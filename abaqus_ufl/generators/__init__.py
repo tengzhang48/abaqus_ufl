@@ -21,12 +21,6 @@ def generate_umat(*args, **kwargs):
     return _generate_umat(*args, **kwargs)
 
 
-def generate_uinter(*args, **kwargs):
-    """Generate an Abaqus UINTER; imported lazily to avoid circular imports."""
-    from .uinter_gen import generate_uinter as _generate_uinter
-    return _generate_uinter(*args, **kwargs)
-
-
 __all__ = [
     "UELModelConfig",
     "ScaffoldReport",
@@ -35,5 +29,4 @@ __all__ = [
     "generate_small_strain_umat",
     "generate_uel",
     "generate_umat",
-    "generate_uinter",
 ]

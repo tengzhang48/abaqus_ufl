@@ -30,7 +30,6 @@ au.LocalScalar
 au.generate_umat(...)
 au.generate_small_strain_umat(...)
 au.generate_uel(...)
-au.generate_uinter(...)
 
 au.generate_inp_scaffold(...)
 au.write_job_inp(...)

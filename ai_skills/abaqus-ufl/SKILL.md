@@ -1,6 +1,6 @@
 ---
 name: abaqus-ufl
-description: Use when developing, reviewing, validating, or debugging abaqus_ufl UMAT/UEL/UINTER examples, generated Abaqus Fortran, f2py checks, Abaqus validation decks, or paper-to-code model implementations. Guides agents through target selection, generator-friendly Python, validation ladders, and known Abaqus/Fortran pitfalls.
+description: Use when developing, reviewing, validating, or debugging abaqus_ufl UMAT/UEL examples, generated Abaqus Fortran, f2py checks, Abaqus validation decks, or paper-to-code model implementations. Guides agents through target selection, generator-friendly Python, validation ladders, and known Abaqus/Fortran pitfalls.
 metadata:
   short-description: Develop and validate abaqus_ufl UMAT/UEL models
 ---
@@ -9,7 +9,7 @@ metadata:
 
 This skill is a compact operational guide distilled from the repository's
 tests, examples, and lessons. Use it before implementing or reviewing any
-`abaqus_ufl` UMAT, UEL, UINTER, f2py, or Abaqus-validation work.
+`abaqus_ufl` UMAT, UEL, f2py, or Abaqus-validation work.
 
 ## First Moves
 
@@ -33,8 +33,6 @@ tests, examples, and lessons. Use it before implementing or reviewing any
      chemical potential.
    - **f2py**: point/element oracle for generated Fortran before solver runs.
    - **Abaqus validation**: final convention and production-solver check.
-   - **UINTER**: contact/interface law rather than a bulk material or element;
-     generate with `au.generate_uinter(...)`.
 
 ## Core Rule
 

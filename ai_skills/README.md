@@ -6,7 +6,7 @@ This directory contains reusable AI-agent skills distilled from the
 ## Available Skills
 
 - `abaqus-ufl/` - operational guide for developing, reviewing, validating, and
-  debugging `abaqus_ufl` UMAT/UEL/UINTER models.
+  debugging `abaqus_ufl` UMAT/UEL models.
 
 ## Use
 

@@ -6,8 +6,8 @@ Start with the top-level [README](../README.md) for install + quickstart, and
 ## Usage
 
 - [API_USAGE.md](API_USAGE.md) — import patterns, the generator entry points
-  (`generate_umat` / `generate_uel` / `generate_uinter`), the tensor DSL rules,
-  and the verification ladder.
+  (`generate_umat` / `generate_uel`), the tensor DSL rules, and the
+  verification ladder.
 
 ## Theory
 
@@ -24,8 +24,6 @@ Start with the top-level [README](../README.md) for install + quickstart, and
   philosophy and the extensibility model.
 - [uel_design.md](uel_design.md) — the UEL code-generator design (templates,
   material translation, CS tangent engine, UEL assembly).
-- [uinter_gen_design.md](uinter_gen_design.md) — the UINTER (surface-interaction)
-  generator design.
 - [SYMBOLIC_TANGENT_DESIGN.md](SYMBOLIC_TANGENT_DESIGN.md) — the symbolic (SymPy)
   tangent engine that emits pure-real Fortran tangents.
 - [matrix_functions_design.md](matrix_functions_design.md) — **complex-step-safe

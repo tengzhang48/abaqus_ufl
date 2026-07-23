@@ -38,7 +38,7 @@ What you get when you ``import abaqus_ufl as au``:
         au.generate_small_strain_umat(material, path)
             # small-strain materials may define self._helper(...) methods;
             # the generator emits each helper as a Fortran subroutine.
-            # See docs/quickstart.md for the constraint list.
+            # See docs/API_USAGE.md for the constraint list.
 
     Hand-written Fortran sidecars (small-strain UMAT)
         @au.fortran_helper(inputs=[...], outputs=[...], subroutine="...")
@@ -47,10 +47,6 @@ What you get when you ``import abaqus_ufl as au``:
         au.generate_small_strain_umat(..., extra_fortran_files=["helper.for"])
             # Python body runs in verify(); generator emits a CALL to the
             # named Fortran subroutine and appends the sidecar verbatim.
-
-    UINTER (surface interaction) generators
-        au.SurfaceInteraction
-        au.generate_uinter(interaction, path)
 
     Element / mesh metadata
         au.ElementConfig, au.ELEMENT_CONFIGS
@@ -84,8 +80,7 @@ Minimal example
     model.verify()                                    # raises if any block fails
     au.generate_umat(model, "neo_hookean_umat.for")
 
-For the current API guide see ``docs/API_USAGE.md``. For longer examples see
-``docs/quickstart.md``.
+For the current API guide see ``docs/API_USAGE.md``.
 """
 
 from .core.material import Material, SmallStrainMaterial
@@ -98,7 +93,6 @@ from .core import small_strain_plasticity
 from .core import soil
 from .generators.element_config import ElementConfig, ELEMENT_CONFIGS
 from .generators.inp_scaffold import UELModelConfig, ScaffoldReport
-from .generators.uinter_gen import SurfaceInteraction
 
 __version__ = "0.1.0"
 
@@ -132,12 +126,6 @@ def generate_small_strain_umat(*args, **kwargs):
         generate_small_strain_umat as _generate_small_strain_umat,
     )
     return _generate_small_strain_umat(*args, **kwargs)
-
-
-def generate_uinter(*args, **kwargs):
-    """Generate an Abaqus UINTER; imported lazily to keep core imports light."""
-    from .generators.uinter_gen import generate_uinter as _generate_uinter
-    return _generate_uinter(*args, **kwargs)
 
 
 def generate_inp_scaffold(*args, **kwargs):
@@ -180,10 +168,9 @@ __all__ = [
     "fortran_helper",
     # tensor algebra and plasticity helpers (modules)
     "tensor", "small_strain_plasticity", "soil",
-    # UEL/UMAT/UINTER generators
+    # UEL/UMAT generators
     "generate_uel", "generate_uel_local_pressure",
     "generate_umat", "generate_small_strain_umat",
-    "generate_uinter", "SurfaceInteraction",
     # element / mesh metadata
     "ElementConfig", "ELEMENT_CONFIGS",
     # Abaqus .inp scaffold

@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_symbol(relative_path: str, symbol: str) -> Any:
