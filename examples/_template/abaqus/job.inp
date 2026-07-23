@@ -1,0 +1,40 @@
+*Heading
+abaqus_ufl TEMPLATE: single C3D8 element, <describe loading here>
+** Copy + edit. Keep it small (1 element is ideal for a material-point check).
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+*Node
+1, 0.0, 0.0, 0.0
+2, 1.0, 0.0, 0.0
+3, 1.0, 1.0, 0.0
+4, 0.0, 1.0, 0.0
+5, 0.0, 0.0, 1.0
+6, 1.0, 0.0, 1.0
+7, 1.0, 1.0, 1.0
+8, 0.0, 1.0, 1.0
+*Element, type=C3D8, elset=BLOCK
+1, 1, 2, 3, 4, 5, 6, 7, 8
+*Nset, nset=LEFT
+1, 4, 5, 8
+*Nset, nset=RIGHT
+2, 3, 6, 7
+*Nset, nset=ALLNODES
+1, 2, 3, 4, 5, 6, 7, 8
+*Solid Section, elset=BLOCK, material=TEMPLATE
+*Material, name=TEMPLATE
+** constants MUST match TemplateMaterial.props (same order): G, K, ...
+*User Material, constants=2
+0.5, 50.0
+*Step, name=LOAD, nlgeom=YES
+*Static
+0.1, 1.0, 1.0e-6, 0.1
+*Boundary
+LEFT, 1, 1, 0.0
+ALLNODES, 2, 2, 0.0
+ALLNODES, 3, 3, 0.0
+RIGHT, 1, 1, -0.02
+*Output, field, frequency=1
+*Node Output
+U, RF
+*Element Output, directions=YES
+S, E
+*End Step

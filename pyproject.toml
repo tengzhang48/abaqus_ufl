@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "abaqus_ufl"
+version = "0.1.0"
+description = "Python-to-Fortran code generator for Abaqus UMAT/UEL"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "sympy>=1.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build",
+    "pytest",
+    "scipy",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["abaqus_ufl*"]
+
+[tool.setuptools.package-data]
+"abaqus_ufl.generators" = ["templates/*.for"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # An indefinite storage/flux operator pairing is treated as a hard error.
+    # Tests that deliberately construct one use pytest.warns, which still works.
+    "error::abaqus_ufl.core.verify.OperatorSignWarning",
+]

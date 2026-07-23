@@ -1,0 +1,21 @@
+# Base environment for abaqus_ufl:
+#   - the code generator
+#   - compiled (f2py) elements, which need a Fortran compiler
+#
+#   mamba env create -f environment.yml
+#   mamba activate abaqus-ufl
+name: abaqus-ufl
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  - numpy
+  - scipy
+  - sympy>=1.12
+  - pytest
+  - fortran-compiler        # gfortran, for numpy.f2py-compiled elements
+  - ninja                   # f2py meson backend (Python>=3.12) needs ninja + meson
+  - meson
+  - charset-normalizer      # f2py crackfortran needs it to detect the generated .for
+                            # encoding (non-ASCII chars in codegen comments)
+  - pip

@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+*.egg
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Fortran build artifacts
+*.o
+*.mod
+*.so
+*.exe
+test_driver
+
+# Abaqus / simulation outputs
+*.odb
+*.dat
+*.msg
+*.sta
+*.com
+*.prt
+*.sim
+*.lck
+*.log
+*.vtk
+*.vtu
+
+# OS / editor
+.DS_Store
+*.swp
