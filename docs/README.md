@@ -35,4 +35,11 @@ Start with the top-level [README](../README.md) for install + quickstart, and
 - [internal_variables_design.md](internal_variables_design.md) — how state /
   internal variables are declared, ordered, and threaded through the generator.
 
+## Lessons Learned
+
+General, hard-won lessons for Abaqus UMAT/UEL development and code generation —
+see the [lessons/](lessons/) index (Abaqus/Fortran traps, finite-element
+pitfalls, complex-step and matrix functions, code generation and testing,
+coupled multiphysics, and field notes).
+
 For an agent-oriented operational guide, see [ai_skills/](../ai_skills/).

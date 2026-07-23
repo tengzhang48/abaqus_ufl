@@ -78,6 +78,7 @@ Abaqus-smoke, Python-verified, or analytical — see
 - **Usage:** [`docs/API_USAGE.md`](docs/API_USAGE.md) — entry points, the tensor DSL, the verification ladder.
 - **Theory:** [`docs/theory.md`](docs/theory.md), [`docs/complex_step_patterns.md`](docs/complex_step_patterns.md), [`docs/JAUMANN_RESOLUTION.md`](docs/JAUMANN_RESOLUTION.md).
 - **Design:** the code-generator and tangent-engine internals — see the [`docs/` index](docs/README.md).
+- **Lessons learned:** general Abaqus UMAT/UEL + codegen lessons — see [`docs/lessons/`](docs/lessons/).
 
 ## License
 
