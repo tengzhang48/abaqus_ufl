@@ -65,11 +65,19 @@ recipe is in [`HOWTO_ADD_AN_EXAMPLE.md`](HOWTO_ADD_AN_EXAMPLE.md).
 abaqus_ufl/            the package: core/ (model API, tangents) + generators/ (UMAT/UEL codegen)
 examples/              worked, verified examples + a copyable _template/
 tools/                 shared Abaqus run / ODB-extract / compare machinery
+docs/                  usage, theory, and design documentation
+ai_skills/             an operational guide for AI coding assistants
 ```
 
 Every example declares its **verification level** — Abaqus-validated,
 Abaqus-smoke, Python-verified, or analytical — see
 [`examples/README.md`](examples/README.md).
+
+## Documentation
+
+- **Usage:** [`docs/API_USAGE.md`](docs/API_USAGE.md) — entry points, the tensor DSL, the verification ladder.
+- **Theory:** [`docs/theory.md`](docs/theory.md), [`docs/complex_step_patterns.md`](docs/complex_step_patterns.md), [`docs/JAUMANN_RESOLUTION.md`](docs/JAUMANN_RESOLUTION.md).
+- **Design:** the code-generator and tangent-engine internals — see the [`docs/` index](docs/README.md).
 
 ## License
 
