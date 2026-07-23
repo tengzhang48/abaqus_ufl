@@ -90,7 +90,7 @@ spurious flux. Branch on `D == 0` in *both* the flux and storage methods:
 ```python
 def solvent_flux(self, F, mu, grad_mu, phi_old, dt):
     if self.D == 0:
-        return au.VectorField.zeros(3)
+        return 0.0 * grad_mu          # zero vector, same shape as grad_mu
     # ... normal flux computation
 
 def solvent_storage(self, F, F_old, mu, phi_old, dt):
@@ -100,8 +100,11 @@ def solvent_storage(self, F, F_old, mu, phi_old, dt):
 ```
 
 Note: material-method code is translated by a restricted AST, so `np.zeros()`
-and helper-function calls are not available inside these methods. Use the
-framework's zero constructors (`au.VectorField.zeros(3)`) or inline literals.
+and helper-function calls are not available inside these methods. Build zero
+quantities with inline literals or a scalar times an in-scope quantity: multiply
+an existing vector by `0.0` for a zero flux (`0.0 * grad_mu`), and use
+`0.0 * eye(3)` for a zero tensor. There is no `au.VectorField.zeros(...)`
+constructor.
 
 ## Locking & element choice
 

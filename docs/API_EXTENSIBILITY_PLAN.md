@@ -170,6 +170,13 @@ Important rule:
 
 ## Future Direction: Physics Templates
 
+> **Proposed design sketch — not implemented.** Everything in this section is a
+> forward-looking direction, not current API. In particular, **`au.Physics` does
+> not exist** in the shipping package; the `class ...(au.Physics)` snippets below
+> are illustrative pseudocode for a possible future interface. Do not import or
+> subclass `au.Physics` in real model code today. Use the method-name weak-form
+> style documented in `API_USAGE.md` instead.
+
 The second stage — physics templates — is intended once several concrete coupled
 examples exist beyond the initial coupled formulation.
 
@@ -187,6 +194,7 @@ The goal is **physics-as-template**, not **equations-as-registry**.
 A `Physics` template declares the mathematical shape the generator needs:
 
 ```python
+# PROPOSED pseudocode — au.Physics is not implemented in the current API.
 class Transport(au.Physics):
     primary_field = "field"
     test_rank = 0
@@ -235,6 +243,7 @@ Some models will not fit the built-in templates. Examples:
 The API includes an explicit custom path:
 
 ```python
+# PROPOSED pseudocode — au.Physics is not implemented in the current API.
 class MyPhysics(au.Physics):
     residual_form = "custom"
     assembly_hook = my_custom_assembly

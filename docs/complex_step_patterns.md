@@ -118,7 +118,12 @@ def stress_PK1(self, F):
     # ... Ogden energy, Hencky strain, etc.
 ```
 
-No branch-free algorithms needed. No special treatment for repeated roots.
+No branch-free algorithms are needed to obtain a well-defined *tangent*: the
+imaginary complex-step perturbation splits otherwise-repeated eigenvalues, so
+`eig(C)` differentiates cleanly. This does **not** make the `eig`-based
+matrix-function backend robust at near-degenerate states — its near-diagonal
+guards can zero shear-block derivatives — which is why the generator's default
+matrix backend is `iterative`, not `eig`.
 
 ### Rule 6: Allowed operations
 
@@ -132,9 +137,9 @@ No branch-free algorithms needed. No special treatment for repeated roots.
 | `inv(A)` | Yes | Explicit cofactor formula |
 | `A @ B` (matmul) | Yes | |
 | `A.T` (transpose) | Yes | |
-| `eig(A)` | Yes | Use LAPACK ZGEEV for complex matrices |
+| `eig(A)` / `eigh(A)` | Yes | Self-contained CS-safe eigensolver, no LAPACK; `eigh` is an alias for the general `eig` |
 | `trace(A)` | Yes | |
-| `sym(A)`, `dev(A)` | Yes | |
+| `0.5*(A + A.T)`, `dev(A)` | Yes | Symmetric/deviatoric parts; the translator has no unary `sym` |
 | `abs(x)` | **No** | Use `x` directly or `sqrt(x*x)` if needed |
 | `max(a, b)` | **No** | Use `if a.real > b.real` branching |
 | `min(a, b)` | **No** | Same |

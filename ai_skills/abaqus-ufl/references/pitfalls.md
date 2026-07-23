@@ -109,8 +109,9 @@ Use it when debugging generated UMAT/UEL behavior.
 - A throwaway `_` in tuple unpacking (`a, _, c = f()`) becomes a Fortran variable
   named `_`, which is invalid. Name every unpacked value (`a, ep_tmp, c = ...`).
 - Not every `core/tensor` function is translator-supported. Supported: `det, inv,
-  log, exp, sqrt, trace, dev, eye, dyad, sym3, sqrtm, logm, expm`. **`sym` is
-  NOT** — write `0.5*(F + F.T)`. **`tanh` is NOT** — build it from `exp`
+  log, exp, sqrt, trace, dev, eye, dyad, sym3, sqrtm, logm, expm, tanh`. **`sym`
+  is NOT** — write `0.5*(F + F.T)`. `tanh` **IS** supported (emitted as
+  `cs_tanh`); if you prefer you can also build it from `exp`
   (`(exp(2x)-1)/(exp(2x)+1)`). An unsupported name raises "Unsupported function:
   <name>" at generate time (verify() is unaffected).
 - Plane strain still uses 3x3 tensors with `F33 = 1`.

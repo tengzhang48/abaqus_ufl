@@ -276,9 +276,13 @@ For converting an Abaqus deck so selected elements use a generated UEL:
 
 ```python
 config = au.UELModelConfig(...)
-report = au.generate_inp_scaffold("source.inp", "output_dir", config)
-au.write_job_inp("output_dir/job.inp", report)
+report = au.generate_inp_scaffold(config, "source.inp", "output_dir")
+au.write_job_inp("output_dir")
 ```
+
+The signatures are `generate_inp_scaffold(config, mesh_path, out_dir, dry_run=False)`
+(config first) and `write_job_inp(out_dir, heading=..., mesh_include=...)`, which
+writes the top-level include driver into `out_dir`.
 
 The scaffold path is intentionally conservative. It helps split mesh, material,
 UEL, step, and output includes, but the user still owns Abaqus modeling choices
@@ -295,7 +299,7 @@ Prefer:
 F.T @ F
 trace(A)
 dev(A)
-sym(A)
+0.5*(A + A.T)
 det(F)
 inv(F)
 eig(A)

@@ -68,11 +68,15 @@ sites in several files.
 
 ## Testing & verification
 
-### The finite-difference tangent check is the ultimate verification
+### The finite-difference tangent check is the primary automated check
 
-If `AMATRX ≈ -dRHS/dU` within FD accuracy (~1e-6), the whole pipeline is
-correct: DOF parsing, field interpolation, material evaluation, tangents, sign
-conventions, and assembly. One FD check validates everything.
+If `AMATRX ≈ -dRHS/dU` within FD accuracy (~1e-6), the tangent is consistent
+with the residual across the pipeline: DOF parsing, field interpolation,
+material evaluation, tangent assembly, and the sign of `AMATRX` relative to
+`RHS`. It verifies the tangent is consistent with the residual, but it does
+**not** prove the physics, the residual, or the PDE sign convention is correct —
+a residual can be internally tangent-consistent yet encode the wrong equation.
+Those need an analytical benchmark or Abaqus validation (see the ladder below).
 
 ```python
 for col in range(NDOFEL):
