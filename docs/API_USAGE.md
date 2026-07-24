@@ -1,7 +1,5 @@
 # abaqus_ufl API Usage Guide
 
-Status: 2026-06-27
-
 This note is the compact user-facing API reference for writing models with
 `abaqus_ufl`. It focuses on the stable workflows that have been exercised by
 the current UMAT, UEL, f2py, and Abaqus-validation examples.

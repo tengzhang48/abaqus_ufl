@@ -27,8 +27,7 @@ What you get when you ``import abaqus_ufl as au``:
         au.generate_uel(problem, path, element=..., formulation=...)
             element ∈ {'quad4', 'quad8', 'quad8r', 'tet4', 'tet4r',
                        'hex8', 'hex20'}
-            formulation ∈ {'standard', 'fbar_mechanics',
-                           'local_pressure', 'fbar_coupled'}
+            formulation ∈ {'standard', 'fbar_mechanics', 'local_pressure'}
         au.generate_uel_local_pressure(weakform, output_path, ...)
 
     UMAT generators

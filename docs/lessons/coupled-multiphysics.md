@@ -150,7 +150,7 @@ Fix: add a pressure field (three-field u–p–μ) or use higher-order displacem
 elements. The three-field split decouples volumetric and deviatoric response and
 removes the locking without F-bar.
 
-### Local-pressure condensation is the preferred low-order coupled path
+### Local-pressure condensation is an effective low-order coupled path
 
 For coupled swelling/diffusion on low-order elements, treat the pressure-like
 volumetric variable as an *element-local* scalar when its equation is algebraic.

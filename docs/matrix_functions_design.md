@@ -1,9 +1,12 @@
 # Matrix Functions Design: `abaqus_ufl/core/tensor.py`
 
-Three-by-three matrix functions for constitutive models.  Every
-implementation is complex-step (CS) safe: fixed iteration counts, no
-branching on imaginary parts, no `abs`/`max`/`sign` on complex
-variables.
+Three-by-three matrix functions for constitutive models.  The **iterative**
+backend (the Python oracle and the generated-Fortran default) is complex-step
+(CS) safe everywhere: fixed iteration counts, no branching on imaginary parts,
+no `abs`/`max`/`sign` on complex variables.  The **eig-based** backend is CS-safe
+away from degeneracy, but its near-diagonal guard returns `V=I` and zeros the
+spectral CS derivatives at (near-)diagonal states (see below) — which is why the
+iterative backend is the default.
 
 ---
 
@@ -25,9 +28,11 @@ tiny imaginary off-diagonals produced by complex-step perturbation, returning
 V=I and zeroing the shear block of the tangent.  The iterative backend avoids
 eigendecomposition entirely inside matrix functions and is therefore CS-safe.
 
-`eig` (and its alias `eigh`) map to the same general eigensolver primitive;
-`eigh` is not a separate symmetric solver. The `eig` matrix-function backend
-remains available for backward compatibility:
+Inside a material method, the translator accepts `eigh` as a syntactic alias for
+`eig` (the same general eigensolver primitive — not a separate symmetric solver).
+Only `eig` is importable from `abaqus_ufl.core.tensor`; `eigh` is a translator
+alias, not a Python function. The `eig` matrix-function backend remains available
+for backward compatibility:
 
 ```python
 au.generate_umat(model, "model_eig.for", matrix_backend="eig")
@@ -73,7 +78,7 @@ elements directly. The absolute guard catches pure complex-step shear
 perturbations where `p1` is `O(CS_H^2)` and the relative guard can be
 too strict near the undeformed state.
 
-The Fortran template mirrors the same guard and clamps the real part of
+The Fortran template applies an equivalent guard and clamps the real part of
 the cubic invariant `r` before complex arccos. These protections were
 added after generated finite-strain UMATs produced singular eigenvectors
 and NaN cascades for diagonal/near-diagonal matrices in `logm33z` and in

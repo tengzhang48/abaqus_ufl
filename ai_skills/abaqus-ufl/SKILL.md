@@ -96,9 +96,10 @@ beliefs are wrong:
 Use:
 
 - `abaqus_ufl.core.tensor` helpers: `eye`, `trace`, `det`, `inv`,
-  `dev`, `eig`/`eigh`, `logm`, `expm`, `sqrtm`, `dyad`, `sym3`. For the
-  symmetric part write `0.5*(A+A.T)` — the translator has no unary `sym`.
-  `eigh` is an alias for the general `eig` (not a separate symmetric solver).
+  `dev`, `eig`, `logm`, `expm`, `sqrtm`, `dyad`, `sym3`. For a matrix's symmetric
+  part write `0.5*(A+A.T)`: the translator has no unary `sym` (it exists in Python
+  for the oracle but does not translate to Fortran). `eigh` works inside a
+  translated method as an alias for `eig`, but is not importable in Python.
 - 3x3 tensor form until the Abaqus boundary.
 - bounded `for k in range(N)` loops with optional `break`.
 - explicit scalar/tensor state variables in `state_vars`.

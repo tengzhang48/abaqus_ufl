@@ -32,5 +32,5 @@ python abaqus/generate_reference.py
 
 # 3. validate in Abaqus (needs Abaqus/Standard on PATH)
 cd abaqus && bash run.sh
-python ../../../tools/compare_results.py job_extracted.json reference.json
+python ../../../tools/compare_results.py --extracted job_extracted.json --reference reference.json
 ```

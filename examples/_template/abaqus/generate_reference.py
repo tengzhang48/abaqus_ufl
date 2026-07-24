@@ -10,7 +10,7 @@ Run once to (re)generate the reference:
 
 Then, after the Abaqus job:
 
-    python ../../../tools/compare_results.py job_extracted.json reference.json
+    python ../../../tools/compare_results.py --extracted job_extracted.json --reference reference.json
 """
 from pathlib import Path
 import sys

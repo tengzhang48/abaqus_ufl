@@ -48,38 +48,41 @@ State variables from the **previous converged step** (read from SVARS)
 are always real. The **current step** update must be computed in complex
 arithmetic to capture the consistent (algorithmic) tangent.
 
+State arrives as `<name>_old` arguments (always real), and the method returns
+`(stress, {name: new_value})`; the generator writes the dict back to `STATEV`.
+
 ```python
 class J2Plasticity(au.Material):
     state_vars = dict(ep=0.0)   # equivalent plastic strain
 
-    def stress_PK1(self, F, state):
-        # state.ep is REAL (from previous converged step)
-        # All current-step quantities are COMPLEX during tangent computation
+    def stress_PK1(self, F, ep_old, dt):
+        # ep_old is REAL (previous converged step); current-step quantities are
+        # COMPLEX during tangent computation.
 
         # Trial elastic state (complex)
         Fe_trial = F   # simplified; real model has multiplicative split
         sigma_trial = self.elastic_stress(Fe_trial)
         s_trial = dev(sigma_trial)
-        f_trial = von_mises(s_trial) - (self.sigma_y + self.H * state.ep)
+        f_trial = von_mises(s_trial) - (self.sigma_y + self.H * ep_old)
 
-        # Plastic correction — branch on real part
+        # Plastic correction — branch on the real part
         if f_trial.real > 0:
             # Return mapping (Newton on real part, arithmetic on complex)
             dgamma = f_trial / (3*self.G + self.H)   # COMPLEX
             # ... radial return ...
-            state.ep = state.ep + dgamma   # state.ep becomes COMPLEX here
-            # This is correct! The complex ep captures d(ep)/d(strain)
+            ep_new = ep_old + dgamma   # COMPLEX; captures d(ep)/d(strain)
         else:
-            dgamma = 0.0  # stays in elastic regime
+            ep_new = ep_old            # elastic step
 
-        # Return stress (complex during tangent, real during residual)
-        return P
+        # Return (stress, updated-state dict); ep_new is COMPLEX during the
+        # tangent pass and real during the residual pass.
+        return P, {"ep": ep_new}
 ```
 
-**Critical:** Do NOT force `state.ep` back to real during tangent computation.
-If you write `state.ep = float(state.ep)` or `state.ep = DBLE(state.ep)`,
-you lose the algorithmic tangent and fall back to the continuum tangent,
-destroying quadratic Newton convergence.
+**Critical:** Do NOT cast the returned state back to real during tangent
+computation. Writing `ep_new = float(ep_new)` (or `DBLE(...)` in Fortran) loses
+the algorithmic tangent and falls back to the continuum tangent, destroying
+quadratic Newton convergence.
 
 ### Rule 4: Iterative algorithms — converge on real, compute on complex
 
@@ -153,17 +156,20 @@ State variables are stored in the flat SVARS array, carved up per Gauss point:
 ```fortran
 C     Read state at Gauss point KINTK
       LOC = (KINTK - 1) * nStatePer
-      ep_old    = SVARS(LOC + 1)
-      alpha_old = SVARS(LOC + 2 : LOC + 7)   ! 6 components (Voigt)
+      ep_old = SVARS(LOC + 1)                 ! scalar state (1 slot)
+      Fp_old = SVARS(LOC + 2 : LOC + 10)      ! (3,3) tensor state (9 slots)
 
 C     ... compute new state (complex during tangent) ...
 
 C     Write state back (real part only — complex part is derivative info,
 C     not stored between increments)
-      SVARS(LOC + 1) = DBLE(ep_new)
-      SVARS(LOC + 2 : LOC + 7) = DBLE(alpha_new)
+      SVARS(LOC + 1)            = DBLE(ep_new)
+      SVARS(LOC + 2 : LOC + 10) = DBLE(Fp_new)
 ```
 
-When computing the tangent, `ep_new` and `alpha_new` are complex. Their real
+When computing the tangent, `ep_new` and `Fp_new` are complex. Their real
 parts are the physical state update; their imaginary parts carry the derivative
 information used by the tangent engine. Only the real parts are written to SVARS.
+
+Supported state-variable shapes are scalar (1 slot), vector `(3,)` (3 slots),
+and tensor `(3,3)` (9 slots).

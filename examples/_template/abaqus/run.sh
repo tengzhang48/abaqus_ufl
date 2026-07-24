@@ -5,7 +5,7 @@
 #   bash run.sh
 #
 # Then compare against the reference:
-#   python ../../../tools/compare_results.py job_extracted.json reference.json
+#   python ../../../tools/compare_results.py --extracted job_extracted.json --reference reference.json
 set -e
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOOLS="$(cd "$HERE/../../../tools" && pwd)"

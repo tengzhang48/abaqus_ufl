@@ -98,11 +98,14 @@ test at a random deformation state with every field nonzero.
 Uniaxial tension on a single element has a closed-form reaction force. Compare
 against it to verify the complete element end to end.
 
-### Build a Python reference assembly as ground truth
+### Build a Python reference assembly as a cross-implementation oracle
 
-Write a Python function that mirrors the generated Fortran exactly — same DOF
-parsing, same shape functions, same assembly loops — and use it as the oracle
-for all tests. This removes the need for a Fortran compiler during development.
+Write a Python function that reimplements the element assembly — same DOF
+parsing, shape functions, and assembly loops — and use it as the oracle for all
+tests. This removes the need for a Fortran compiler during development. Because
+it is a second implementation of the *same* formulation, it catches
+code-generation and bookkeeping errors, not errors in the underlying physics;
+those still need an analytical or Abaqus check.
 
 ### Multi-field formulations require an UNSYMMETRIC solver
 

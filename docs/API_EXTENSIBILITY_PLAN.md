@@ -106,7 +106,7 @@ Required metadata:
 - whether it is condensed,
 - initial guess / state variable layout.
 
-The first production use is local pressure:
+The first application of this pattern is the (prototype) local-pressure path:
 
 ```
 global fields: u, mu
