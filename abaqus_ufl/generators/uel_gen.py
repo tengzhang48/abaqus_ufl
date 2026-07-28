@@ -933,11 +933,18 @@ def _append_svars_read(lines, sv_info, indent='      '):
 
 
 def _append_svars_write(lines, sv_info, indent='      '):
-    """Write updated state variables back to SVARS using real parts only."""
+    """Write updated state variables back to SVARS using real parts only.
+
+    State commits are gated on the normal residual-and-Jacobian request
+    (LFLAGS(3)=1): stiffness-only and residual-only calls must not
+    mutate the stored state.
+    """
     if not sv_info:
         return
 
-    lines.append('C       Write updated state to SVARS (real part only)')
+    lines.append('C       Write updated state to SVARS (real part only);')
+    lines.append('C       committed only on normal calls (LFLAGS(3)=1).')
+    lines.append(f'{indent}IF (LFLAGS(3) .EQ. 1) THEN')
     offset = 0
     for name, entry in sv_info.items():
         shape = entry['shape']
@@ -959,7 +966,7 @@ def _append_svars_write(lines, sv_info, indent='      '):
                         f'{indent}SVARS(LOC + {idx}) = '
                         f'DBLE({name}_new_z({i+1},{j+1}))')
             offset += 9
-
+    lines.append(f'{indent}END IF')
 
 def _append_state_old_to_complex(lines, sv_info, indent='      '):
     """Convert local real state variables to complex temporaries."""

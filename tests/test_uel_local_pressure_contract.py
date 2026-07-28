@@ -194,6 +194,15 @@ def test_nonfinite_local_solve_requests_cutback(compiled):
     assert pnewdt < 1.0, pnewdt
 
 
+def test_stiffness_only_call_does_not_commit_state(compiled):
+    """LFLAGS(3)=2 must not mutate SVARS (state commits are type-1 only)."""
+    U, DU = _state()
+    _, _, p_normal, _ = _call(compiled, U, DU, lflags3=1)
+    assert abs(p_normal) > 1.0e-12          # normal call does commit
+    _, _, p_stiff, _ = _call(compiled, U, DU, lflags3=2)
+    assert p_stiff == 0.0, p_stiff          # incoming state preserved
+
+
 def test_nonpositive_detF_requests_cutback(compiled):
     U, DU = _state()
     U_bad = U.copy()
