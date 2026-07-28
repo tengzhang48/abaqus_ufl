@@ -31,9 +31,10 @@ What you get when you ``import abaqus_ufl as au``:
         au.generate_uel_local_pressure(weakform, output_path, ...)
 
     UMAT generators
-        au.generate_umat(material, path)            # finite-strain
-        au.generate_umat(material, path, matrix_backend="iterative")
-            # opt-in fixed-count iterative sqrtm/logm/expm backend
+        au.generate_umat(material, path)            # finite-strain,
+                                                     # iterative backend
+        au.generate_umat(material, path, matrix_backend="eig")
+            # compatibility/debugging matrix-function backend
         au.generate_small_strain_umat(material, path)
             # small-strain materials may define self._helper(...) methods;
             # the generator emits each helper as a Fortran subroutine.

@@ -1,5 +1,5 @@
 C======================================================================
-C     isoparametric.for — Isoparametric mapping (2D and 3D)
+C     isoparametric.for -- Isoparametric mapping (2D and 3D)
 C
 C     Contains:
 C       map_grad_2d:    Map shape function gradients (2D) + return Jinv
@@ -17,15 +17,15 @@ C----------------------------------------------------------------------
 C     map_grad_2d: Map shape function gradients from (xi,eta) to (X,Y)
 C
 C     Given:
-C       dshxi(nNode,2)  — derivatives wrt xi, eta
-C       coords(2,nNode) — nodal coordinates (X,Y for each node)
-C       nNode           — number of nodes
+C       dshxi(nNode,2)  -- derivatives wrt xi, eta
+C       coords(2,nNode) -- nodal coordinates (X,Y for each node)
+C       nNode           -- number of nodes
 C
 C     Returns:
-C       dsh(nNode,2)    — derivatives wrt X, Y
-C       detJ            — determinant of the Jacobian
-C       Jinv_out(2,2)   — inverse Jacobian (for reuse with apply_jinv)
-C       stat            — 0 if detJ <= 0 (degenerate element)
+C       dsh(nNode,2)    -- derivatives wrt X, Y
+C       detJ            -- determinant of the Jacobian
+C       Jinv_out(2,2)   -- inverse Jacobian (for reuse with apply_jinv)
+C       stat            -- 0 if detJ <= 0 (degenerate element)
 C----------------------------------------------------------------------
       SUBROUTINE map_grad_2d(dshxi, coords, nNode, dsh, detJ,
      &                       Jinv_out, stat)
@@ -88,12 +88,12 @@ C     For mixed-degree elements: use the Jacobian inverse from the full
 C     geometry mapping to map lower-degree shape function derivatives.
 C
 C     Given:
-C       dshxi(nNode,2)  — derivatives wrt xi, eta
-C       Jinv(2,2)       — pre-computed Jacobian inverse
-C       nNode           — number of nodes
+C       dshxi(nNode,2)  -- derivatives wrt xi, eta
+C       Jinv(2,2)       -- pre-computed Jacobian inverse
+C       nNode           -- number of nodes
 C
 C     Returns:
-C       dsh(nNode,2)    — derivatives wrt X, Y
+C       dsh(nNode,2)    -- derivatives wrt X, Y
 C----------------------------------------------------------------------
       SUBROUTINE apply_jinv(dshxi, Jinv, nNode, dsh)
       IMPLICIT NONE
@@ -115,15 +115,15 @@ C     map_grad_3d: Map shape function gradients from (xi,eta,zeta)
 C                  to (X,Y,Z)
 C
 C     Given:
-C       dshxi(nNode,3)  — derivatives wrt xi, eta, zeta
-C       coords(3,nNode) — nodal coordinates (X,Y,Z for each node)
-C       nNode           — number of nodes
+C       dshxi(nNode,3)  -- derivatives wrt xi, eta, zeta
+C       coords(3,nNode) -- nodal coordinates (X,Y,Z for each node)
+C       nNode           -- number of nodes
 C
 C     Returns:
-C       dsh(nNode,3)    — derivatives wrt X, Y, Z
-C       detJ            — determinant of the Jacobian
-C       Jinv_out(3,3)   — inverse Jacobian (for reuse with apply_jinv_3d)
-C       stat            — 0 if detJ <= 0 (degenerate element)
+C       dsh(nNode,3)    -- derivatives wrt X, Y, Z
+C       detJ            -- determinant of the Jacobian
+C       Jinv_out(3,3)   -- inverse Jacobian (for reuse with apply_jinv_3d)
+C       stat            -- 0 if detJ <= 0 (degenerate element)
 C----------------------------------------------------------------------
       SUBROUTINE map_grad_3d(dshxi, coords, nNode, dsh, detJ,
      &                       Jinv_out, stat)
@@ -184,12 +184,12 @@ C     apply_jinv_3d: Map shape function derivatives using
 C                    pre-computed 3x3 Jinv
 C
 C     Given:
-C       dshxi(nNode,3)  — derivatives wrt xi, eta, zeta
-C       Jinv(3,3)       — pre-computed Jacobian inverse
-C       nNode           — number of nodes
+C       dshxi(nNode,3)  -- derivatives wrt xi, eta, zeta
+C       Jinv(3,3)       -- pre-computed Jacobian inverse
+C       nNode           -- number of nodes
 C
 C     Returns:
-C       dsh(nNode,3)    — derivatives wrt X, Y, Z
+C       dsh(nNode,3)    -- derivatives wrt X, Y, Z
 C----------------------------------------------------------------------
       SUBROUTINE apply_jinv_3d(dshxi, Jinv, nNode, dsh)
       IMPLICIT NONE

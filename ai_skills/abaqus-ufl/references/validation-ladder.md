@@ -1,30 +1,25 @@
-# Validation Ladder
+# Verification Pipeline
 
-Use the smallest validation layer that can expose the suspected bug. Do not use
+Use the smallest pipeline gate that can expose the suspected bug. Do not use
 Abaqus to debug a Python equation error, and do not call a model paper-validated
 because a generated `.for` file compiles.
 
-## Layer 0: CHECK THE VALIDATION RECORD FIRST (before debugging a discrepancy)
+The layers below are an efficient execution order, not one scalar verification
+level. Record the exact quantity, oracle, runtime, and output bridge that passed.
 
-Before treating a discrepancy as a solver bug, establish **what is already validated**:
-the layer it was validated at, the **oracle** (Abaqus / analytical), and the
-exact **quantity**. Then compare against *that* reference, don't re-litigate a passed
-validation, and read the validated DECK rather than re-deriving its parameters (this is how
-you catch setup mismatches like a wrong `theta` early). Two distinctions that save days:
+## Layer 0: Check the evidence record first
 
-- **"The MODEL is validated"** (constitutive / equilibrium, against an oracle) is NOT the
-  same as **"this new comparison matches a specific external run."** The latter failing
-  (e.g. a transient-rate gap vs one Abaqus run) is not a model-validation failure and is
-  often lower-stakes.
-- **Weight effort by how REALISTIC and how VALIDATED the regime is.** Benchmark decks often
-  use deliberate extremes (e.g. a near-dry initial state that swells several-fold) as stress
-  tests; those extremes drive most of the numerical difficulty. Don't pour runs into an
-  extreme, already-validated, unrealistic corner -- test the realistic regime instead.
+Before treating a discrepancy as a solver bug, establish the exact quantity and
+configuration already checked, the oracle or comparison source, the runtime,
+and the output path. Read the checked deck rather than re-deriving its
+parameters so setup mismatches are separated from implementation defects.
 
-(Real example: a transient-rate gap chased across many runs as a "validation failure" was,
-in fact, a new diffusion-transient comparison at an unrealistic, already-validated stress
-case -- while the model itself was already validated against an independent oracle. Checking
-the record first would have reframed it immediately.)
+- A constitutive or equilibrium check against an independent oracle is not the
+  same as agreement with a new external run.
+- Abaqus agreement is production-interface and convention evidence unless the
+  comparison itself supplies an independent quantitative benchmark.
+- A deliberate extreme may be useful as a stress test without defining the
+  realistic operating envelope. Record both roles instead of conflating them.
 
 ## Layer 1: Python Reference
 
@@ -47,14 +42,9 @@ Good checks:
 - flux sign and magnitude match the strong form.
 - for branch-dependent gradient damage, the gradient coefficient and reaction
   coefficient use the same branch parameters; measure `ell_eff` per branch.
-- when an internal-variable ODE has a closed-form regime solution (Voce
-  hardening, exponential relaxation), integrate the increment WITH that exact
-  form — then asserting the state against the paper's integrated equation is a
-  free INDEPENDENT oracle. Prefer test states where the criterion under test
-  collapses to a parameter (a yield locus in simple tension reducing to a single
-  parameter), and build uniaxial-stress states exactly
-  (Hencky: `lam_lat = lam_ax**(-nu)`) — high-exponent loci amplify a "roughly
-  uniaxial" state into a double-digit threshold error.
+- when an internal-variable evolution law has a closed-form regime solution,
+  compare the accumulated state with that independent solution rather than
+  checking only qualitative monotonicity.
 
 ## Layer 2: Framework Verification
 
@@ -65,15 +55,21 @@ model.verify()
 problem.verify()
 ```
 
-This checks tangent consistency with the implemented residual. It does not
-prove the residual matches the paper.
+For a material, this checks tangent consistency with the implemented
+constitutive response. `WeakForm.verify()` currently delegates to material
+verification; it does not assemble a UEL residual/tangent. It therefore does
+not prove the weak form, DOF layout, quadrature, or generated element is
+correct, and neither method proves the equations match the paper.
 
 For branchy models, do not move straight from `verify()` to a solver run. Add a
 material-point or element-level regime sweep that proves each branch is entered
-and checks at least one branch-specific invariant. A gradient-damage UEL bug can
-pass `verify()` because both CS and FD differentiate the same wrong residual:
-`phase_storage` used the ductile `psi_star` in compression while `phase_flux`
-used the brittle value. A per-branch regularization-length check caught it.
+and checks at least one branch-specific invariant. A branch mismatch between a
+reaction term and its gradient coefficient can pass `verify()` because CS and
+FD differentiate the same wrong residual.
+
+For a UEL, add a Python reference-assembly check of `RHS` and `AMATRX`, an
+element finite-difference tangent check, and an appropriate constant-field,
+patch, rigid-body, or operator-sign test before generation is called verified.
 
 ## Layer 3: Generated Fortran Compile
 
@@ -105,13 +101,16 @@ This layer calls a single subroutine:
 | Target | Outputs |
 |---|---|
 | UMAT | `STRESS`, `DDSDDE`, `STATEV` |
-| UMATHT | `FLUX`, `DUDT`, `DUDG`, `DFDT`, `DFDG` |
-| HETVAL | heat/source and tangent |
 | UEL | `RHS`, `AMATRX`, `SVARS`, `PNEWDT` |
 
 With Python 3.12+ and NumPy 2.x, f2py needs Meson and Ninja.
 
-## Layer 5: Abaqus Validation
+The working `examples/_template/check_compiled.py` and
+`examples/_template/f2py/drive_umat.f90` demonstrate regeneration parity,
+compile, and a direct UMAT call. UELs need an example-owned element driver that
+checks the generated `RHS`, `AMATRX`, `SVARS`, and `PNEWDT`.
+
+## Layer 5: Optional Solver and Output Bridge
 
 Use the per-example `abaqus/` bundle (see `examples/_template/abaqus/`) for
 production-convention checks, with the shared harness in `tools/`.
@@ -138,6 +137,28 @@ Shared harness files:
 UMATs usually extract `S`, `E`, and `SDV`. UELs often need nodal `U`/`RF`
 or custom state extraction because standard stress output may not exist.
 
+General Abaqus model construction is outside the package pipeline: mesh,
+contact, sections, loading, procedures, solver controls, and launch setup
+remain example/user-owned. The output bridge is in scope.
+
+Treat solver completion and output verification as separate gates:
+
+1. identify each intended logical quantity and its field/component/slot/active
+   DOF, units, sign/offset, component order, and integration-point order;
+2. identify the authoritative solved field separately from reconstructed or
+   visualization-only output;
+3. require complete, unique, finite node or element/integration-point coverage
+   using stable identities;
+4. audit `UVARM`, dummy-element, or projected visualization bridges pointwise
+   against authoritative output where possible; and
+5. only then compare the extracted quantity with a frozen independent
+   reference.
+
+The shared extractor is for simple one-element cases. Histories, named-set
+reductions, projections, and derived observables belong in an example-owned
+extractor. If a quantity has no checked bridge, label it unavailable or
+diagnostic-only rather than inferring it from job completion.
+
 ## Layer 6: Paper Reproduction
 
 Only attempt paper figures after smaller rungs are stable. Published models
@@ -153,7 +174,7 @@ often hide:
 Use exact status labels:
 
 - **code implementation complete**: scoped equations implemented, generated,
-  compiled, and validated at a small rung.
+  compiled, and checked through an appropriate direct-runtime rung.
 - **solver stabilization open**: residual/tangent exist but free solve is not
   robust.
 - **paper reproduction complete**: geometry, boundary conditions, parameters,

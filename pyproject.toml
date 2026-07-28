@@ -19,6 +19,8 @@ dev = [
     "build",
     "pytest",
     "scipy",
+    "meson",
+    "ninja",
 ]
 
 [tool.setuptools.packages.find]

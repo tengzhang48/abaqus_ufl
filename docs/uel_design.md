@@ -408,15 +408,20 @@ weakform._mat              # Material instance (for AST translation + props)
 
 ## Verification
 
-The Python reference assembly (`reference_assembly.py`) mirrors the Fortran
-UEL exactly — same DOF parsing, field interpolation, CS tangents, and assembly
-patterns. The FD tangent check confirms:
+The Python reference assembly (`reference_assembly.py`) mirrors the intended
+UEL operations — DOF parsing, field interpolation, CS tangents, and assembly
+patterns. Its FD tangent check confirms:
 
 ```
 AMATRX ≈ -dRHS/dU    (max relative error: 5.12e-07)
 ```
 
-This validates the entire pipeline end-to-end.
+This is Python assembled-residual/tangent evidence only. It neither executes
+the generated Fortran nor proves the weak form matches the theory. Complete the
+code-generation gate by calling the generated UEL through f2py or another
+checked compiled runtime and comparing `RHS`, `AMATRX`, `SVARS`, and `PNEWDT`
+with this assembly. Keep an independent quantitative physics oracle as a
+separate gate.
 
 ---
 
@@ -494,9 +499,7 @@ For this package, the design decision is:
 ## Deferred to follow-up
 
 - Surface BC integration (NDLOAD/JDLTYP face mapping)
-- State variable arguments to material methods (for plasticity)
 - General SVARS read/write for arbitrary post-processing variables
 - Time-dependent boundary conditions
-- 3D elements (Hex20)
 - Full original-package-style dummy-mesh UVARM/global-state visualization
 - LFLAGS check for initial stiffness call

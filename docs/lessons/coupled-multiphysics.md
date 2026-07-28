@@ -362,20 +362,21 @@ its internal fields into the output database.
 Validate the bridge explicitly, as separate checks:
 
 1. **Solver execution** — the job compiles, links, and reaches the target step.
-2. **UEL state validity** — selected integration-point variables are finite
-   *inside* the UEL before being written to visualization storage.
-3. **Bridge validity** — the dummy material copies the same finite values into
-   its state array.
-4. **Extractor validity** — the postprocessor reads the intended fields and
-   frames.
-5. **Response validation** — curves and contours match the reference / paper.
+2. **Authoritative solution validity** — every required instance-qualified node
+   or element/integration-point record exists, is unique, and is finite.
+3. **Bridge validity** — a dummy, projected, or `UVARM` visualization field
+   agrees pointwise with the authoritative solution using the declared
+   element-label and integration-point mapping.
+4. **Extractor validity** — the postprocessor reads the intended fields,
+   identities, steps/frames, units, signs, component order, and cumulative time.
+5. **Response validation** — only after those gates do curves and contours
+   compare with the frozen reference or paper.
 
-Use a short *serial* debug run before any threaded or long run, and compare one
-known integration point on both sides of the bridge (UEL-side visualization
-value vs. the value the dummy material writes into its state array). Module-level
-scratch arrays and global scalars used for visualization are often unsafe under
-threaded execution — an N-core request can run as one rank × N threads — so
-thread safety matters even when the job is launched through an MPI-style script.
+Use a short serial debug run before any threaded or long run, but do not replace
+the full coverage audit with one inspected integration point. Module-level
+scratch arrays and global scalars used for visualization may be unsafe under
+threads; serial-versus-parallel comparison comes after both runs apply the same
+identity and coverage checks.
 
 Also, do not read a zero or scaled visualization field as proof that the local
 solve failed. A missing or lumped projection path can show zeros while the
@@ -408,19 +409,21 @@ still exposes an uncommitted-state path.
 
 After a one-element fix passes, the full mesh still needs its own short run
 before a production run. The correct intermediate gate is a shortened run on the
-production mesh that shows *finite, nonzero* visualization fields at a large
-fraction of integration points — proving the big mesh receives the scalar DOFs
-and the visualization bridge writes useful fields — without yet claiming the
-physical growth/response is reproduced.
+production mesh that proves exact expected node/element/integration-point
+coverage, uniqueness, finiteness, and any visualization-bridge parity. A
+"large fraction" is not sufficient: a deterministic missing element block can
+remain finite or zero and still produce plausible extrema. Nonzero checks are
+model-specific and must distinguish an expected physical zero from a failed
+transfer.
 
 Keep three distinct milestones and do not collapse them:
 
 1. one-element scalar-transfer pass,
-2. full-mesh finite-output smoke pass,
+2. full-mesh coverage and bridge-parity pass,
 3. full-duration paper-comparison pass.
 
-A derived quantity that stays at finite zero in the short smoke run is a
-production/reproduction target, not evidence from the smoke test.
+A derived quantity is not trustworthy until its source field and postprocessing
+rule have passed these bridge gates.
 
 ### Long-run convergence is a separate validation gate
 

@@ -1,50 +1,36 @@
-# abaqus_ufl Example Map
+# abaqus_ufl Public Example Map
 
-Use this map before opening old example folders. It tells an agent which
-existing model is the closest reusable pattern.
+This file is a positive release map, not the development lab's capability
+inventory.
 
-Scope: this map lists the released `abaqus_ufl` examples. If a path is missing,
-do not assume the repository is broken; run `find examples -maxdepth 2 -type d`
-and choose the closest present pattern.
+Before reusing an example:
 
-## Clean UMAT Models
+1. read `examples/README.md`;
+2. confirm that the folder exists in this checkout;
+3. read its theory, non-scope, and evidence record; and
+4. reuse only the rung that the example actually passed.
 
-| Example | Reuse for | Notes |
+Do not infer that a missing research model is a package defect, and do not add
+an internal, unpublished, license-unclear, planned, or not-yet-ported path to
+this map.
+
+## Pipeline reference
+
+| Path | Reuse for | Scope |
 |---|---|---|
-| `examples/small_strain_elastic_umat` | Minimal small-strain UMAT | Signature, compression-positive convention. |
-| `examples/neo_hookean_umat` | Minimal finite-strain UMAT | `stress_PK1(F)` to Abaqus stress/DDSDDE. |
-| `examples/mooney_rivlin_umat` | Level-1 finite-strain benchmark | Clean build smoke path. |
-| `examples/small_strain_viscoelastic_umat` | Tensor `STATEV` | 9-slot tensor state and transient response. |
+| `examples/_template` | Complete minimal Python-to-compiled-UMAT pipeline | Working elastic demonstration; replace its physics and model-specific checks. |
+| `HOWTO_ADD_AN_EXAMPLE.md` | Pipeline responsibilities and release gates | Canonical public contract; filenames remain example-owned. |
+| `tools/` | Simple Abaqus run/extract/compare support | One-element/simple output only; difficult output bridges remain example-owned. |
 
-## Path-Dependent UMAT Models
+## Released scientific examples
 
-| Example | Reuse for | Notes |
-|---|---|---|
-| `examples/small_strain_j2_umat` | Stateful plasticity | Return `(sigma, state_dict)`, yielding activation. |
+The authoritative allowlist is the table in `examples/README.md`. Keep any
+scientific example entries here synchronized with that table after their
+folders land in the public repository. Do not pre-advertise v1 targets.
 
-## UEL Models
+## Authoritative docs
 
-| Example | Reuse for | Notes |
-|---|---|---|
-| `examples/scalar_diffusion_uel` | Minimal scalar transport UEL | `transport_equation` returns `(storage, flux)`. |
-| `examples/phasefield_fracture_uel` | Scalar phase-field UEL | Gradient damage requires UEL, not UMAT. |
-| `examples/thermo_mechanics_quad8` | Coupled `u + T` UEL | Temperature-displacement scaffold and dummy thermal material requirements. |
-| `examples/uel_scaffold_quad4` | Abaqus UEL input scaffold | Flat include structure, node-label extraction. |
-| `examples/uel_scaffold_mixed_quad8` | Mixed UEL scaffold | Active DOF and interpolation sanity checks. |
-| `examples/Fbar_uel` | Pure mechanics F-bar | Do not use as default for coupled gels. |
-
-## Validation Workspaces
-
-| Path | Purpose |
-|---|---|
-| `examples/<name>/abaqus/` | Per-example Abaqus validation decks and reference results. |
-| `tools/` | Shared validation, extraction, and comparison scripts. |
-
-## Authoritative Docs
-
-Open these before deep changes:
-
-- `docs/API_USAGE.md`
 - `README.md`
 - `HOWTO_ADD_AN_EXAMPLE.md`
+- `docs/API_USAGE.md`
 - `examples/README.md`

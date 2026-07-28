@@ -32,6 +32,8 @@ test_driver
 *.log
 *.vtk
 *.vtu
+examples/**/abaqus/*_extracted.json
+examples/**/abaqus/*_report.json
 
 # OS / editor
 .DS_Store

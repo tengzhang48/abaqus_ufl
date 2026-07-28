@@ -1,8 +1,9 @@
 # abaqus_ufl API Usage Guide
 
 This note is the compact user-facing API reference for writing models with
-`abaqus_ufl`. It focuses on the stable workflows that have been exercised by
-the current UMAT, UEL, f2py, and Abaqus-validation examples.
+`abaqus_ufl`. It focuses on the stable authoring and generation API. Evidence
+for any released scientific example belongs in the public example manifest,
+not in this API guide.
 
 ## Import Pattern
 
@@ -81,10 +82,14 @@ class ThermoMaterial(au.Material):
         FinvT = inv(F).T
         return self.G * (F - FinvT) + self.K * log(J) * FinvT - self.K * self.alpha * T * FinvT
 
-    def heat_storage(self, F, F_old, T, T_old, dt):
+    # The storage/flux pair MUST use the recognized method names below;
+    # the generator emits calls to exactly these names, and the WeakForm
+    # constructor rejects a material that lacks them. (Heat notation is
+    # fine in comments; 'heat_storage'/'heat_flux' are NOT recognized.)
+    def solvent_storage(self, F, F_old, T, T_old, dt):
         return self.rho_cp * (T - T_old) / dt
 
-    def heat_flux(self, F, T, grad_T):
+    def solvent_flux(self, F, T, grad_T):
         return -self.k * grad_T
 
 class ThermoProblem(au.WeakForm):
@@ -99,7 +104,7 @@ class ThermoProblem(au.WeakForm):
         return self.material.stress_PK1(F, T)
 
     def transport_equation(self, theta, F, T, grad_T, F_old, T_old, dt):
-        return self.material.heat_storage(F, F_old, T, T_old, dt), self.material.heat_flux(F, T, grad_T)
+        return self.material.solvent_storage(F, F_old, T, T_old, dt), self.material.solvent_flux(F, T, grad_T)
 
 problem = ThermoProblem()
 problem.verify()
@@ -116,26 +121,13 @@ needed by the tuple convention. For AT2 damage,
 `storage = Gc/ell*d - 2*(1-d)*H` and the positive weak-form term
 `+Gc*ell*grad(d).grad(eta)` require `phase_flux = -Gc*ell*grad_d`.
 
-When a scalar gradient model has mechanism-dependent coefficients, thread the
-same branch data through both the storage/reaction term and the gradient term.
-For example, a damage law with tensile and compressive mechanisms should not use
-`psi_star_damage` in `phase_storage` but a hard-coded brittle `psi_star` in
-`phase_flux`. Pass the state needed to choose the mechanism into the flux method:
-
-```python
-def phase_storage(self, F, damage, damage_old, Fp_old, dt):
-    H, psi_star_m, eta_m = self.damage_params(F, Fp_old)
-    return eta_m * (damage - damage_old) / dt - 2.0 * (1.0 - damage) * H + 2.0 * psi_star_m * damage
-
-def phase_flux(self, F, grad_damage, Fp_old):
-    _, psi_star_m, _ = self.damage_params(F, Fp_old)
-    return -2.0 * psi_star_m * self.ell * self.ell * grad_damage
-```
-
-This adds `dflux/dF` blocks to the full coupled UEL tangent. If a production
-run needs a diagonal or staggered tangent, use `drop_tangent_coupling` or a
-separate diagonal variant deliberately; do not make the physics branch-agnostic
-just to keep the tangent smaller.
+When a scalar gradient model has branch-dependent coefficients, derive the
+storage/reaction and gradient terms from the same branch selection and thread
+the required state into both methods. A CS-vs-FD check can differentiate the
+same wrong branch consistently, so add a branch-specific invariant that checks
+the declared reaction/gradient relationship. If a production run uses a
+diagonal or staggered tangent, make that approximation explicit rather than
+changing the physics to reduce coupling.
 
 UEL material methods may also request `time`, which maps to Abaqus total time
 `TIME(2)`. Treat it like `dt`: it is a real, non-differentiated parameter, not
@@ -167,7 +159,7 @@ stress and the complex-step `dP/dF` tangent.
 | Backend | Use case |
 |---------|----------|
 | `"iterative"` | **Default.** Fixed-count iterative helpers (`sqrtm33z_iter`, `logm33z_iter`, `expm33z_iter`, `polar33z_iter`). CS-safe at diagonal-F states. |
-| `"eig"` | Eig-based `sqrtm33z`, `logm33z`, `expm33z`, `polar33z`. Not CS-safe at diagonal-F states due to `eig33z` near-diagonal guard; available for backward compatibility. |
+| `"eig"` | Eig-based `sqrtm33z`, `logm33z`, `expm33z`, `polar33z`. The eig guards are scale- and rotation-safe (repeated spectra route through a rotation-invariant fallback); available for compatibility/debugging, with compiled spectral gates covering the states in scope. |
 
 Example:
 
@@ -357,35 +349,47 @@ not dataclasses.
 
 Use this order for every new model:
 
-1. Python material or weak-form verification with `verify()`.
-2. Material-point or element-level regime checks that prove the tested states
-   enter every claimed branch.
-3. Generated Fortran compile check with `gfortran`.
-4. Optional f2py material-point or element-level check.
-5. Abaqus one-element validation.
-6. Published benchmark or collaborator comparison.
+1. Document the theory, non-scope, conventions, fields/DOFs, and state layout.
+2. Add an independent quantitative oracle and model-specific regime checks.
+3. Run material-method tangent consistency with `verify()`.
+4. For a UEL, check assembled `RHS`/`AMATRX`, DOF/state layout, and an
+   appropriate patch or invariant.
+5. Regenerate deterministically and compile the Fortran with `gfortran`.
+6. Directly call nontrivial generated code through f2py or another checked
+   compiled runtime.
+7. Add a small solver run only when useful, then validate its output bridge.
+8. Attempt a published benchmark or collaborator comparison last.
 
-`verify()` checks the tangent of the implemented residual at its chosen state.
-It does not prove that the residual matches the paper, that all branches were
-entered, or that a gradient coefficient matches the corresponding reaction
-coefficient. For branchy damage/plasticity models, add tests that assert the
-regime was reached and measure branch-specific invariants such as an effective
-regularization length from the ratio of gradient and reaction stiffnesses.
+`Material.verify()` checks the tangent of implemented material methods at its
+chosen state. `WeakForm.verify()` currently delegates to material verification;
+it does not assemble a UEL residual/tangent. Neither proves that the equations
+match the paper, that all branches were entered, or that a gradient coefficient
+matches the corresponding reaction coefficient. For branchy models, add tests
+that assert the regime was reached and measure branch-specific invariants.
 
 Do not interpret a failed solver run before the earlier rungs pass. Solver
 nonconvergence can come from the material law, load step, tangent symmetry,
 boundary conditions, hourglass control, or the solver path.
 
+### Solver-output bridge
+
+Abaqus setup is example/user-owned. When a solver result is used as evidence,
+the example must still define and test its output bridge:
+
+- map each logical quantity to its field/component/slot/active DOF;
+- declare units, signs/offsets, component and integration-point order;
+- require stable identity, exact coverage, uniqueness, and finiteness;
+- distinguish authoritative solved fields from reconstructed or
+  visualization-only bridges; and
+- audit a `UVARM`, dummy-element, or projected bridge pointwise where possible.
+
+The shared ODB extractor is intentionally for simple one-element cases. Keep
+model-specific histories, projections, named-set reductions, and derived
+observables in the example.
+
 ## Reference Examples
 
-Use these examples as templates:
-
-| Need | Start from |
-|------|------------|
-| finite-strain elastic UMAT | `examples/neo_hookean_umat`, `examples/mooney_rivlin_umat` |
-| viscoelastic UMAT | `examples/small_strain_viscoelastic_umat` |
-| small-strain plastic UMAT | `examples/small_strain_j2_umat` |
-| scalar UEL | `examples/scalar_diffusion_uel` |
-| phase-field UEL | `examples/phasefield_fracture_uel` |
-| coupled displacement-temperature UEL | `examples/thermo_mechanics_quad8` |
-| Abaqus deck validation | `examples/_template`, `tools/` |
+The public positive manifest is [`../examples/README.md`](../examples/README.md).
+Use only folders present there and in this checkout. The working
+[`../examples/_template/`](../examples/_template/) demonstrates the complete
+minimal UMAT pipeline; it is not a scientific capability claim.

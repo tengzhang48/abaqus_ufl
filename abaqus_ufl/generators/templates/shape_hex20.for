@@ -1,5 +1,5 @@
 C======================================================================
-C     shape_hex20.for — Shape functions for 20-node hexahedral element
+C     shape_hex20.for -- Shape functions for 20-node hexahedral element
 C
 C     Node numbering (Abaqus convention):
 C
@@ -32,10 +32,10 @@ C======================================================================
 C     20-node hexahedral shape functions and derivatives (serendipity)
 C
 C     Input:
-C       xi, eta, zeta — natural coordinates in [-1,1]
+C       xi, eta, zeta -- natural coordinates in [-1,1]
 C     Output:
-C       N(20)       — shape function values at (xi,eta,zeta)
-C       dNdxi(20,3) — dNdxi(a,i) = dN_a/dxi_i
+C       N(20)       -- shape function values at (xi,eta,zeta)
+C       dNdxi(20,3) -- dNdxi(a,i) = dN_a/dxi_i
 C                      i=1: d/dxi, i=2: d/deta, i=3: d/dzeta
 C
       IMPLICIT NONE

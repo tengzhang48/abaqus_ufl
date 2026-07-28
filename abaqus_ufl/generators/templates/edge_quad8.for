@@ -1,5 +1,5 @@
 C======================================================================
-C     edge_quad8.for — Edge (surface) integration for Quad8 elements
+C     edge_quad8.for -- Edge (surface) integration for Quad8 elements
 C
 C     Standalone copy of edge_shape_quad8 for use without shape_quad8.for.
 C     Requires: shape_quad8 subroutine (from shape_quad8.for)
@@ -21,9 +21,9 @@ C
 C     t: parametric coordinate along the edge [-1, +1]
 C
 C     Returns:
-C       sh8(8)    — Quad8 shape functions evaluated on this face
-C       ds        — edge Jacobian (length element for line integral)
-C       normal(2) — outward unit normal vector (nx, ny)
+C       sh8(8)    -- Quad8 shape functions evaluated on this face
+C       ds        -- edge Jacobian (length element for line integral)
+C       normal(2) -- outward unit normal vector (nx, ny)
 C
 C     The edge is traversed with t from -1 to +1 such that the
 C     outward normal is obtained by rotating the tangent (dX/dt, dY/dt)

@@ -1,11 +1,11 @@
 C======================================================================
-C     gauss_hex.for — Gauss quadrature rules for hexahedral elements
+C     gauss_hex.for -- Gauss quadrature rules for hexahedral elements
 C
 C     Provides integration point coordinates and weights for:
-C       - 2x2x2 (8-point)  — Hex8 full integration
-C       - 3x3x3 (27-point) — Hex20 full integration
-C       - 1-point           — Hex8 reduced integration
-C       - 2x2x2 (8-point)  — Hex20 reduced integration
+C       - 2x2x2 (8-point)  -- Hex8 full integration
+C       - 3x3x3 (27-point) -- Hex20 full integration
+C       - 1-point           -- Hex8 reduced integration
+C       - 2x2x2 (8-point)  -- Hex20 reduced integration
 C
 C     Generates: gauss_hex8, gauss_hex20, gauss_hex_reduced
 C======================================================================
@@ -14,9 +14,9 @@ C======================================================================
 C     2x2x2 Gauss quadrature for 8-node hexahedral (full integration)
 C
 C     Output:
-C       xi_gp(8,3) — integration point coordinates (xi,eta,zeta)
-C       w_gp(8)    — integration weights
-C       n_gp       — number of integration points (8)
+C       xi_gp(8,3) -- integration point coordinates (xi,eta,zeta)
+C       w_gp(8)    -- integration weights
+C       n_gp       -- number of integration points (8)
 C
       IMPLICIT NONE
       DOUBLE PRECISION, INTENT(OUT) :: xi_gp(8,3), w_gp(8)
@@ -49,9 +49,9 @@ C
 C     3x3x3 Gauss quadrature for 20-node hexahedral (full integration)
 C
 C     Output:
-C       xi_gp(27,3) — integration point coordinates
-C       w_gp(27)    — integration weights
-C       n_gp        — number of integration points (27)
+C       xi_gp(27,3) -- integration point coordinates
+C       w_gp(27)    -- integration weights
+C       n_gp        -- number of integration points (27)
 C
       IMPLICIT NONE
       DOUBLE PRECISION, INTENT(OUT) :: xi_gp(27,3), w_gp(27)
@@ -92,9 +92,9 @@ C     3-point Gauss rule: points and weights
 C     1-point Gauss quadrature for reduced integration
 C
 C     Output:
-C       xi_gp(1,3) — integration point at origin
-C       w_gp(1)    — weight = 8.0 (volume of [-1,1]^3)
-C       n_gp       — 1
+C       xi_gp(1,3) -- integration point at origin
+C       w_gp(1)    -- weight = 8.0 (volume of [-1,1]^3)
+C       n_gp       -- 1
 C
       IMPLICIT NONE
       DOUBLE PRECISION, INTENT(OUT) :: xi_gp(1,3), w_gp(1)

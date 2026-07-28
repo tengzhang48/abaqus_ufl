@@ -1,4 +1,4 @@
-"""Utilities for Abaqus validation reference generation.
+"""Utilities for Abaqus integration-reference generation.
 
 The references here are Python material-point values for deliberately
 homogeneous one-element Abaqus decks. Small-strain UMAT examples use the

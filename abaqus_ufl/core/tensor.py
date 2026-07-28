@@ -2,8 +2,13 @@
 Tensor algebra for constitutive models.
 
 Every function in this module:
-  1. Works with both real and complex NumPy arrays (CS-safe)
+  1. Works with real NumPy arrays and the infinitesimal complex-step
+     perturbations used by verification/code generation
   2. Has a known Fortran counterpart for code generation
+
+Most algebraic primitives also accept arbitrary complex values. ``eig`` has a
+narrower constitutive contract: real symmetric state plus an infinitesimal
+complex-step perturbation, not a general finite-complex eigensolver.
 
 Fortran mapping (used by the code generator):
     det(A)    -> det33z(Az)
@@ -15,6 +20,7 @@ Fortran mapping (used by the code generator):
     exp(x)    -> EXP(xz)              [scalar only]
     log(x)    -> LOG(xz)              [scalar only]
     sqrt(x)   -> SQRT(xz)             [scalar only]
+    normalize(v) -> v / sqrt(v^T v)   [3-vector, no conjugation]
     dyad(a,b) -> a(i)*b(j) loop
     cross(a,b)-> explicit formula
     sqrtm(A)  -> sqrtm33z(A, S)       [3x3 symmetric matrix]
@@ -28,17 +34,18 @@ explicit mapping (@ -> matmul33z, .T -> transpose33z).
 Backend status:
   - Python sqrtm/logm/expm use robust iterative algorithms with fixed
     iteration counts. This is the material-point oracle path.
-  - Generated Fortran currently maps sqrtm/logm/expm to eigendecomposition
-    helpers (sqrtm33z/logm33z/expm33z). Those helpers use the same
-    trigonometric cubic eigensolver plus diagonal/near-diagonal guards.
-  - Iterative Fortran helpers also exist in tensor_ops.for, but the
-    generator does not select them by default.
+  - Generated Fortran defaults to fixed-count iterative helpers for
+    sqrtm/logm/expm/polar. The eig-based matrix-function backend remains an
+    explicit compatibility/debugging option.
+  - Explicit eig calls use the trigonometric real-value path and a
+    rotation-invariant, first-order complex-step fallback in both Python and
+    generated Fortran.
 
-The backend split is intentional for now and is tracked in
-the matrix-function templates.  f2py material tests compare generated Fortran
+The backend split is intentional for now and is tracked in the
+matrix-function design notes.  f2py material tests compare generated Fortran
 against the Python oracle at representative states.
 
-See the matrix-function templates for details.
+See docs/matrix_functions_design.md for details.
 
 IMPORTANT: Users must ONLY use functions from this module in their
 Material methods. Using raw numpy (np.linalg.det, np.abs, etc.)
@@ -163,6 +170,30 @@ def cross(a, b):
     return c
 
 
+def normalize(v):
+    """Return a unit 3-vector using the CS-safe bilinear norm.
+
+    The normalization is
+
+    ``v / sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2])``.
+
+    There is deliberately no conjugation, ``abs()``, or ``.real`` projection:
+    around a nonzero real vector this expression is locally holomorphic and
+    therefore preserves complex-step derivatives.  The input must be nonzero.
+
+    This primitive is intended for constitutive formulas that require a unit
+    direction, such as slip-system construction from a column returned by
+    :func:`eig`.  ``eig`` does not guarantee the scale or normalization of its
+    columns.  Matrix-function reconstruction must therefore use
+    ``V @ diag(f(lam)) @ inv(V)``; call ``normalize`` only when the constitutive
+    theory itself requires a unit direction.
+
+    Fortran: an inline 3-vector normalization emitted by the generator.
+    """
+    scale = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
+    return v / scale
+
+
 # =====================================================================
 # Invariants (convenience)
 # =====================================================================
@@ -187,25 +218,41 @@ def eig(A):
     """
     Eigenvalues and eigenvectors of a 3x3 symmetric matrix.
 
-    Uses the trigonometric solution for the depressed cubic (avoids
-    branch cut issues of Cardano's algebraic form). Self-contained —
-    no LAPACK dependency.
+    Distinct real spectra use the trigonometric solution for the depressed
+    cubic. Repeated/quasi-repeated spectra and complex-step calls use a real
+    symmetric principal basis followed by a perturbation fallback.
 
-    Eigenvectors are returned unnormalized (raw cross-product vectors)
-    to preserve holomorphic properties for CS differentiation. Use
-    inv(V) (not V^T) for reconstruction: f(A) = V @ diag(f(lam)) @ inv(V).
+    Eigenvector column scale is an implementation detail: columns are not
+    guaranteed to be unit or orthogonal. Use ``inv(V)`` (not ``V.T``) for
+    reconstruction: ``f(A) = V @ diag(f(lam)) @ inv(V)``. If a constitutive
+    equation needs a unit direction, normalize that column explicitly.
+
+    Within the quasi-repeated grouping band, only eigenspace-invariant
+    reconstructions are supported. Derivatives of an arbitrarily selected
+    individual eigenvector or rank-one projector are gauge-dependent,
+    ill-conditioned, and outside this API contract.
 
     Args:
-        A: 3x3 numpy array (real or complex), assumed symmetric
+        A: 3x3 symmetric real state, optionally carrying an infinitesimal
+           complex-step perturbation. Arbitrary finite-complex matrix
+           eigendecomposition is outside this constitutive DSL contract.
 
     Returns:
         lam: length-3 array of eigenvalues (sorted by real part)
-        V:   3x3 array where V[:,i] is the eigenvector for lam[i]
-             (unnormalized, but linearly independent for distinct eigenvalues)
+        V:   3x3 array whose columns correspond to ``lam``. Column scale and
+             normalization are unspecified.
 
     Fortran: eig33z(A, lam, V)
     """
     A = np.asarray(A, dtype=np.complex128)
+
+    # A repeated spectrum is not a coordinate-dependent event.  During a
+    # complex-step call, first diagonalize the real symmetric state, rotate the
+    # full complex perturbation into that basis, and reuse the established
+    # quasi-degenerate treatment there.  The former guard only recognized
+    # diagonal repeated states and failed after a real orthogonal rotation.
+    if np.max(np.abs(A.imag)) > 0.0:
+        return _eig_rotated_fallback(A)
 
     # Invariants
     p1 = A[0, 1] ** 2 + A[0, 2] ** 2 + A[1, 2] ** 2
@@ -227,7 +274,7 @@ def eig(A):
     # order. The old fallback (lam = q, V = I) silently zeroed CS
     # derivatives of spectral functions at C = I (audit finding H2).
     if abs(p.real) < 1e-30:
-        return _eig_near_diagonal(A)
+        return _eig_rotated_fallback(A)
 
     # For nearly-diagonal matrices the trigonometric formula is unstable
     # when two eigenvalues are nearly equal (|r| ≈ 1).  In that regime
@@ -236,10 +283,8 @@ def eig(A):
     # perturbation theory about the diagonal (keeps the off-diagonal CS
     # parts that the old diag/V=I fallback discarded — finding H2).
     p2_abs = abs(p2.real)
-    if p2_abs > 0.0 and (
-        abs(p1.real) < 1e-14 * p2_abs or abs(p1) < 1e-18
-    ):
-        return _eig_near_diagonal(A)
+    if p2_abs > 0.0 and abs(p1.real) < 1e-14 * p2_abs:
+        return _eig_rotated_fallback(A)
 
     # C = B / p
     C = B / p
@@ -249,6 +294,13 @@ def eig(A):
              - C[0, 1] * (C[1, 0] * C[2, 2] - C[1, 2] * C[2, 0])
              + C[0, 2] * (C[1, 0] * C[2, 1] - C[1, 1] * C[2, 0]))
     r = det_C / 2.0
+
+    # Repeated and quasi-repeated spectra are also rotation invariant on the
+    # pure real value path. Cross-product columns become singular when the
+    # repeated eigenspace is not coordinate-aligned, so reuse the real-basis
+    # fallback before evaluating the cubic angle.
+    if abs(1.0 - abs(r.real)) <= 1.0e-10:
+        return _eig_rotated_fallback(A)
 
     # Clamp r to [-1, 1] to avoid arccos domain issues.
     # For complex-step inputs we clamp the real part only; the imag
@@ -276,6 +328,22 @@ def eig(A):
     return lam, V
 
 
+def _eig_rotated_fallback(A):
+    """Rotation-invariant repeated-spectrum/complex-step eig fallback.
+
+    ``A.real`` supplies a real orthonormal principal basis.  In that basis the
+    full complex matrix is near diagonal, so ``_eig_near_diagonal`` can resolve
+    repeated and quasi-repeated blocks without assuming that the original
+    coordinate axes are principal axes. For complex-step input this is a
+    first-order construction. Pure real, well-separated value calls stay on
+    ``eig``'s trigonometric path; repeated/near-repeated values use this path.
+    """
+    _, Q = np.linalg.eigh(A.real)
+    A_principal = Q.T @ A @ Q
+    lam, V_principal = _eig_near_diagonal(A_principal)
+    return lam, Q.astype(np.complex128) @ V_principal
+
+
 def _eig_near_diagonal(A):
     """Eigendecomposition of a (near-)diagonal complex-symmetric 3x3 by
     quasi-degenerate perturbation theory.
@@ -283,10 +351,11 @@ def _eig_near_diagonal(A):
     Used by eig()'s degeneracy guards, where the trigonometric path is
     singular. A = D + E with D = diag(A) and E small (real rounding
     and/or a complex-step perturbation). Diagonal entries are grouped by
-    closeness; within each group the dominant real-symmetric part of the
-    deviation is diagonalized exactly (numpy.linalg.eigh on a real
-    matrix — no recursion into eig), and across groups the eigenvectors
-    receive the standard first-order correction
+    closeness; within each group the derivative-carrying imaginary-symmetric
+    deviation is diagonalized during a complex-step call (the real-symmetric
+    deviation is used for a pure value call; both use numpy.linalg.eigh with no
+    recursion into eig), and across groups the eigenvectors receive the
+    standard first-order correction
 
         V[i, a] += (e_i . A v0_a) / (lam_a - D_i).
 
@@ -319,12 +388,16 @@ def _eig_near_diagonal(A):
             lam[idx[0]] = D[idx[0]]
             V[idx[0], idx[0]] = 1.0
             continue
-        # Deviation from the group mean; rotate by the eigenbasis of its
-        # dominant real-symmetric part (exact within the group, keeps
-        # the subdominant part to first order on the rotated diagonal).
+        # Deviation from the group mean. A CS call must resolve its imaginary
+        # direction inside this intentionally quasi-degenerate block; a pure
+        # value call uses the real-symmetric deviation.
         dev = sub - (np.trace(sub) / n) * np.eye(n)
-        M = dev.imag if np.max(np.abs(dev.imag)) > np.max(np.abs(dev.real)) \
-            else dev.real
+        # During a complex-step call, the imaginary block is the derivative
+        # direction.  Resolve it even when a small real eigenvalue split is
+        # numerically larger; treating every member of this intentionally
+        # quasi-degenerate group in the real basis would erase the off-diagonal
+        # derivative.  Purely real value calls still use the real deviation.
+        M = dev.imag if np.max(np.abs(dev.imag)) > 0.0 else dev.real
         if np.max(np.abs(M)) == 0.0:
             Q = np.eye(n)
         else:
@@ -354,9 +427,13 @@ def _eigvec(M, idx):
     """
     Compute eigenvector for singular matrix M = A - lambda*I.
 
-    Returns the RAW (unnormalized) cross-product vector.
-    Normalization is not needed because _reconstruct uses inv(V),
-    and normalization would be non-holomorphic (breaking CS).
+    This helper is used only on ``eig``'s distinct-real trigonometric path and
+    returns the raw (unnormalized) cross-product vector. The public ``eig``
+    contract does not promise this scaling because other paths choose a real
+    symmetric basis. Reconstruction uses ``inv(V)``, so column scaling cancels.
+    A constitutive consumer that requires a unit direction should call
+    ``normalize()``, which uses the locally holomorphic bilinear norm (not a
+    conjugated/Hermitian norm).
 
     Falls back to coordinate basis for degenerate cases.
     """
@@ -372,8 +449,13 @@ def _eigvec(M, idx):
             best = c
             best_nsq = nsq
 
-    # Degenerate: fall back to coordinate basis
-    if abs(best_nsq) < 1e-50:
+    # This path only receives pure-real distinct spectra. A fixed absolute
+    # threshold is not scale invariant: for a small but otherwise ordinary
+    # rotated tensor the cross products scale as ||A||^2 and their squared
+    # norms as ||A||^4. Fall back only when the cross products are exactly
+    # zero; sufficiently small spectra are already routed through the rotated
+    # fallback before reaching this helper.
+    if abs(best_nsq) == 0.0:
         v = np.zeros(3, dtype=np.complex128)
         v[idx] = 1.0
         return v

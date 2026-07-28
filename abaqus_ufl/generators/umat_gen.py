@@ -191,6 +191,7 @@ class FortranTranslator(ast.NodeVisitor):
       log(x)      -> LOG(xz)                  [scalar]
       exp(x)      -> EXP(xz)                  [scalar]
       sqrt(x)     -> SQRT(xz)                 [scalar]
+      normalize(v)-> v / SQRT(v^T v)          [3-vector]
       trace(A)    -> (A(1,1)+A(2,2)+A(3,3))   [scalar]
       A @ B       -> matmul33z call            [tensor]
       A.T         -> transpose33z call         [tensor]
@@ -1119,6 +1120,24 @@ class FortranTranslator(ast.NodeVisitor):
                 return f'EXP({args[0]})', 'scalar'
             elif func_name == 'sqrt':
                 return f'SQRT({args[0]})', 'scalar'
+            elif func_name == 'normalize':
+                if len(args_with_kinds) != 1:
+                    raise NotImplementedError(
+                        "normalize requires exactly one 3-vector argument")
+                if args_with_kinds[0][1] != 'vector':
+                    raise NotImplementedError(
+                        "normalize requires a 3-vector argument")
+                vec = self._materialize_call_arg(args[0], 'vector')
+                norm = self._new_temp('VNORM')
+                self._add_decl('DOUBLE COMPLEX', norm, '')
+                self._add_stmt(
+                    f'{norm} = SQRT({vec}(1)*{vec}(1) + '
+                    f'{vec}(2)*{vec}(2) + {vec}(3)*{vec}(3))')
+                tmp = self._new_temp('UNITV')
+                self._add_decl('DOUBLE COMPLEX', tmp, '(3)')
+                self._var_kinds[tmp] = 'vector'
+                self._add_stmt(f'{tmp} = {vec} / {norm}')
+                return tmp, 'vector'
             elif func_name in ('sin', 'cos', 'tan',
                                'sinh', 'cosh', 'tanh',
                                'arctan', 'atan', 'arccos'):
@@ -1613,10 +1632,23 @@ def _generate_statev_read(sv_info):
     if not sv_info:
         return ''
 
+    # Total slots, for the first-increment all-zero scan.
+    nslots = 0
+    for entry in sv_info.values():
+        nslots += {'scalar': 1, 'vector': 3, 'tensor': 9}[entry['shape']]
+
     lines = []
     lines.append('C     --- Read state variables from STATEV ---')
-    lines.append('C     (Standard Abaqus STATEV init pattern, TIME(2)==0)')
-    lines.append('      IF (TIME(2) .EQ. 0.0d0) THEN')
+    lines.append('C     First increment (TIME(2)==0): honor nonzero incoming state')
+    lines.append('C     (e.g. from SDVINI or *INITIAL CONDITIONS); fall back to the')
+    lines.append('C     declared initial values only when STATEV is all zero, which')
+    lines.append('C     is the Abaqus default initialization.')
+    lines.append('      svinit_max = 0.0d0')
+    lines.append(f'      DO i = 1, {nslots}')
+    lines.append('        svinit_max = MAX(svinit_max, DABS(STATEV(i)))')
+    lines.append('      END DO')
+    lines.append('      IF (TIME(2) .EQ. 0.0d0 .AND. '
+                 'svinit_max .EQ. 0.0d0) THEN')
 
     # Initial values
     for name, entry in sv_info.items():
@@ -2407,16 +2439,17 @@ C             AFF_ijkl = sum_{J,L} dPdF(i,J,k,L) * F(j,J) * F(l,L)
         END DO
       END DO
 
-C     Pack symmetric tensor into Voigt 6x6.
-C     Major symmetry is satisfied by construction.
+C     Pack symmetric stress/strain component pairs into Voigt 6x6.
+C     Preserve all 36 computed entries. Major symmetry is a material
+C     validation/deck contract, not guaranteed by this kinematic conversion.
       DO i = 1, 6
         STRESS(i) = sigma(voigt_i(i), voigt_j(i))
       END DO
 
       DO i = 1, 6
-        DO j = i, 6
-          DDSDDE(i,j) = c(voigt_i(i), voigt_j(i), voigt_i(j), voigt_j(j))
-          DDSDDE(j,i) = DDSDDE(i,j)
+        DO j = 1, 6
+          DDSDDE(i,j) = c(voigt_i(i), voigt_j(i),
+     &                      voigt_i(j), voigt_j(j))
         END DO
       END DO
 
@@ -2539,9 +2572,28 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
             lines.append(
                 f'      DOUBLE COMPLEX :: {name}_new_z{dims}')
         lines.append('      DOUBLE PRECISION :: dt_safe')
+        lines.append('      DOUBLE PRECISION :: svinit_max')
 
     lines.append('      INTEGER :: i, j')
     lines.append('')
+
+    # Abaqus permits these source/coupling outputs to be omitted by a
+    # constitutive model, but they still must be deterministic. Preserve
+    # SSE/SPD/SCD because Abaqus passes accumulated energy values into UMAT.
+    lines.extend([
+        'C     --- Initialize optional Abaqus outputs ---',
+        '      RPL = 0.0d0',
+        '      DDSDDT = 0.0d0',
+        '      DRPLDE = 0.0d0',
+        '      DRPLDT = 0.0d0',
+        '      DDSDDE = 0.0d0',
+        '',
+        '      IF (NDI .NE. 3 .OR. NSHR .NE. 3 .OR. NTENS .NE. 6) THEN',
+        '        PNEWDT = 0.5d0',
+        '        RETURN',
+        '      END IF',
+        '',
+    ])
 
     # --- Get deformation gradient ---
     lines.append('C     --- Get deformation gradient ---')
@@ -2756,11 +2808,19 @@ def _generate_small_strain_umat_wrapper(
             lines.append(f'      DOUBLE COMPLEX :: {name}_old_z{dims}')
             lines.append(f'      DOUBLE COMPLEX :: {name}_new_z{dims}')
         lines.append('      DOUBLE PRECISION :: dt_safe')
+        lines.append('      DOUBLE PRECISION :: svinit_max')
     lines.append('      INTEGER :: i, j, col')
     lines.append('')
 
     lines.extend([
-        '      IF (NTENS .NE. 6) THEN',
+        'C     --- Initialize optional Abaqus outputs ---',
+        '      RPL = 0.0d0',
+        '      DDSDDT = 0.0d0',
+        '      DRPLDE = 0.0d0',
+        '      DRPLDT = 0.0d0',
+        '      DDSDDE = 0.0d0',
+        '',
+        '      IF (NDI .NE. 3 .OR. NSHR .NE. 3 .OR. NTENS .NE. 6) THEN',
         '        PNEWDT = 0.5d0',
         '        RETURN',
         '      END IF',
@@ -2916,10 +2976,11 @@ def generate_umat(material, output_path, mat_prefix=None,
                     (default: lowercase class name)
         matrix_backend: matrix-function backend for generated Fortran.
                     'iterative' (default) uses fixed-count iterative helpers
-                        (CS-safe, no eigendecomposition guards).
+                        and avoids eigenvector gauges inside matrix functions.
                     'eig' uses sqrtm33z/logm33z/expm33z.
-                        Not CS-safe at diagonal-F states; available for
-                        backward compatibility or explicit choice.
+                        Available for backward compatibility/debugging; require
+                        compiled spectrum-specific derivative gates for the
+                        constitutive states in scope.
     """
     if matrix_backend not in ('eig', 'iterative'):
         raise ValueError(
@@ -2974,6 +3035,13 @@ def generate_umat(material, output_path, mat_prefix=None,
     hdr.append(
         f'C     Material: {material.__class__.__name__}')
     hdr.append(f'C     Matrix backend: {matrix_backend}')
+    symmetric_tangent = getattr(material, 'symmetric_tangent', True)
+    hdr.append(
+        f'C     Algorithmic tangent: '
+        f'{"major-symmetric" if symmetric_tangent else "full/unsymmetric"}')
+    if not symmetric_tangent:
+        hdr.append(
+            'C     Abaqus deck requirement: *USER MATERIAL, UNSYMM')
     hdr.append(
         f'C     Props: '
         f'{", ".join(f"{k}={getattr(material, k)}" for k in material.props_names)}')
@@ -2983,6 +3051,10 @@ def generate_umat(material, output_path, mat_prefix=None,
         hdr.append(
             f'C     State vars: '
             f'{", ".join(sv_info.keys())}')
+        if any(e['shape'] == 'tensor' for e in sv_info.values()):
+            hdr.append(
+                'C     Tensor state is stored without DROT rotation; '
+                'small-rotation use only.')
     hdr.append('C')
     hdr.append(
         'C     This file is self-contained. '
@@ -3155,6 +3227,13 @@ def generate_small_strain_umat(material, output_path, mat_prefix=None,
     hdr.append('C     Small-strain UMAT, compression-positive user API')
     hdr.append(f'C     Material: {material.__class__.__name__}')
     hdr.append(f'C     Update method: {update_method}')
+    symmetric_tangent = getattr(material, 'symmetric_tangent', True)
+    hdr.append(
+        f'C     Algorithmic tangent: '
+        f'{"major-symmetric" if symmetric_tangent else "full/unsymmetric"}')
+    if not symmetric_tangent:
+        hdr.append(
+            'C     Abaqus deck requirement: *USER MATERIAL, UNSYMM')
     hdr.append(
         f'C     Props: '
         f'{", ".join(f"{k}={getattr(material, k)}" for k in material.props_names)}')
@@ -3162,6 +3241,10 @@ def generate_small_strain_umat(material, output_path, mat_prefix=None,
     if has_state:
         hdr.append(f'C     NSTATV = {nstatv}')
         hdr.append(f'C     State vars: {", ".join(sv_info.keys())}')
+        if any(e['shape'] == 'tensor' for e in sv_info.values()):
+            hdr.append(
+                'C     Tensor state is stored without DROT rotation; '
+                'small-rotation use only.')
     hdr.append('C')
     hdr.append(f'C       abaqus job=my_job user={os.path.basename(output_path)}')
     hdr.append(f'C{"=" * 70}')
@@ -3205,7 +3288,7 @@ def generate_small_strain_umat(material, output_path, mat_prefix=None,
             sections.extend([
                 '',
                 'C' + '=' * 70,
-                f'C     Section {idx}: User Fortran helper — {basename}',
+                f'C     Section {idx}: User Fortran helper -- {basename}',
                 'C' + '=' * 70,
                 sidecar_src,
             ])

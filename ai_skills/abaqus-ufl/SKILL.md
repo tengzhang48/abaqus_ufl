@@ -1,15 +1,15 @@
 ---
 name: abaqus-ufl
-description: Use when developing, reviewing, validating, or debugging abaqus_ufl UMAT/UEL examples, generated Abaqus Fortran, f2py checks, Abaqus validation decks, or paper-to-code model implementations. Guides agents through target selection, generator-friendly Python, validation ladders, and known Abaqus/Fortran pitfalls.
+description: Use when developing, reviewing, verifying, or debugging abaqus_ufl UMAT/UEL examples, generated Abaqus Fortran, f2py checks, Abaqus integration decks, or paper-to-code model implementations. Guides agents through target selection, generator-friendly Python, the example pipeline, and known Abaqus/Fortran pitfalls.
 metadata:
-  short-description: Develop and validate abaqus_ufl UMAT/UEL models
+  short-description: Develop and verify abaqus_ufl UMAT/UEL models
 ---
 
 # abaqus_ufl Model Development
 
 This skill is a compact operational guide distilled from the repository's
 tests, examples, and lessons. Use it before implementing or reviewing any
-`abaqus_ufl` UMAT, UEL, f2py, or Abaqus-validation work.
+`abaqus_ufl` UMAT, UEL, f2py, or Abaqus-integration work.
 
 ## First Moves
 
@@ -17,11 +17,12 @@ tests, examples, and lessons. Use it before implementing or reviewing any
    ```bash
    git status --short
    ```
-   Do not overwrite collaborator edits, generated files, or Abaqus-validation
+   Do not overwrite collaborator edits, generated files, or Abaqus-integration
    artifacts without understanding them.
 
 2. Read the live API guide in the repo:
    - `docs/API_USAGE.md`
+   - `HOWTO_ADD_AN_EXAMPLE.md`
 
 3. Pick the target deliberately:
    - **finite-strain UMAT**: local constitutive law, built-in Abaqus elements
@@ -31,24 +32,32 @@ tests, examples, and lessons. Use it before implementing or reviewing any
    - **UEL**: any extra solved nodal field, gradient term, mixed interpolation,
      phase field, pore pressure, diffusion, temperature, concentration, or
      chemical potential.
-   - **f2py**: point/element oracle for generated Fortran before solver runs.
-   - **Abaqus validation**: final convention and production-solver check.
+   - **f2py**: point/element check for generated Fortran before solver runs.
+   - **Abaqus integration check**: production-solver, convention, and
+     output-bridge evidence; not automatically an independent physics oracle.
 
 ## Core Rule
 
 Do not start from Fortran. Start from the theory, write generator-friendly
-Python, verify the Python model, generate Fortran, compile, then climb the
-validation ladder.
+Python, verify the Python model, generate Fortran, compile, then execute the
+example pipeline.
 
-The validation ladder is:
+The existing example pipeline is:
 
-1. Python reference checks.
-2. `model.verify()` or `problem.verify()`.
-3. Material-point or element-level regime checks for every claimed branch.
-4. Generated Fortran compile test.
-5. f2py single-point or single-element test when the model is nontrivial.
-6. Abaqus one-element validation deck.
-7. Published-figure reproduction only after the previous rungs are stable.
+1. Document theory, scope, conventions, fields/DOFs, and state layout.
+2. Add Python reference checks and an independent quantitative oracle.
+3. Run `model.verify()` or `problem.verify()` for implemented-method tangent
+   consistency, plus regime checks for every claimed branch.
+4. For a UEL, check assembled `RHS`/`AMATRX`, DOF/state layout, and an
+   appropriate patch or invariant; `problem.verify()` alone is not this gate.
+5. Generate deterministically and compile every generated Fortran source.
+6. Call nontrivial generated code through f2py or another checked compiled
+   runtime.
+7. Add a small solver run only when it provides useful evidence.
+8. Validate the output bridge before using solver results in comparisons or
+   plots.
+9. Attempt a published-figure reproduction only after the smaller rungs are
+   stable.
 
 ## Verify, Do Not Guess
 
@@ -57,14 +66,12 @@ When a build fails, a solve diverges, or you suspect a framework limitation,
 the existing examples first. Most "the framework can't do X" or "it must be Y"
 beliefs are wrong:
 
-- **Check the examples before claiming a limitation.** A local Newton / implicit
-  return map *inside* the element is fully supported (branch on `.real`, a fixed
-  `for k in range(N)` loop, analytic Jacobian; the complex step rides through the
-  converged iterate and yields the consistent tangent). For STIFF exponential rate
-  laws (`exp(x/C)`, small C) at implicit dt, solve in log-slip variables (exact
-  backward-Euler of the smoothed law, no active-set branching, early-exit `break`
-  after two consecutive machine-zero residuals so the CS imaginary part settles).
-  `grep` the examples before concluding something is impossible.
+- **Check available evidence before claiming a limitation.** Bounded local
+  Newton/implicit updates inside a generated method are supported when written
+  with generator-safe operations and explicit convergence/finite checks.
+  Inspect the public manifest, present example folders, package source, and
+  linked tests or evidence before concluding something is impossible. Do not
+  infer public capabilities from an unpublished model.
 - **Localize a failure with a test, not a guess.** Reproduce the exact failing
   state; cross-check the compiled element against `reference_assembly`; confirm a
   suspected culprit actually misbehaves *at that state* before fixing it. In one
@@ -79,17 +86,10 @@ beliefs are wrong:
   NaN slips silently through a convergence check; guard residual checks with
   `isfinite`. (When diagnosing, note an f2py recompile is ~60 s — do not read a
   wall-clock timeout as non-convergence; compile once per debugging process.)
-- **Match the linear solver to the MATRIX TYPE, then VERIFY it converged.** Before
-  choosing a KSP/PC, determine the operator's symmetry from the physics — a single
-  field elliptic problem (Poisson, diffusion, linear elasticity) is **SPD** → `cg` +
-  AMG (`gamg`/`hypre`); a **coupled multi-field tangent** (u-eₚ plasticity, u-φ/u-c-φ
-  fracture, plastic tangents) is **NON-SYMMETRIC** → `gmres` (never `cg` — it stalls
-  silently) + `pc="fieldsplit"` to isolate the blocks. **Plain AMG DIVERGES on a
-  coupled non-symmetric matrix** (measured: gamg 166–193 KSP iters → cap; FieldSplit
-  with a strong per-block sub-solve → 14). If unsure of symmetry, check
-  `‖K−Kᵀ‖/‖K‖`. Then **verify**: a KSP at its iteration cap (`info["ksp_its"]`,
-  `info["ksp_diverged"]`, or `-ksp_converged_reason`) means the **preconditioner is
-  wrong for the operator — change the PC, do not raise `max_it`.**
+- **Keep solver setup separate from package correctness.** Determine whether a
+  tangent is symmetric and declare the Abaqus interface consistently, but do
+  not make a user- or machine-specific solver configuration part of the
+  package contract.
 
 ## Generator-Friendly Python
 
@@ -215,13 +215,11 @@ return the adapter required by the generator convention. Do not copy a flux sign
 from another phase-field example by field name; derive it from the exact
 `storage` quantity returned by that equation.
 
-For branch-dependent gradient damage, the flux method must receive the same
-state needed to choose the branch as the storage method. If `phase_storage`
-uses `psi_star_ductile` in compression and `phase_flux` hard-codes the brittle
-`psi_star`, CS-vs-FD still passes because both sides differentiate the same
-wrong residual. Add a material-point gate that measures the effective
-regularization length per branch and fails if it differs from the declared
-`ell`.
+For a branch-dependent gradient model, the flux method must receive the same
+state needed to choose the branch as the storage/reaction method. CS-vs-FD can
+still pass when both sides differentiate the same wrong branch. Add a
+branch-specific invariant that checks the declared reaction/gradient
+relationship.
 
 Major symmetry: `verify()` checks dP/dF symmetry for stateless materials by
 default. A material whose stress is DELIBERATELY not an energy derivative —
@@ -270,8 +268,11 @@ A new example is not done until it has:
 - properties, units, sign convention, and `STATEV`/`SVARS` layout documented;
 - Python reference checks or material-point tests;
 - explicit regime-entry checks for each claimed branch;
+- assembled residual/tangent plus patch/invariant checks for a UEL;
 - generated Fortran compile coverage;
-- f2py or Abaqus validation appropriate to the model;
+- direct compiled execution appropriate to the model;
+- output-bridge mappings, identity, coverage, conventions, and status for every
+  claimed solver result;
 - **at least one INDEPENDENT, QUANTITATIVE oracle** — a digitized
   paper-figure point, a closed-form limit, or a hand computation — that
   is NOT derived from the code under test (see below);
@@ -281,9 +282,9 @@ A new example is not done until it has:
 Do not collapse these statuses. A model can be code-complete without being a
 paper-figure reproduction.
 
-**Why the independent oracle is non-negotiable.** Four hard models this
-project shipped with green suites all had real bugs (wrong signs, wrong
-exponents, wrong push-forward `Fp`, 100x-off parameters). The suites
+**Why the independent oracle is non-negotiable.** Reviews of difficult
+development examples have repeatedly found real equation, convention,
+state-update, and parameter-transcription bugs behind green suites. The suites
 could not see them because they were built from: (1) consistency checks
 (CS-vs-FD / `verify()` / compile differentiate the *wrong* code
 faithfully); (2) code-vs-itself oracles (f2py comparing generated
@@ -299,20 +300,17 @@ produce. Add it.
 ## Independent Review Pattern
 
 For hard research models, use independent AI review as a validation-envelope
-attack, not just a style review. The method that found every bug: read the
+attack, not just a style review. A repeatedly effective method is to read the
 paper equation, re-implement that one term independently, evaluate the code at
 a state that actually exercises the term, and compare numerically. Do not trust
-the green suite, your own paper reading, or a sub-helper's transcription until
-the numbers agree (a helper mis-stated a matrix factor order this session; the
-numerical check caught it). A reviewer should ask:
+a green suite or a transcription until the numbers agree. A reviewer should
+ask:
 
 - Which branch did `model.verify()` actually exercise? (A default state at
-  `e=e_max`, `grad=0`, or `Fp=I` can make the whole nonlinear core elastic /
-  inert and uncertified.)
-- Did the tests reach plastic flow, damage, residual strain, fabric rotation,
-  split yield intervals, non-homogeneous gradients, near-singular limits, or
-  NON-COAXIAL loading? (Axisymmetric/diagonal loading masks every
-  commute-dependent algebra bug.)
+  a homogeneous, reference, or identity configuration can leave the nonlinear
+  core inert and uncertified.)
+- Did the tests reach every claimed branch and state evolution, plus
+  non-homogeneous, near-singular, and non-coaxial states where applicable?
 - Are readable Python and generator-facing paths mathematically isomorphic, or
   did a codegen rewrite change data structures? Do they AGREE numerically in
   the regime where they could diverge?
@@ -335,4 +333,12 @@ A multi-agent implement/review/fix loop is the reference pattern: one agent
 implements, an independent reviewer finds untested codegen defects, a second
 agent fixes and adds adversarial regressions, and a re-review localizes any
 remaining mismatch instead of hiding it. Keep this loop explicit for any model
-that is more than a clean Level-1 UMAT.
+that is more than a minimal clean UMAT.
+
+## Public Capability Boundary
+
+The public AI example map is the positive release manifest, not a history of
+everything developed in the lab. Reference only example folders that are
+actually shipped and listed in `examples/README.md`. Do not disclose,
+reconstruct, or advertise internal, unpublished, license-unclear, or deferred
+models as v1 capabilities.

@@ -1,7 +1,8 @@
 # Documentation
 
 Start with the top-level [README](../README.md) for install + quickstart, and
-[HOWTO_ADD_AN_EXAMPLE](../HOWTO_ADD_AN_EXAMPLE.md) to build your own model.
+[HOWTO_ADD_AN_EXAMPLE](../HOWTO_ADD_AN_EXAMPLE.md) for the complete
+theory-to-compiled-code-to-output example pipeline.
 
 ## Usage
 

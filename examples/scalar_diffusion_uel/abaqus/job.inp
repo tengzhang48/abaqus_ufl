@@ -1,0 +1,86 @@
+*Heading
+abaqus_ufl scalar_diffusion_uel: coupled thermo-mechanical Quad4 UEL
+** STATUS: NOT YET RUN with the current generated source. This deck
+** documents the intended *USER ELEMENT interface (DOF lists, UNSYMM,
+** property order) and mirrors the deck structure of an internal case
+** that passed Abaqus 2022 with an earlier generated UEL: a coupled
+** temperature-displacement procedure carries the scalar on DOF 11
+** (Abaqus rejects DOF-11 boundaries under *STATIC), and a small remote
+** CPE4T element activates the temperature DOF in the procedure. The
+** license-free gates (check_reference/check_compiled/check_assembled)
+** are the verified evidence; an Abaqus rerun is a pending release gate.
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+**
+** The complex-step tangent is the full coupled dR/dU, which is NOT
+** symmetric (one-way thermal-stress coupling), hence Unsymm here and
+** the unsymmetric solver on *Step.
+*User Element, Type=U1, Nodes=4, Coordinates=2, Properties=5,
+ Variables=1, Unsymm
+1, 2, 11
+*Node
+1, 0.0, 0.0
+2, 1.0, 0.0
+3, 1.0, 1.0
+4, 0.0, 1.0
+*Element, type=U1, elset=DOMAIN
+1, 1, 2, 3, 4
+** Near-zero-stiffness overlay sharing the UEL nodes (visualization and
+** standard-element support for the shared DOFs).
+*Element, type=CPE4, elset=DUMMY
+2, 1, 2, 3, 4
+** Small remote CPE4T element: activates temperature DOF 11 in the
+** coupled procedure. Its material carries the thermal properties.
+*Node
+5, 0.0,     -1.0e-3
+6, 1.0e-5,  -1.0e-3
+7, 1.0e-5,  -9.9e-4
+8, 0.0,     -9.9e-4
+*Element, type=CPE4T, elset=ACTIVATOR
+3, 5, 6, 7, 8
+*Nset, nset=LEFT
+1, 4
+*Nset, nset=RIGHT
+2, 3
+*Nset, nset=UELNODES
+1, 2, 3, 4
+*Nset, nset=ACTNODES
+5, 6, 7, 8
+** PROPS order matches HeatDiffusionMaterial.props:
+**   G, K, alpha, k, rho_cp
+*Uel Property, elset=DOMAIN
+1.0, 10.0, 1.0e-3, 0.5, 1.0
+*Material, name=dummy_material
+*Elastic
+1.0e-20, 0.3
+*Solid Section, elset=DUMMY, material=dummy_material
+,
+*Material, name=activator_material
+*Elastic
+1.0e-20, 0.3
+*Density
+1.0,
+*Conductivity
+0.5,
+*Specific Heat
+1.0,
+*Solid Section, elset=ACTIVATOR, material=activator_material
+,
+*Initial Conditions, type=TEMPERATURE
+UELNODES, 0.0
+ACTNODES, 0.0
+*Step, name=HEAT, nlgeom=YES, unsymm=YES
+*Coupled Temperature-displacement, creep=none
+0.1, 1.0
+*Boundary
+LEFT, 1, 2, 0.0
+RIGHT, 2, 2, 0.0
+ACTNODES, 1, 2, 0.0
+ACTNODES, 11, 11, 0.0
+** Temperature prescribed on the left edge ONLY; the right-edge DOF-11
+** values stay free, so the step exercises a genuine transient transport
+** solve, not a fully constrained scalar field.
+LEFT, 11, 11, 1.0
+*Output, field, frequency=1
+*Node Output
+U, RF, NT
+*End Step

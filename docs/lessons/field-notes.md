@@ -22,8 +22,8 @@ meant to transfer to a new model, element, or solver.
   (definiteness, a dispersion sign, a manufactured-solution residual).
 
 - **Verify the regime, not one state.** A single benign verification state
-  (smooth, tensile, coaxial, homogeneous, gradient-free, first-plastic-step)
-  hides whole branches: the compressive/ductile branch, the non-coaxial term,
+  (smooth, coaxial, homogeneous, gradient-free)
+  hides whole branches, non-coaxial terms,
   the anti-diffusive term that vanishes at homogeneous states. "All tests pass"
   is a claim about the *validated envelope*, not the model — so state the
   envelope explicitly and drive coverage states that actually enter the claimed
@@ -259,15 +259,12 @@ meant to transfer to a new model, element, or solver.
 
 ## Constitutive and numerical formulation
 
-- **Solve in the right unknown.** A Newton on the wrong variable can be singular
-  where the physics is benign: power-law hardening `σ_y = σ_y0 + K·ε_p^n` (n<1)
-  has infinite slope at onset, so a Newton on the plastic increment overshoots
-  to NaN — reformulate on the *flow stress* via the inverse hardening (slope
-  `1/n ≥ 1`, well-conditioned everywhere). For stiff exponential flow
-  (`γ̇ ∝ exp(x/C)`), solve in log-slip variables: the unknowns become O(±100)
-  and well-scaled, "inactive" systems sit at large-negative and contribute
-  `exp(−100) ≈ 0` with no active-set branching, and Newton never sees
-  exp-overflow.
+- **Solve in a smooth, well-scaled local unknown.** A Newton on the obvious
+  increment can be singular or extremely stiff even when the physical state is
+  benign. Reformulate the consistency equation using a standard
+  computational-plasticity unknown with a finite derivative. This is a
+  constitutive-integration choice, not a reason to add arbitrary solver
+  damping.
 
 - **Integrate internal-variable ODEs with their exact regime solutions — the
   closed form becomes a free oracle.** Forward-Euler on a stiff hardening/
@@ -278,20 +275,6 @@ meant to transfer to a new model, element, or solver.
   independent oracle that costs nothing. When an exponent makes units
   ambiguous, cross-check a hardening modulus against a *digitized figure*, not
   just the table.
-
-- **Stress-state-dependent criteria must be evaluated on the returned stress,
-  not the elastic trial.** During active flow the trial deviator overshoots the
-  flow stress by the elastic predictor while the mean stress is untouched,
-  biasing triaxiality/Lode measures in a `dt`-dependent way — amplified when the
-  criterion raises the state dependence to a high power. Evaluate the locus on
-  the end-of-increment (returned) principal stresses; where a gate is needed
-  *before* the return map, carry the previous increment's value as a state
-  variable (semi-implicit, still `dt`-refinement convergent). And freeze the
-  `.real` part of any computation that passes through an unbounded-derivative
-  function (e.g. `arccos` at ±1, where simple tension sits exactly): a
-  complex-step perturbation poisons the tangent there, and since such loci are
-  stress *ratios* they carry no first-order tangent information anyway (uniform
-  scalings, including damage degradation, cancel).
 
 - **An explicit trial-based return map fails at the resolution a sharp feature
   needs; the fix is constitutive, not a solver swap.** A smooth-explicit slip

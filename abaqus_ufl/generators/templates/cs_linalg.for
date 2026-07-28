@@ -1,8 +1,8 @@
 C======================================================================
-C     cs_linalg.for — CS-safe small dense linear solve
+C     cs_linalg.for -- CS-safe small dense linear solve
 C
 C     Inline LU with partial pivoting for N in {2,3,4,6,9}.
-C     No LAPACK dependency — self-contained for Abaqus UMAT.
+C     No LAPACK dependency -- self-contained for Abaqus UMAT.
 C======================================================================
 
 C----------------------------------------------------------------------

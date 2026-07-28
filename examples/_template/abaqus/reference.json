@@ -1,0 +1,83 @@
+{
+  "description": "Closed-form small-strain elastic response for one constrained C3D8R under 2% x-compression.",
+  "checks": {
+    "stress_voigt": {
+      "path": "fields.S.data",
+      "expected": [
+        -0.8081082927007787,
+        -0.40405414635038933,
+        -0.40405414635038933,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rtol": 1e-05,
+      "atol": 1e-10
+    },
+    "mises": {
+      "path": "fields.S.mises",
+      "expected": 0.40405414635038933,
+      "rtol": 1e-05,
+      "atol": 1e-10
+    },
+    "strain_voigt": {
+      "path": "fields.LE.data",
+      "expected": [
+        -0.020202707317519466,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rtol": 1e-05,
+      "atol": 1e-10
+    },
+    "step_name": {
+      "path": "step",
+      "expected": "LOAD"
+    },
+    "frame_value": {
+      "path": "frame_value",
+      "expected": 1.0,
+      "rtol": 0.0,
+      "atol": 1e-12
+    },
+    "s_record_count": {
+      "path": "fields.S.record_count",
+      "expected": 1,
+      "rtol": 0.0,
+      "atol": 0.0
+    },
+    "s_element_label": {
+      "path": "fields.S.element_label",
+      "expected": 1,
+      "rtol": 0.0,
+      "atol": 0.0
+    },
+    "s_integration_point": {
+      "path": "fields.S.integration_point",
+      "expected": 1,
+      "rtol": 0.0,
+      "atol": 0.0
+    },
+    "le_record_count": {
+      "path": "fields.LE.record_count",
+      "expected": 1,
+      "rtol": 0.0,
+      "atol": 0.0
+    },
+    "le_element_label": {
+      "path": "fields.LE.element_label",
+      "expected": 1,
+      "rtol": 0.0,
+      "atol": 0.0
+    },
+    "le_integration_point": {
+      "path": "fields.LE.integration_point",
+      "expected": 1,
+      "rtol": 0.0,
+      "atol": 0.0
+    }
+  }
+}

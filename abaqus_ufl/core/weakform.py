@@ -329,6 +329,37 @@ class WeakForm:
                 param_vars = [p for p in field_params
                               if p in self._param_args]
 
+                # Fail fast when a mixed-assembly equation is declared but
+                # the material lacks the RECOGNIZED storage/flux methods.
+                # The generator emits calls to exactly these canonical names,
+                # so a differently named method (e.g. 'heat_storage') would
+                # pass verify(), be silently dropped from the material
+                # subroutines, and leave the generated Fortran uncompilable.
+                sub_terms = eq_info.get('sub_terms') or {}
+                expected = [
+                    (term, tinfo['material_method'])
+                    for term, tinfo in sub_terms.items()
+                    if tinfo.get('material_method')
+                ]
+                present = [
+                    (term, mm) for term, mm in expected
+                    if callable(getattr(self._mat, mm, None))
+                ]
+                # Storage-only equations are legitimate, so raise only when
+                # NONE of the recognized sub-term methods exists (the
+                # documented failure mode: e.g. heat_storage/heat_flux). A
+                # partially misspelled pair still fails later at the compile
+                # gate.
+                if expected and not present:
+                    detail = ' / '.join(
+                        "'{}' ({})".format(mm, term) for term, mm in expected)
+                    raise TypeError(
+                        "{} is declared, but material '{}' defines none of "
+                        "the recognized method(s) {}. Rename the material "
+                        "methods to these names; unrecognized names are not "
+                        "picked up by the generator.".format(
+                            eq_name, type(self._mat).__name__, detail))
+
                 self._equations[eq_name] = {
                     'callable': method,
                     'test_field': test_field_name,

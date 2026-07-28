@@ -38,6 +38,10 @@ def compare_scalar(observed, expected, rtol=1e-4, atol=1e-10):
     """Return (passed, message)."""
     if observed is None or expected is None:
         return False, f"missing value (obs={observed}, exp={expected})"
+    if isinstance(observed, (str, bool)) or isinstance(expected, (str, bool)):
+        if observed == expected:
+            return True, "exact match"
+        return False, f"value mismatch (obs={observed!r}, exp={expected!r})"
     denom = max(abs(expected), 1e-15)
     rel_err = abs(observed - expected) / denom
     abs_err = abs(observed - expected)
@@ -76,6 +80,10 @@ def run_comparison(extracted, reference, default_rtol=1e-4):
     }
     """
     checks = reference.get("checks", {})
+    if not isinstance(checks, dict) or not checks:
+        raise ValueError(
+            "reference.json must contain at least one named quantitative check"
+        )
     results = {}
     all_pass = True
 
@@ -102,6 +110,7 @@ def run_comparison(extracted, reference, default_rtol=1e-4):
             "expected": expected,
             "observed": observed,
             "rtol": rtol,
+            "atol": atol,
             "messages": messages
         }
 
@@ -110,7 +119,7 @@ def run_comparison(extracted, reference, default_rtol=1e-4):
 
 def print_report(all_pass, results):
     print("=" * 70)
-    print("Abaqus Validation Comparison Report")
+    print("Solver Output Comparison Report")
     print("=" * 70)
     for name, res in results.items():
         status = "PASS" if res["passed"] else "FAIL"

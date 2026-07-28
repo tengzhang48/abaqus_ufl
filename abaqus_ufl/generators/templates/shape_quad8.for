@@ -1,5 +1,5 @@
 C======================================================================
-C     shape_quad8.for — 8-node serendipity shape functions (Quad8)
+C     shape_quad8.for -- 8-node serendipity shape functions (Quad8)
 C
 C     Contains:
 C       1. shape_quad8:      shape functions and derivatives
@@ -52,22 +52,22 @@ C     Node 4: corner (-1,+1)
       dshxi(4,1) = 0.25d0*(1.0d0+eta)*(2.0d0*xi-eta)
       dshxi(4,2) = 0.25d0*(1.0d0-xi)*(-xi+2.0d0*eta)
 
-C     Node 5: midside (0,-1) — between nodes 1 and 2
+C     Node 5: midside (0,-1) -- between nodes 1 and 2
       sh(5) = 0.5d0*(1.0d0-xi*xi)*(1.0d0-eta)
       dshxi(5,1) = -xi*(1.0d0-eta)
       dshxi(5,2) = -0.5d0*(1.0d0-xi*xi)
 
-C     Node 6: midside (+1,0) — between nodes 2 and 3
+C     Node 6: midside (+1,0) -- between nodes 2 and 3
       sh(6) = 0.5d0*(1.0d0+xi)*(1.0d0-eta*eta)
       dshxi(6,1) = 0.5d0*(1.0d0-eta*eta)
       dshxi(6,2) = -(1.0d0+xi)*eta
 
-C     Node 7: midside (0,+1) — between nodes 3 and 4
+C     Node 7: midside (0,+1) -- between nodes 3 and 4
       sh(7) = 0.5d0*(1.0d0-xi*xi)*(1.0d0+eta)
       dshxi(7,1) = -xi*(1.0d0+eta)
       dshxi(7,2) = 0.5d0*(1.0d0-xi*xi)
 
-C     Node 8: midside (-1,0) — between nodes 4 and 1
+C     Node 8: midside (-1,0) -- between nodes 4 and 1
       sh(8) = 0.5d0*(1.0d0-xi)*(1.0d0-eta*eta)
       dshxi(8,1) = -0.5d0*(1.0d0-eta*eta)
       dshxi(8,2) = -(1.0d0-xi)*eta
@@ -87,9 +87,9 @@ C
 C     t: parametric coordinate along the edge [-1, +1]
 C
 C     Returns:
-C       sh8(8)    — Quad8 shape functions evaluated on this face
-C       ds        — edge Jacobian (length element for line integral)
-C       normal(2) — outward unit normal vector (nx, ny)
+C       sh8(8)    -- Quad8 shape functions evaluated on this face
+C       ds        -- edge Jacobian (length element for line integral)
+C       normal(2) -- outward unit normal vector (nx, ny)
 C
 C     The edge is traversed with t from -1 to +1 such that the
 C     outward normal is obtained by rotating the tangent (dX/dt, dY/dt)

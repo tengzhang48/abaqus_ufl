@@ -16,12 +16,44 @@ Use it when debugging generated UMAT/UEL behavior.
   states. Set `PNEWDT` to a fraction such as `0.25` to request a cutback and
   to `1.0` when the state is acceptable. Larger growth requests are
   solver-dependent and should be used deliberately.
-- Use `UNSYMM` for coupled UELs and genuinely nonsymmetric UMAT tangents unless
-  symmetry has been proven. If the tangent is unsymmetric and `UNSYMM` is
-  omitted, Abaqus may use the wrong tangent treatment and convergence can
-  degrade or fail. If `UNSYMM` is declared for a symmetric tangent, Abaqus pays
-  the cost of an unsymmetric solver. `UNSYMM` does not fix bad physics or large
+- Derive or measure tangent symmetry; do not infer it from the number of
+  fields. Use `UNSYMM` when the assembled UEL or UMAT tangent is genuinely
+  nonsymmetric. If it is omitted for a nonsymmetric operator, convergence can
+  degrade or fail; if it is declared for a symmetric operator, Abaqus pays the
+  cost of an unsymmetric solver. `UNSYMM` does not fix bad physics or large
   steps.
+- Solver completion does not validate ODB fields. Check the authoritative
+  solved field, any optional `UVARM`/dummy-element visualization bridge, and the
+  extractor/postprocessor as separate interfaces.
+- Finite output is not a coverage test. Require every expected instance-qualified
+  node or element/integration-point identity, reject duplicates and missing
+  records, and check non-finite values before comparing magnitudes.
+- Do not use a flat ODB list index for a multi-element result. The stable
+  integration-point identity is `(step, frame, instance, element label,
+  integration point)`; the stable nodal identity includes the instance and node
+  label.
+- Map logical fields to Abaqus fields/slots/active DOFs per formulation. A
+  thermal-style field name such as `NT11` has no universal physical meaning.
+- Treat a native duplicate mesh as topology or visualization support unless its
+  field has been audited against the authoritative UEL solution.
+- `UVARM` can receive an assembly-internal element number while the ODB shows a
+  part-local label. Convert the number space explicitly before applying a label
+  offset.
+- Never assume that a generated UEL and a native visualization element use the
+  same integration-point numbering. Declare and test the permutation
+  point-by-point.
+- Do not label an output defect as MPI/thread-related until the same identity
+  and coverage audit has been run in serial.
+- `*UEL PROPERTY` accepts at most eight real property values per data line.
+  Split longer ordered `PROPS` lists across continuation data lines. A declared
+  `NPROPS` can still be correct while an unsplit ninth value reaches the UEL as
+  zero, so inspect or instrument the received properties when a new deck fails
+  immediately.
+- A reduced-integration native element with hourglass modes and a UMAT needs
+  explicit section hourglass stiffness because Abaqus cannot infer the initial
+  shear modulus from `*User Material` during preprocessing. For a solid in
+  Abaqus/Standard, `*Hourglass Stiffness` with `0.005 G` reproduces the usual
+  total-stiffness default; place it immediately after `*Solid Section`.
 
 ## DOF and State Layout
 
@@ -333,50 +365,18 @@ solver-convergence issue.
 ## Local Return Maps and Nonlinear Hardening
 
 A local Newton / implicit return map *inside* the element is supported and is
-often the correct choice — do not replace it with an explicit/smooth-viscoplastic
-shortcut to avoid a branch. The CS-safe idiom:
-branch the elastic/plastic decision on `.real`, run a **fixed-count** `for k in
-range(N)` loop (no `while`, no convergence `break` needed), update with an analytic
-Jacobian; the complex step differentiates through the converged iterate and yields
-the consistent tangent automatically. An explicit trial-stress update is only
-conditionally stable and overshoots at stress concentrations (notch roots).
+often the correct choice. Branch on `.real`, use a bounded `for k in range(N)`
+loop and an analytic Jacobian, and guard both real and imaginary residuals for
+non-finite values. The complex step can then differentiate through the
+converged iterate.
 
-- **Solve for the right unknown.** For power-law / Ludwik hardening
-  `sigma_y = sigma_y0 + K*eps_p^n` with `n < 1`, the forward slope
-  `d(sigma_y)/d(eps_p) = K n eps_p^(n-1) -> inf` at `eps_p = 0`. A Newton on the
-  plastic increment `dgamma` is therefore **non-smooth at the onset of yield** —
-  not a solver bug, the wrong unknown. No reparametrization of `dgamma` fixes it
-  (linear space overshoots to `(neg)^n` = NaN; log space overflows `exp` = NaN).
-- **Fix: solve the consistency for the FLOW STRESS** via the inverse hardening
-  `eps_p(sigma) = ((sigma - sigma_y0)/K)^(1/n)`, whose slope `1/n >= 1` is smooth at
-  the onset (`g'(sigma_y0) = -1/(3G)`, "simple at the onset"). One CS-safe Newton
-  then covers the hardening-dominated onset and the elastic-dominated high-overstress
-  branch; use a root-adjacent init `sigma0 = sigma_y0 + K*(eps_p_old + f_trial/3G)^n`
-  so the high-overstress case converges fast. This is standard computational-
-  plasticity practice; recognise it is a *formulation* choice, not solver tuning.
+- **Solve for a smooth, well-scaled unknown.** If the constitutive relation is
+  singular or extremely stiff in the obvious increment variable, reformulate
+  the local consistency equation using a standard computational-plasticity
+  unknown whose derivative remains finite. This is a formulation decision, not
+  a reason to add arbitrary damping.
 - **Case-insensitive Fortran bites local-Newton temporaries.** A residual named `g`
   collides with shear modulus `G`; `dg` with anything `DG`. Name them `gres`/`dgres`.
-- **Stiff exponential rate laws (`gdot = gdot0 exp(x/C) y(x)`, small C): solve in
-  LOG-SLIP variables.** A Newton on the slip increment (or the explicit
-  trial-rate update) explodes at implicit dt because a few percent
-  overstress multiplies the rate by orders of magnitude. Change unknowns to
-  `z = ln(dgam/(dt*gdot0))`; the residual `R = x + C*ln y(x) - C*z` is the exact
-  backward-Euler smoothed law, needs NO active/inactive branching (inactive
-  systems sit at z ~ -100, contributing exp(-100) ~ 0), and stays exp-overflow
-  free with an elastic-return initial guess plus |dz| and z clamps. Early-exit
-  on TWO consecutive machine-zero residuals so the CS imaginary part (a linear
-  problem once the real part converges) settles.
-- **Evaluate stress-state-dependent criteria (fracture loci, nucleation
-  thresholds) on the RETURNED stress, not the elastic trial.** During flow the
-  trial deviator overshoots the flow stress by the elastic predictor while the
-  mean stress is untouched, so trial triaxiality is biased LOW, dt-dependently
-  — and a Hosford-Coulomb-type locus amplifies it by the 1/n power (1/n = 10
-  turned a benign-looking bias into a 3.5% locus error). If a gate is needed
-  BEFORE the return map runs (dilatancy on/off), carry the previous
-  increment's locus as a state variable. Also freeze (`.real`) any locus path
-  through `arccos` — simple tension sits EXACTLY at xi = +1 where the
-  derivative is unbounded; stress RATIOS carry no g(d)/scale tangent
-  information, so freezing loses nothing that matters.
 
 ## Transcribing From The Paper
 
@@ -385,22 +385,15 @@ them. When porting equations and tables:
 
 - **A constraint is not a definition.** A paper inequality / restriction
   (something that "must hold", `>= 0`, a dissipation condition) is not
-  the defining formula. One recurring error used a dilatancy restriction
-  `[tau - beta*sigma] > 0` (a positivity constraint) as the slip-rate
-  numerator, when the flow rule's numerator is `tau` alone. Take
-  numerators / yield functions from the DEFINITION equation; cite its
-  number at the code site.
+  the defining formula. Take each expression from its definition equation and
+  cite that equation at the code site.
 - **Cross-check every parameter against its specific table, digit and
-  unit.** When a paper has sibling tables (brittle vs ductile; material
-  A vs B), values migrate from the wrong table or carry over from the
-  previously-coded sibling. In one case brittle `psi*`/`eta` values were
-  used for the ductile mechanism; a `zeta_d=1e8` was actually correct, and
-  a false review claim that it should be `1e6` was caught only by rereading
-  the source table. Annotate each prop with its source table.
+  unit.** When a paper has sibling mechanisms or materials, values migrate
+  from the wrong table or carry over from the
+  previously-coded sibling. Annotate each property with its source table and
+  unit.
 - **One symbol, one role.** Do not reuse a variable (e.g. an exponent)
-  for two distinct physical meanings. One recurring case reused a dilatancy
-  exponent `p` as the ductile-damage exponent (which the paper fixes at
-  2).
+  for two distinct physical meanings.
 - **A quantity and its variational dual must be derived separately.**
   Getting the stress sign right (derived from the energy) says nothing
   about the dual gradient-flux sign — one case got the stress right and the
@@ -433,12 +426,12 @@ through the input scaffold path.
 - Legacy UELs with approximate tangents can fail in a simpler runtime even if
   Abaqus can stabilize them.
 - MUMPS/MPI-MUMPS helps large generated UEL/UMAT runs, but solver success is
-  not Abaqus validation.
+  not independent model verification.
 - Parse VTK connectivity; do not assume VTK point order equals input node-label
   order.
 - Template a same-NDOFEL single-element deck and set the initial DOF at the
-  model's true equilibrium so "did it solve?" is unambiguous. Use an unsymmetric
-  solver for coupled/transient tangents.
+  model's true equilibrium so "did it solve?" is unambiguous. Match the solver
+  symmetry treatment to the derived or measured assembled tangent.
 - An **independent** tangent check (a runtime that FDs the residual vs the
   generated `AMATRX`) is a second confirmation beyond the Python complex-step
   `verify()`. When such a check is printed **twice** — element-level *before* the
@@ -537,26 +530,20 @@ unknown — see "Local Return Maps and Nonlinear Hardening") before solver tunin
 
 `verify()` (CS-vs-FD), generate+compile, and code-vs-itself f2py are
 **consistency** checks — they cannot see convention errors or untested branches.
-One audit found a real gradient-damage bug that all of these
-passed. Add a **material-point regime sweep**:
+Add a **material-point or element regime sweep**:
 
-- **Verify every branch, not one state.** `verify()` runs a single *tensile* state;
-  a model with a tensile (brittle) and a compressive (ductile) branch needs BOTH
-  exercised. The bug and the nonfinite tangent lived only in the unverified branch.
-- **CS-vs-FD passes "wrong-but-consistent".** A mismatched `psi_star`/`ell` in a
-  gradient term, a degraded-vs-undamaged drive, or a scrambled call-arg order agree
-  on both sides. Confirm generator arg order by reading the emitted `.for`.
-- **Assert the test entered its regime.** `assert_regime_entered` — a qualitative
-  `gamma_bar_p > 1e-3` passes even when the path stayed elastic (uniaxial *strain*
-  over-confines → no yield). A vacuous pass is worse than a red.
-- **Regularization self-consistency** (gradient damage): measure `ell_eff` from the
-  gradient/reaction stiffness ratio in each branch, assert `== ell`. `phase_flux`
-  must use the same branch `psi_star` (and `ell`) as `phase_storage` — the paper
-  gives each mechanism its own ψ\*, ℓ, η.
-- **Robustness is a gate.** Tangent finite across softening; dt-refinement converges
-  (distinguishes an explicit-overshoot artifact from a constitutive defect — the
-  stiff `1/m` slip flow overshoots to `d=1`+NaN at large per-step strain, but the
-  peak stress converges under dt-refinement, so the fix is an implicit/sub-stepped
-  return map, not the equations).
+- **Verify every branch, not one state.** A default smooth state can leave a
+  whole branch untested.
+- **CS-vs-FD passes "wrong-but-consistent".** A branch mismatch, convention
+  error, or scrambled call-argument order can agree on both sides. Confirm
+  generator argument order by reading the emitted `.for`.
+- **Assert that the test entered its claimed regime.** A vacuous pass is worse
+  than a red test.
+- **Check branch-specific invariants.** For a gradient model, verify the
+  declared relationship between reaction and gradient coefficients on every
+  branch.
+- **Robustness is a separate gate.** Require finite stress/state/tangent and
+  time-step refinement of a relevant quantity where the integration is
+  step-size dependent.
 - For an open known bug, pin the CORRECT expected value with `xfail(strict)`.
   Remove the marker as soon as the fix turns it into XPASS.

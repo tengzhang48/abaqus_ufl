@@ -1,0 +1,99 @@
+*Heading
+abaqus_ufl thermo_mechanics_quad8: mixed-order thermo-mechanical Quad8 UEL
+** STATUS: NOT YET RUN with the current generated source. This deck
+** documents the intended *USER ELEMENT interface for the mixed-order
+** DOF lists (corners carry u1, u2 and T on DOF 11; midsides u1, u2
+** only) and mirrors the deck structure of an internal case that passed
+** Abaqus 2022 with an earlier generated UEL: a coupled
+** temperature-displacement procedure carries the scalar on DOF 11
+** (Abaqus rejects DOF-11 boundaries under *STATIC), and a small remote
+** CPE8T element activates the temperature DOF in the procedure. The
+** license-free gates (check_reference/check_compiled/check_assembled)
+** are the verified evidence; an Abaqus rerun is a pending release gate.
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+**
+** Full coupled complex-step tangent (nonsymmetric): Unsymm on the
+** element card AND unsymm=YES on *Step.
+*User Element, Type=U2, Nodes=8, Coordinates=2, Properties=5,
+ Variables=1, Unsymm
+1, 2, 11
+5, 1, 2
+*Node
+1, 0.0, 0.0
+2, 1.0, 0.0
+3, 1.0, 1.0
+4, 0.0, 1.0
+5, 0.5, 0.0
+6, 1.0, 0.5
+7, 0.5, 1.0
+8, 0.0, 0.5
+*Element, type=U2, elset=DOMAIN
+1, 1, 2, 3, 4, 5, 6, 7, 8
+** Near-zero-stiffness overlay sharing the UEL nodes.
+*Element, type=CPE8, elset=DUMMY
+2, 1, 2, 3, 4, 5, 6, 7, 8
+** Small remote CPE8T element: activates temperature DOF 11.
+*Node
+9,  0.0,     -1.0e-3
+10, 1.0e-5,  -1.0e-3
+11, 1.0e-5,  -9.9e-4
+12, 0.0,     -9.9e-4
+13, 5.0e-6,  -1.0e-3
+14, 1.0e-5,  -9.95e-4
+15, 5.0e-6,  -9.9e-4
+16, 0.0,     -9.95e-4
+*Element, type=CPE8T, elset=ACTIVATOR
+3, 9, 10, 11, 12, 13, 14, 15, 16
+*Nset, nset=LEFT
+1, 4, 8
+*Nset, nset=RIGHT
+2, 3, 6
+*Nset, nset=BOTTOMTEMP
+1, 2
+*Nset, nset=ACTNODES
+9, 10, 11, 12, 13, 14, 15, 16
+** CPE8T carries temperature at corner nodes only
+*Nset, nset=ACTCORNERS
+9, 10, 11, 12
+** PROPS order matches ThermoMechanicalMaterial.props:
+**   G, K, alpha, kappa, cT
+*Uel Property, elset=DOMAIN
+1.0, 100.0, 1.0e-3, 0.25, 1.0
+*Material, name=dummy_material
+*Elastic
+1.0e-20, 0.3
+*Solid Section, elset=DUMMY, material=dummy_material
+,
+*Material, name=activator_material
+*Elastic
+1.0e-20, 0.3
+*Density
+1.0,
+*Conductivity
+0.25,
+*Specific Heat
+1.0,
+*Solid Section, elset=ACTIVATOR, material=activator_material
+,
+*Initial Conditions, type=TEMPERATURE
+1, 0.0
+2, 0.0
+3, 0.0
+4, 0.0
+ACTCORNERS, 0.0
+*Step, name=HEAT, nlgeom=YES, unsymm=YES
+*Coupled Temperature-displacement, creep=none
+0.1, 1.0
+*Boundary
+LEFT, 1, 2, 0.0
+RIGHT, 1, 1, 0.02
+ACTNODES, 1, 2, 0.0
+ACTCORNERS, 11, 11, 0.0
+** Temperature prescribed on the two bottom corners ONLY; the top-corner
+** DOF-11 values stay free, so the step exercises a genuine transient
+** transport solve on the mixed-order element.
+BOTTOMTEMP, 11, 11, 10.0
+*Output, field, frequency=1
+*Node Output
+U, RF, NT
+*End Step

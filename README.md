@@ -1,12 +1,13 @@
 # abaqus_ufl
 
 Generate **Abaqus** user subroutines (**UMAT** / **UEL**) from a compact symbolic
-model definition written in Python, with automatic consistent-tangent
-verification.
+model definition written in Python, with automatic tangent generation and
+material-method tangent verification.
 
 You write the constitutive response (or an element weak form) once, in Python.
-`abaqus_ufl` differentiates it, checks the tangent (complex-step vs finite
-difference), and emits ready-to-submit fixed-form Fortran.
+`abaqus_ufl` differentiates the implemented methods and emits fixed-form
+Fortran. Material `verify()` checks complex-step tangents against finite
+differences; a UEL still needs the assembled element checks defined below.
 
 ## Install
 
@@ -48,34 +49,48 @@ au.generate_umat(model, "neo_hookean_umat.for")
 before any Fortran is written. For an element-level weak form, subclass
 `au.WeakForm` and call `au.generate_uel(...)` instead.
 
-## The workflow
+## The pipeline
 
-1. **Author** — a `Material` (UMAT) or `WeakForm` (UEL) in Python.
-2. **Verify** — `model.verify()` checks the generated tangent.
-3. **Generate** — `generate_umat` / `generate_uel` emit the `.for`.
-4. **Validate** — run the generated subroutine in Abaqus against an independent
-   reference (see `examples/` and `tools/`).
+The package sits inside a verification pipeline already exercised by the
+development examples:
 
-Copy [`examples/_template/`](examples/_template/) to start your own; the full
-recipe is in [`HOWTO_ADD_AN_EXAMPLE.md`](HOWTO_ADD_AN_EXAMPLE.md).
+1. map the theory, assumptions, conventions, fields, and state layout;
+2. implement the Python material or weak form;
+3. check tangents plus model-specific regimes, invariants, and an independent
+   quantitative oracle;
+4. generate the Fortran reproducibly and compile it;
+5. call nontrivial generated code directly through f2py or another checked
+   compiled runtime;
+6. add a solver run only where it provides useful evidence; and
+7. verify the output bridge before comparing or plotting solver results.
+
+`verify()` is one consistency gate in this chain. For a UEL,
+`problem.verify()` does not replace an assembled residual/tangent check.
+Abaqus mesh, contact, loading, procedure, solver-control, and launch choices
+remain example/user-owned; the package does not attempt to automate the whole
+FEM-analysis workflow.
+
+The working [`examples/_template/`](examples/_template/) demonstrates the
+local Python-to-compiled-UMAT loop. The complete shared contract is in
+[`HOWTO_ADD_AN_EXAMPLE.md`](HOWTO_ADD_AN_EXAMPLE.md).
 
 ## Layout
 
 ```
 abaqus_ufl/            the package: core/ (model API, tangents) + generators/ (UMAT/UEL codegen)
-examples/              worked, verified examples + a copyable _template/
+examples/              public allowlist + working pipeline demonstration
 tools/                 shared Abaqus run / ODB-extract / compare machinery
 docs/                  usage, theory, and design documentation
 ai_skills/             an operational guide for AI coding assistants
 ```
 
-Every example declares its **verification level** — Abaqus-validated,
-Abaqus-smoke, Python-verified, or analytical — see
-[`examples/README.md`](examples/README.md).
+Every released example reports separate evidence for theory/oracles, tangent
+or element consistency, generated/compiled execution, solver runs, and output
+bridges. See [`examples/README.md`](examples/README.md).
 
 ## Documentation
 
-- **Usage:** [`docs/API_USAGE.md`](docs/API_USAGE.md) — entry points, the tensor DSL, the verification ladder.
+- **Usage:** [`docs/API_USAGE.md`](docs/API_USAGE.md) — entry points, the tensor DSL, and the example pipeline.
 - **Theory:** [`docs/theory.md`](docs/theory.md), [`docs/complex_step_patterns.md`](docs/complex_step_patterns.md), [`docs/JAUMANN_RESOLUTION.md`](docs/JAUMANN_RESOLUTION.md).
 - **Design:** the code-generator and tangent-engine internals — see the [`docs/` index](docs/README.md).
 - **Lessons learned:** general Abaqus UMAT/UEL + codegen lessons — see [`docs/lessons/`](docs/lessons/).

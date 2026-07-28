@@ -112,11 +112,16 @@ nodes), the labels must match exactly what the UEL expects.
 *User Element, Type=U2, Nodes=8, Coordinates=2,
  Properties=9, Variables=1
 1, 2, 11, 12
+5, 1, 2, 12
 ```
 
 Here DOFs 1,2 = displacement, 11 = pressure, 12 = a second scalar field (e.g.
-chemical potential). Corner nodes get all four; midside nodes get 1, 2, 12
-only — Abaqus resolves this from the element connectivity.
+chemical potential). The first data line is the DOF list applying from nodal
+position 1 (corners: all four DOFs); each subsequent line starts with a nodal
+position and gives the DOF list that applies from that position on
+(`5, 1, 2, 12`: midside nodes 5-8 carry 1, 2, 12 only). Abaqus does NOT infer
+varying per-node DOF sets from the element connectivity; without the second
+data line every node gets the first list.
 
 **Fix:** Document the DOF layout with a table mapping DOF index -> node -> field.
 

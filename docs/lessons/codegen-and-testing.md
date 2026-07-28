@@ -76,7 +76,9 @@ material evaluation, tangent assembly, and the sign of `AMATRX` relative to
 `RHS`. It verifies the tangent is consistent with the residual, but it does
 **not** prove the physics, the residual, or the PDE sign convention is correct —
 a residual can be internally tangent-consistent yet encode the wrong equation.
-Those need an analytical benchmark or Abaqus validation (see the ladder below).
+Those need an independent quantitative benchmark. An optional Abaqus
+integration check supplies production-interface, convention, and output-bridge
+evidence; it is not automatically a physics oracle (see the pipeline below).
 
 ```python
 for col in range(NDOFEL):
@@ -96,28 +98,31 @@ test at a random deformation state with every field nonzero.
 ### Analytical benchmarks for simple cases
 
 Uniaxial tension on a single element has a closed-form reaction force. Compare
-against it to verify the complete element end to end.
+both the Python assembly and the directly executed generated element against
+it. The first checks the formulation/assembly; the second adds code-generation
+and compiled-interface evidence.
 
-### Build a Python reference assembly as a cross-implementation oracle
+### Build a Python reference assembly
 
-Write a Python function that reimplements the element assembly — same DOF
-parsing, shape functions, and assembly loops — and use it as the oracle for all
-tests. This removes the need for a Fortran compiler during development. Because
-it is a second implementation of the *same* formulation, it catches
-code-generation and bookkeeping errors, not errors in the underlying physics;
-those still need an analytical or Abaqus check.
+Write a Python function that reimplements the intended element assembly — DOF
+parsing, shape functions, and assembly loops — and use it for fast residual,
+tangent, and bookkeeping checks during development. It does not execute the
+generated source, so code-generation parity still requires a compiled UEL
+comparison. Because both paths implement the same formulation, neither is an
+independent physics oracle; use a closed form, hand calculation, published
+benchmark, or independently formulated comparison for that gate.
 
-### Multi-field formulations require an UNSYMMETRIC solver
+### Determine matrix symmetry from the formulation
 
-A multi-field tangent is genuinely unsymmetric: the off-diagonal coupling
-blocks are different operators, not transposes of each other. A symmetric
-solver silently discards the lower triangle and corrupts every Newton
-correction — yet a per-entry stiffness check still passes, because it tests
-entries independently. Symptom: the stiffness check passes but Newton diverges
-monotonically to NaN. Always flag the solver unsymmetric for any u-p, u-p-μ,
-mechanics-diffusion, or mechanics-damage formulation (e.g. Abaqus
-`*STATIC, UNSYMM`). Check the solver symmetry flag first, before any
-formulation debugging.
+Do not infer symmetry from the number or names of fields. A variational
+saddle-point formulation can be symmetric indefinite, while time-dependent,
+history-dependent, stabilized, or non-associated coupling can be genuinely
+nonsymmetric. Inspect the off-diagonal blocks and measure
+`||K-K.T||/||K||` at representative states. Request unsymmetric tangent
+treatment only when the actual operator requires it. A solver symmetry mismatch
+can corrupt Newton corrections even while a per-entry stiffness check passes,
+so compare the declared treatment with the measured operator before changing
+the physics or iteration limits.
 
 ### A passing stiffness check does not guarantee Newton convergence
 

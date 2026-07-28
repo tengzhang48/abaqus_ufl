@@ -1,6 +1,7 @@
 *Heading
-abaqus_ufl TEMPLATE: single C3D8 element, <describe loading here>
-** Copy + edit. Keep it small (1 element is ideal for a material-point check).
+abaqus_ufl template: constrained-strain small-strain elastic UMAT
+** This optional deck checks the Abaqus interface/output bridge, not general
+** Abaqus model construction.
 *Preprint, echo=NO, model=NO, history=NO, contact=NO
 *Node
 1, 0.0, 0.0, 0.0
@@ -11,7 +12,7 @@ abaqus_ufl TEMPLATE: single C3D8 element, <describe loading here>
 6, 1.0, 0.0, 1.0
 7, 1.0, 1.0, 1.0
 8, 0.0, 1.0, 1.0
-*Element, type=C3D8, elset=BLOCK
+*Element, type=C3D8R, elset=BLOCK
 1, 1, 2, 3, 4, 5, 6, 7, 8
 *Nset, nset=LEFT
 1, 4, 5, 8
@@ -19,11 +20,15 @@ abaqus_ufl TEMPLATE: single C3D8 element, <describe loading here>
 2, 3, 6, 7
 *Nset, nset=ALLNODES
 1, 2, 3, 4, 5, 6, 7, 8
+** For a UMAT, Abaqus cannot infer reduced-integration hourglass stiffness.
+** Use the Abaqus/Standard total-stiffness default equivalent: 0.005*G.
 *Solid Section, elset=BLOCK, material=TEMPLATE
+*Hourglass Stiffness
+0.05
 *Material, name=TEMPLATE
-** constants MUST match TemplateMaterial.props (same order): G, K, ...
+** constants match TemplateElastic.props in the order G, lam
 *User Material, constants=2
-0.5, 50.0
+10.0, 20.0
 *Step, name=LOAD, nlgeom=YES
 *Static
 0.1, 1.0, 1.0e-6, 0.1
@@ -36,5 +41,5 @@ RIGHT, 1, 1, -0.02
 *Node Output
 U, RF
 *Element Output, directions=YES
-S, E
+S, LE
 *End Step

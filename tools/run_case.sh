@@ -1,5 +1,5 @@
 #!/bin/bash
-# Per-case Abaqus runner + ODB extractor for abaqus_ufl validation.
+# Per-case Abaqus runner + ODB extractor for abaqus_ufl integration checks.
 #
 # Usage (from inside a case directory):
 #   bash /path/to/run_case.sh <job_name> <user_for> [extract_config.json]
@@ -36,7 +36,7 @@ if [ -z "$USER_FOR" ]; then
 fi
 
 echo "=========================================="
-echo "Running Abaqus validation case"
+echo "Running Abaqus integration check"
 echo "  job_name = $JOB_NAME"
 echo "  user_for = $USER_FOR"
 echo "  extract  = $EXTRACT_CONFIG"

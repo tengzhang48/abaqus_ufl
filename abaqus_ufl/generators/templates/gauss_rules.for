@@ -1,5 +1,5 @@
 C======================================================================
-C     gauss_rules.for — Gauss quadrature rules for 2D elements
+C     gauss_rules.for -- Gauss quadrature rules for 2D elements
 C
 C     Contains:
 C       1. gauss_2d_2x2:  4-point (2x2), exact to degree 3

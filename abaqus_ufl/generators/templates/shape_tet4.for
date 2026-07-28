@@ -1,5 +1,5 @@
 C======================================================================
-C     shape_tet4.for — Shape functions + quadrature for 4-node
+C     shape_tet4.for -- Shape functions + quadrature for 4-node
 C     linear tetrahedral element (Abaqus C3D4 convention)
 C
 C     Reference element: nodes at
@@ -23,10 +23,10 @@ C======================================================================
 C     4-node linear tetrahedron shape functions and derivatives
 C
 C     Input:
-C       xi, eta, zeta — natural coordinates
+C       xi, eta, zeta -- natural coordinates
 C     Output:
-C       N(4)       — shape function values
-C       dNdxi(4,3) — dNdxi(a,i) = dN_a/dxi_i (constant for the tet)
+C       N(4)       -- shape function values
+C       dNdxi(4,3) -- dNdxi(a,i) = dN_a/dxi_i (constant for the tet)
 C
       IMPLICIT NONE
       DOUBLE PRECISION, INTENT(IN)  :: xi, eta, zeta
@@ -58,9 +58,9 @@ C
 C     4-point Gauss rule for the reference tetrahedron (degree 2)
 C
 C     Output:
-C       xi_gp(4,3) — integration point coordinates
-C       w_gp(4)    — weights (sum = 1/6 = reference tet volume)
-C       n_gp       — 4
+C       xi_gp(4,3) -- integration point coordinates
+C       w_gp(4)    -- weights (sum = 1/6 = reference tet volume)
+C       n_gp       -- 4
 C
       IMPLICIT NONE
       DOUBLE PRECISION, INTENT(OUT) :: xi_gp(4,3), w_gp(4)
@@ -101,9 +101,9 @@ C     This is the single-point quadrature highlighted by Scovazzi et al.
 C     (2023) for the stabilized linear tet.
 C
 C     Output:
-C       xi_gp(1,3) — centroid (1/4, 1/4, 1/4)
-C       w_gp(1)    — 1/6 (reference tet volume)
-C       n_gp       — 1
+C       xi_gp(1,3) -- centroid (1/4, 1/4, 1/4)
+C       w_gp(1)    -- 1/6 (reference tet volume)
+C       n_gp       -- 1
 C
       IMPLICIT NONE
       DOUBLE PRECISION, INTENT(OUT) :: xi_gp(1,3), w_gp(1)

@@ -1,5 +1,5 @@
 C======================================================================
-C     shape_hex8.for — Shape functions for 8-node hexahedral element
+C     shape_hex8.for -- Shape functions for 8-node hexahedral element
 C
 C     Node numbering (Abaqus convention):
 C
@@ -10,7 +10,7 @@ C       | 4-----|-3          |/_____ xi
 C       |/      |/
 C       1-------2
 C
-C     Corner nodes at (xi,eta,zeta) = (±1,±1,±1):
+C     Corner nodes at (xi,eta,zeta) = (+/-1,+/-1,+/-1):
 C       Node 1: (-1,-1,-1)
 C       Node 2: (+1,-1,-1)
 C       Node 3: (+1,+1,-1)
@@ -27,10 +27,10 @@ C======================================================================
 C     8-node hexahedral shape functions and derivatives
 C
 C     Input:
-C       xi, eta, zeta — natural coordinates in [-1,1]
+C       xi, eta, zeta -- natural coordinates in [-1,1]
 C     Output:
-C       N(8)      — shape function values at (xi,eta,zeta)
-C       dNdxi(8,3) — dNdxi(a,i) = dN_a/dxi_i
+C       N(8)      -- shape function values at (xi,eta,zeta)
+C       dNdxi(8,3) -- dNdxi(a,i) = dN_a/dxi_i
 C                     i=1: d/dxi, i=2: d/deta, i=3: d/dzeta
 C
       IMPLICIT NONE

@@ -1,5 +1,5 @@
 C======================================================================
-C     face_hex.for — Face shape functions for hexahedral elements
+C     face_hex.for -- Face shape functions for hexahedral elements
 C
 C     Used for integrating distributed loads (surface tractions)
 C     over element faces in the Abaqus UEL NDLOAD interface.
@@ -14,7 +14,7 @@ C       Face 5: nodes on zeta= -1  (1,2,3,4 for Hex8)
 C       Face 6: nodes on zeta= +1  (5,6,7,8 for Hex8)
 C
 C     Each face is a 2D surface parameterized by two of the three
-C     natural coordinates (the third is fixed at ±1).
+C     natural coordinates (the third is fixed at +/-1).
 C
 C     Generates: face_hex8_nodes, face_hex8_shape
 C                face_hex20_nodes, face_hex20_shape
@@ -24,10 +24,10 @@ C======================================================================
 C     Return local node numbers on a given face of Hex8
 C
 C     Input:
-C       iface — face number (1-6, Abaqus convention)
+C       iface -- face number (1-6, Abaqus convention)
 C     Output:
-C       face_nodes(4) — local node numbers on this face
-C       n_face_nodes  — 4
+C       face_nodes(4) -- local node numbers on this face
+C       n_face_nodes  -- 4
 C
       IMPLICIT NONE
       INTEGER, INTENT(IN)  :: iface
@@ -82,21 +82,21 @@ C       zeta = +1: nodes 5,6,7,8
 C     Shape functions on a face of Hex8 (bilinear quad)
 C
 C     Input:
-C       iface — face number (1-6)
-C       s1, s2 — face natural coordinates in [-1,1]
+C       iface -- face number (1-6)
+C       s1, s2 -- face natural coordinates in [-1,1]
 C     Output:
-C       N_face(4) — shape function values
-C       dNds(4,2) — dN/ds1, dN/ds2
-C       n_face_nodes — 4
+C       N_face(4) -- shape function values
+C       dNds(4,2) -- dN/ds1, dN/ds2
+C       n_face_nodes -- 4
 C
 C     The mapping from face params (s1,s2) to volume params
 C     (xi,eta,zeta) depends on which face:
-C       Face 1 (eta=-1): s1→xi, s2→zeta
-C       Face 2 (eta=+1): s1→xi, s2→zeta
-C       Face 3 (xi=-1):  s1→eta, s2→zeta
-C       Face 4 (xi=+1):  s1→eta, s2→zeta
-C       Face 5 (zeta=-1): s1→xi, s2→eta
-C       Face 6 (zeta=+1): s1→xi, s2→eta
+C       Face 1 (eta=-1): s1->xi, s2->zeta
+C       Face 2 (eta=+1): s1->xi, s2->zeta
+C       Face 3 (xi=-1):  s1->eta, s2->zeta
+C       Face 4 (xi=+1):  s1->eta, s2->zeta
+C       Face 5 (zeta=-1): s1->xi, s2->eta
+C       Face 6 (zeta=+1): s1->xi, s2->eta
 C
       IMPLICIT NONE
       INTEGER, INTENT(IN) :: iface
@@ -141,10 +141,10 @@ C     Return local node numbers on a given face of Hex20
 C     Each face is an 8-node serendipity quad
 C
 C     Input:
-C       iface — face number (1-6, Abaqus convention)
+C       iface -- face number (1-6, Abaqus convention)
 C     Output:
-C       face_nodes(8) — local node numbers (4 corners + 4 midside)
-C       n_face_nodes  — 8
+C       face_nodes(8) -- local node numbers (4 corners + 4 midside)
+C       n_face_nodes  -- 8
 C
       IMPLICIT NONE
       INTEGER, INTENT(IN)  :: iface
@@ -223,12 +223,12 @@ C       zeta = +1: corners 5,6,7,8; midside 13,14,15,16
 C     Shape functions on a face of Hex20 (8-node serendipity quad)
 C
 C     Input:
-C       iface — face number (1-6)
-C       s1, s2 — face natural coordinates in [-1,1]
+C       iface -- face number (1-6)
+C       s1, s2 -- face natural coordinates in [-1,1]
 C     Output:
-C       N_face(8) — shape function values
-C       dNds(8,2) — dN/ds1, dN/ds2
-C       n_face_nodes — 8
+C       N_face(8) -- shape function values
+C       dNds(8,2) -- dN/ds1, dN/ds2
+C       n_face_nodes -- 8
 C
       IMPLICIT NONE
       INTEGER, INTENT(IN) :: iface

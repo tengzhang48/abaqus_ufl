@@ -1,5 +1,5 @@
 {
-  "_comment": "Tells tools/extract_odb.py what to pull from job.odb. For a UMAT, extract element fields (S, LE/E) at one integration point. For a UEL, extract nodal U/RF by node_label instead (UELs emit no standard S/E).",
+  "_comment": "One-element bridge only: extract Abaqus tension-positive S and logarithmic LE at integration point 1. Multi-element, mixed-field, history, projection, or visualization bridges need an example-owned extractor with explicit identity, coverage, ordering, and semantic field/DOF mapping.",
   "odb_path": "job.odb",
   "frame": "last",
   "fields": ["S", "LE"],

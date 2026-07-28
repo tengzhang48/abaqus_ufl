@@ -1,8 +1,8 @@
 C======================================================================
-C     tangent_identities.for — Tensor derivative identity library
+C     tangent_identities.for -- Tensor derivative identity library
 C
 C     Layer 2 of the symbolic/complex-step tangent system.
-C     Pure DOUBLE PRECISION — no complex arithmetic.
+C     Pure DOUBLE PRECISION -- no complex arithmetic.
 C
 C     These are standard closed-form tensor calculus results reused
 C     by every model that needs them.

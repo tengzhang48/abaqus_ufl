@@ -1,0 +1,18 @@
+# Source-distribution policy: the sdist must be self-sufficient for the
+# documented workflow — package + templates + tests (including the f2py
+# Fortran drivers) + docs + examples — so `pip download` users can run
+# the same gates recorded in the example READMEs.
+include LICENSE
+include CITATION.cff
+include conftest.py
+include README.md
+include HOWTO_ADD_AN_EXAMPLE.md
+include environment.yml
+recursive-include abaqus_ufl *.for
+recursive-include tests *.py *.f90
+recursive-include docs *.md
+recursive-include ai_skills *.md
+recursive-include examples *.py *.for *.f90 *.md *.inp *.json *.sh
+recursive-include tools *.py *.sh
+global-exclude __pycache__ *.pyc *.pyo *.so *.o
+prune examples/*/f2py/__pycache__

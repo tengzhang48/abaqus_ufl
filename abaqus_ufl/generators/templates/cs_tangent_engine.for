@@ -1,5 +1,5 @@
 C======================================================================
-C     cs_tangent_engine.for — Complex-step tangent computation
+C     cs_tangent_engine.for -- Complex-step tangent computation
 C
 C     Computes all tangent blocks for the three-field (u, p, mu)
 C     gel formulation by perturbing material function inputs.
@@ -71,7 +71,7 @@ C     --- One-time conversion of time-invariant inputs ---
       thetaz  = DCMPLX(theta, 0.0d0)
 
 C======================================================================
-C     BLOCK 1: dP/dF (3,3,3,3) — 9 perturbations of F
+C     BLOCK 1: dP/dF (3,3,3,3) -- 9 perturbations of F
 C======================================================================
       DO k = 1, 3
         DO l = 1, 3
@@ -90,7 +90,7 @@ C======================================================================
       END DO
 
 C======================================================================
-C     BLOCK 2: dP/dp (3,3) — 1 perturbation of p
+C     BLOCK 2: dP/dp (3,3) -- 1 perturbation of p
 C======================================================================
       CALL real2complex33(F, Fz)
       pz  = DCMPLX(p, CS_H)
@@ -103,10 +103,10 @@ C======================================================================
         END DO
       END DO
 
-C     BLOCK 3: dP/dmu — SKIPPED (known zero for this model)
+C     BLOCK 3: dP/dmu -- SKIPPED (known zero for this model)
 
 C======================================================================
-C     BLOCK 4: drp/dF (3,3) — 9 perturbations of F
+C     BLOCK 4: drp/dF (3,3) -- 9 perturbations of F
 C======================================================================
       DO k = 1, 3
         DO l = 1, 3
@@ -121,7 +121,7 @@ C======================================================================
       END DO
 
 C======================================================================
-C     BLOCK 5: drp/dp (scalar) — 1 perturbation of p
+C     BLOCK 5: drp/dp (scalar) -- 1 perturbation of p
 C======================================================================
       CALL real2complex33(F, Fz)
       pz  = DCMPLX(p, CS_H)
@@ -131,7 +131,7 @@ C======================================================================
       drpdp = AIMAG(rpz) / CS_H
 
 C======================================================================
-C     BLOCK 6: drp/dmu (scalar) — 1 perturbation of mu
+C     BLOCK 6: drp/dmu (scalar) -- 1 perturbation of mu
 C======================================================================
       CALL real2complex33(F, Fz)
       pz  = DCMPLX(p, 0.0d0)
@@ -141,7 +141,7 @@ C======================================================================
       drpdmu = AIMAG(rpz) / CS_H
 
 C======================================================================
-C     BLOCK 7: djR/dF (3,3,3) — 9 perturbations of F
+C     BLOCK 7: djR/dF (3,3,3) -- 9 perturbations of F
 C======================================================================
       DO k = 1, 3
         DO l = 1, 3
@@ -159,7 +159,7 @@ C======================================================================
       END DO
 
 C======================================================================
-C     BLOCK 8: djR/dp (3) — 1 perturbation of p
+C     BLOCK 8: djR/dp (3) -- 1 perturbation of p
 C======================================================================
       CALL real2complex33(F, Fz)
       pz  = DCMPLX(p, CS_H)
@@ -171,7 +171,7 @@ C======================================================================
       END DO
 
 C======================================================================
-C     BLOCK 9: djR/dmu (3) — 1 perturbation of mu
+C     BLOCK 9: djR/dmu (3) -- 1 perturbation of mu
 C======================================================================
       CALL real2complex33(F, Fz)
       pz  = DCMPLX(p, 0.0d0)
@@ -183,7 +183,7 @@ C======================================================================
       END DO
 
 C======================================================================
-C     BLOCK 10: djR/d(grad_mu) (3,3) — 3 perturbations of grad_mu
+C     BLOCK 10: djR/d(grad_mu) (3,3) -- 3 perturbations of grad_mu
 C======================================================================
       DO k = 1, 3
         CALL real2complex33(F, Fz)
@@ -198,7 +198,7 @@ C======================================================================
       END DO
 
 C======================================================================
-C     BLOCK 11: dcdot/dF (3,3) — 9 perturbations of F
+C     BLOCK 11: dcdot/dF (3,3) -- 9 perturbations of F
 C======================================================================
       DO k = 1, 3
         DO l = 1, 3
@@ -214,7 +214,7 @@ C======================================================================
       END DO
 
 C======================================================================
-C     BLOCK 12: dcdot/dp (scalar) — 1 perturbation of p
+C     BLOCK 12: dcdot/dp (scalar) -- 1 perturbation of p
 C======================================================================
       CALL real2complex33(F, Fz)
       pz  = DCMPLX(p, CS_H)

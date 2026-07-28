@@ -324,7 +324,11 @@ def _state_args_for_gp(material, STATEV, kk):
         if size == 1:
             state[f'{name}_old'] = vals[0]
         else:
-            state[f'{name}_old'] = vals.reshape(np.asarray(init).shape)
+            # Column-major (Fortran) layout: the generated UEL packs tensor
+            # SVARS as slot 3*(j-1)+i for component (i, j), so the reference
+            # assembler must read them back the same way.
+            state[f'{name}_old'] = vals.reshape(
+                np.asarray(init).shape, order='F')
         offset += size
     return {**defaults, **state}
 
@@ -788,8 +792,9 @@ def assemble_element(weakform, coords, U, DU, DTIME, PROPS, STATEV=None,
 
 def _flatten_gp_state(material, new_state_by_gp, n_gp, STATEV):
     """Flatten per-GP stress_PK1 state dicts into a STATEV-layout array (GP-major,
-    state_vars order, C-flatten — matching `_state_args_for_gp`'s reshape).  GPs
-    with no update fall back to the incoming STATEV (or the material defaults)."""
+    state_vars order, column-major/Fortran flatten — matching the generated UEL's
+    SVARS packing and `_state_args_for_gp`'s reshape).  GPs with no update fall
+    back to the incoming STATEV (or the material defaults)."""
     sizes = _state_var_sizes(material)
     per_gp = sum(s for _, s, _ in sizes)
     if per_gp == 0:
@@ -801,11 +806,13 @@ def _flatten_gp_state(material, new_state_by_gp, n_gp, STATEV):
         off = kk * per_gp
         for name, size, init in sizes:
             if sd is not None and name in sd:
-                val = np.real(np.asarray(sd[name], dtype=complex)).ravel()
+                val = np.real(np.asarray(sd[name], dtype=complex)).ravel(
+                    order='F')
             elif STATEV is not None:
                 val = np.asarray(STATEV[off:off + size], dtype=float).ravel()
             else:
-                val = np.asarray(defaults[f'{name}_old'], dtype=float).ravel()
+                val = np.asarray(
+                    defaults[f'{name}_old'], dtype=float).ravel(order='F')
             out[off:off + size] = val
             off += size
     return out

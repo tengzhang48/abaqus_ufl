@@ -1,10 +1,10 @@
 C======================================================================
-C     tensor_ops.for — Complex-arithmetic tensor utilities
+C     tensor_ops.for -- Complex-arithmetic tensor utilities
 C
 C     Provides det33, inv33, matmul33, transpose33, outer33 for
 C     DOUBLE COMPLEX arguments. Also provides real-only wrappers.
 C
-C     Design:  1:1 mirror of Python det33/inv33 helpers
+C     Design:  1:1 mirror of the package's Python tensor helpers
 C     Purpose: Foundation for complex-step tangent engine
 C
 C     Convention: All 3x3 matrices stored as (3,3) arrays
@@ -91,7 +91,7 @@ C----------------------------------------------------------------------
 
 C----------------------------------------------------------------------
 C     matmul33z: C = A * B for 3x3 complex matrices
-C     (Explicit loop — avoids MATMUL intrinsic for portability)
+C     (Explicit loop -- avoids MATMUL intrinsic for portability)
 C----------------------------------------------------------------------
       SUBROUTINE matmul33z(A, B, C)
       IMPLICIT NONE
@@ -286,20 +286,20 @@ C======================================================================
 C     Matrix functions for tensor_ops.for
 C     Eigendecomposition-based (Approach A) + iterative fallbacks (B)
 C
-C     All DOUBLE COMPLEX, CS-safe.
+C     All DOUBLE COMPLEX, CS-safe. See MATRIX_FUNCTIONS_DESIGN.md.
 C
 C     Subroutines:
-C       cross3z        — cross product of complex 3-vectors
-C       outer33z       — outer product of two complex 3-vectors
-C       sym3z          — symmetric 3x3 tensor from 6 unique entries
-C       eig33z         — eigenvalues/vectors of 3x3 symmetric matrix
-C       sqrtm33z       — matrix square root via eigendecomposition
-C       logm33z        — matrix logarithm via eigendecomposition
-C       expm33z        — matrix exponential via eigendecomposition
-C       polar33z       — right polar decomposition F = R * U
-C       sqrtm33z_iter  — matrix square root (Denman-Beavers)
-C       logm33z_iter   — matrix logarithm (inv scaling & squaring)
-C       expm33z_iter   — matrix exponential (scaling & squaring + Pade)
+C       cross3z        -- cross product of complex 3-vectors
+C       outer33z       -- outer product of two complex 3-vectors
+C       sym3z          -- symmetric 3x3 tensor from 6 unique entries
+C       eig33z         -- eigenvalues/vectors of 3x3 symmetric matrix
+C       sqrtm33z       -- matrix square root via eigendecomposition
+C       logm33z        -- matrix logarithm via eigendecomposition
+C       expm33z        -- matrix exponential via eigendecomposition
+C       polar33z       -- right polar decomposition F = R * U
+C       sqrtm33z_iter  -- matrix square root (Denman-Beavers)
+C       logm33z_iter   -- matrix logarithm (inv scaling & squaring)
+C       expm33z_iter   -- matrix exponential (scaling & squaring + Pade)
 C======================================================================
 
 C----------------------------------------------------------------------
@@ -360,21 +360,311 @@ C----------------------------------------------------------------------
       END SUBROUTINE sym3z
 
 C----------------------------------------------------------------------
+C     jacobi33d_vectors: Eigenvectors of a real symmetric 3x3 matrix.
+C
+C     Fixed cyclic Jacobi sweeps are used only inside the near-diagonal
+C     complex-step fallback below.  The input is the selected real or
+C     imaginary part of a quasi-degenerate block; Q is real orthogonal.
+C----------------------------------------------------------------------
+      SUBROUTINE jacobi33d_vectors(M_in, Q)
+      IMPLICIT NONE
+      DOUBLE PRECISION, INTENT(IN)  :: M_in(3,3)
+      DOUBLE PRECISION, INTENT(OUT) :: Q(3,3)
+      DOUBLE PRECISION :: M(3,3), R(3,3), T(3,3)
+      DOUBLE PRECISION :: apq, theta, cc, ss
+      INTEGER :: pp(3), qq(3)
+      INTEGER :: i, pair, pidx, qidx, sweep
+      DATA pp /1, 1, 2/
+      DATA qq /2, 3, 3/
+
+      M = M_in
+      Q = 0.0d0
+      DO i = 1, 3
+        Q(i,i) = 1.0d0
+      END DO
+
+      DO sweep = 1, 12
+        DO pair = 1, 3
+          pidx = pp(pair)
+          qidx = qq(pair)
+          apq = M(pidx,qidx)
+          IF (ABS(apq) .GT. 0.0d0) THEN
+            theta = 0.5d0 * ATAN2(2.0d0*apq,
+     &                              M(pidx,pidx)-M(qidx,qidx))
+            cc = COS(theta)
+            ss = SIN(theta)
+            R = 0.0d0
+            DO i = 1, 3
+              R(i,i) = 1.0d0
+            END DO
+            R(pidx,pidx) = cc
+            R(qidx,qidx) = cc
+            R(pidx,qidx) = -ss
+            R(qidx,pidx) = ss
+            T = MATMUL(TRANSPOSE(R), MATMUL(M, R))
+            M = T
+            Q = MATMUL(Q, R)
+          END IF
+        END DO
+      END DO
+
+      RETURN
+      END SUBROUTINE jacobi33d_vectors
+
+C----------------------------------------------------------------------
+C     eig33z_near_diagonal: Quasi-degenerate perturbation fallback.
+C
+C     This is the generated-Fortran mirror of tensor.py's
+C     _eig_near_diagonal. Diagonal entries are grouped by real-part
+C     closeness. Within a repeated group, the derivative-carrying
+C     imaginary-symmetric deviation selects the CS basis when present;
+C     pure value calls use the real deviation. Across distinct groups,
+C     first-order eigenvector corrections retain the complex-step
+C     off-diagonal perturbation.
+C----------------------------------------------------------------------
+      SUBROUTINE eig33z_near_diagonal(A, lam, V)
+      IMPLICIT NONE
+      DOUBLE COMPLEX, INTENT(IN)  :: A(3,3)
+      DOUBLE COMPLEX, INTENT(OUT) :: lam(3), V(3,3)
+      DOUBLE COMPLEX :: D(3), group_mean, numerator, gap
+      DOUBLE COMPLEX :: zdev, ztmp
+      DOUBLE PRECISION :: scale, max_real, max_imag
+      DOUBLE PRECISION :: Mreal(3,3), Qreal(3,3)
+      DOUBLE PRECISION :: aa, bb, dd, theta, cc, ss
+      INTEGER :: order(3), group(3), members(3)
+      INTEGER :: i, j, aidx, bidx, col, g, ng, n, pos
+
+      DO i = 1, 3
+        D(i) = A(i,i)
+        order(i) = i
+      END DO
+
+C     Sort diagonal indices by real part.
+      DO i = 1, 2
+        DO j = i+1, 3
+          IF (DBLE(D(order(j))) .LT. DBLE(D(order(i)))) THEN
+            pos = order(i)
+            order(i) = order(j)
+            order(j) = pos
+          END IF
+        END DO
+      END DO
+
+      scale = 1.0d-300
+      DO i = 1, 3
+        DO j = 1, 3
+          scale = MAX(scale, ABS(A(i,j)))
+        END DO
+      END DO
+
+C     Group adjacent near-equal diagonal values.
+      ng = 1
+      group(order(1)) = ng
+      DO pos = 2, 3
+        IF (ABS(DBLE(D(order(pos)))-DBLE(D(order(pos-1))))
+     &      .LE. 1.0d-6*scale) THEN
+          group(order(pos)) = ng
+        ELSE
+          ng = ng + 1
+          group(order(pos)) = ng
+        END IF
+      END DO
+
+      V = DCMPLX(0.0d0, 0.0d0)
+      lam = DCMPLX(0.0d0, 0.0d0)
+
+      DO g = 1, ng
+        n = 0
+        DO pos = 1, 3
+          i = order(pos)
+          IF (group(i) .EQ. g) THEN
+            n = n + 1
+            members(n) = i
+          END IF
+        END DO
+
+        IF (n .EQ. 1) THEN
+          col = members(1)
+          lam(col) = D(col)
+          V(col,col) = DCMPLX(1.0d0, 0.0d0)
+        ELSE
+          group_mean = DCMPLX(0.0d0, 0.0d0)
+          DO aidx = 1, n
+            i = members(aidx)
+            group_mean = group_mean + A(i,i)
+          END DO
+          group_mean = group_mean / DBLE(n)
+
+          max_real = 0.0d0
+          max_imag = 0.0d0
+          DO aidx = 1, n
+            i = members(aidx)
+            DO bidx = 1, n
+              j = members(bidx)
+              zdev = A(i,j)
+              IF (i .EQ. j) zdev = zdev - group_mean
+              max_real = MAX(max_real, ABS(DBLE(zdev)))
+              max_imag = MAX(max_imag, ABS(AIMAG(zdev)))
+            END DO
+          END DO
+
+          Mreal = 0.0d0
+          DO aidx = 1, n
+            i = members(aidx)
+            DO bidx = 1, n
+              j = members(bidx)
+              zdev = A(i,j)
+              IF (i .EQ. j) zdev = zdev - group_mean
+              IF (max_imag .GT. 0.0d0) THEN
+                Mreal(i,j) = AIMAG(zdev)
+              ELSE
+                Mreal(i,j) = DBLE(zdev)
+              END IF
+            END DO
+          END DO
+
+          Qreal = 0.0d0
+          DO i = 1, 3
+            Qreal(i,i) = 1.0d0
+          END DO
+          IF (MAX(max_real, max_imag) .GT. 0.0d0) THEN
+            IF (n .EQ. 2) THEN
+              i = members(1)
+              j = members(2)
+              aa = Mreal(i,i)
+              bb = Mreal(i,j)
+              dd = Mreal(j,j)
+              IF (ABS(bb) .GT. 0.0d0) THEN
+                theta = 0.5d0 * ATAN2(2.0d0*bb, aa-dd)
+                cc = COS(theta)
+                ss = SIN(theta)
+                Qreal(i,i) = cc
+                Qreal(j,i) = ss
+                Qreal(i,j) = -ss
+                Qreal(j,j) = cc
+              END IF
+            ELSE
+              CALL jacobi33d_vectors(Mreal, Qreal)
+            END IF
+          END IF
+
+C         Rotate the complex block and retain its diagonal to first order.
+          DO aidx = 1, n
+            col = members(aidx)
+            DO bidx = 1, n
+              i = members(bidx)
+              V(i,col) = DCMPLX(Qreal(i,col), 0.0d0)
+            END DO
+            DO bidx = 1, n
+              i = members(bidx)
+              DO pos = 1, n
+                j = members(pos)
+                lam(col) = lam(col)
+     &            + Qreal(i,col)*A(i,j)*Qreal(j,col)
+              END DO
+            END DO
+          END DO
+        END IF
+      END DO
+
+C     First-order corrections between distinct diagonal groups.
+      DO col = 1, 3
+        DO i = 1, 3
+          IF (group(i) .NE. group(col)) THEN
+            numerator = DCMPLX(0.0d0, 0.0d0)
+            DO j = 1, 3
+              numerator = numerator + A(i,j)*V(j,col)
+            END DO
+            gap = lam(col) - D(i)
+            V(i,col) = V(i,col) + numerator/gap
+          END IF
+        END DO
+      END DO
+
+C     Sort eigenpairs by eigenvalue real part.
+      DO i = 1, 2
+        DO j = i+1, 3
+          IF (DBLE(lam(j)) .LT. DBLE(lam(i))) THEN
+            ztmp = lam(i)
+            lam(i) = lam(j)
+            lam(j) = ztmp
+            DO pos = 1, 3
+              ztmp = V(pos,i)
+              V(pos,i) = V(pos,j)
+              V(pos,j) = ztmp
+            END DO
+          END IF
+        END DO
+      END DO
+
+      RETURN
+      END SUBROUTINE eig33z_near_diagonal
+
+C----------------------------------------------------------------------
+C     eig33z_rotated_fallback: Rotation-invariant eig fallback.
+C
+C     Diagonalize the real symmetric state with the fixed real Jacobi
+C     helper, rotate the full complex perturbation into that principal
+C     basis, apply eig33z_near_diagonal there, and rotate its vectors
+C     back. This handles complex-step calls and repeated/near-repeated
+C     pure values without assuming coordinate-axis alignment.
+C----------------------------------------------------------------------
+      SUBROUTINE eig33z_rotated_fallback(A, lam, V)
+      IMPLICIT NONE
+      DOUBLE COMPLEX, INTENT(IN)  :: A(3,3)
+      DOUBLE COMPLEX, INTENT(OUT) :: lam(3), V(3,3)
+      DOUBLE PRECISION :: Areal(3,3), Q(3,3)
+      DOUBLE COMPLEX :: Aprin(3,3), Vprin(3,3)
+      INTEGER :: i, j, k, l
+
+      DO i = 1, 3
+        DO j = 1, 3
+          Areal(i,j) = DBLE(A(i,j))
+        END DO
+      END DO
+      CALL jacobi33d_vectors(Areal, Q)
+
+      Aprin = DCMPLX(0.0d0, 0.0d0)
+      DO i = 1, 3
+        DO j = 1, 3
+          DO k = 1, 3
+            DO l = 1, 3
+              Aprin(i,j) = Aprin(i,j)
+     &          + Q(k,i)*A(k,l)*Q(l,j)
+            END DO
+          END DO
+        END DO
+      END DO
+
+      CALL eig33z_near_diagonal(Aprin, lam, Vprin)
+
+      V = DCMPLX(0.0d0, 0.0d0)
+      DO i = 1, 3
+        DO j = 1, 3
+          DO k = 1, 3
+            V(i,j) = V(i,j) + Q(i,k)*Vprin(k,j)
+          END DO
+        END DO
+      END DO
+
+      RETURN
+      END SUBROUTINE eig33z_rotated_fallback
+
+C----------------------------------------------------------------------
 C     eig33z: Eigenvalues and eigenvectors of 3x3 symmetric matrix
 C
-C     Uses trigonometric solution for the depressed cubic.
-C     Eigenvectors are UNNORMALIZED (raw cross products) for CS
-C     correctness. Use inv(V) not V^T for reconstruction.
+C     Distinct real spectra use the trigonometric solution. Repeated,
+C     quasi-repeated, and complex-step paths use a real principal basis
+C     and perturbation fallback.
 C
-C     KNOWN LIMITATION: the degeneracy
-C     guards below return lam=q, V=I and DISCARD complex-step
-C     perturbations at (near-)diagonal/identity states, silently
-C     zeroing CS derivatives of spectral functions there (C = F^T F
-C     is exactly I at the first increment). tensor.py eig() was fixed
-C     2026-06-12 with a perturbation-theory fallback; this Fortran
-C     mirror has NOT been ported (needs a real-symmetric 3x3 Jacobi
-C     solver). The default matrix_backend='iterative' does not call
-C     eig33z; do not switch materials to backend='eig' until ported.
+C     Eigenvector column scaling/normalization is unspecified. Use
+C     inv(V), not V^T, for reconstruction; normalize a column explicitly
+C     only when a constitutive equation requires a unit direction.
+C     Inside the quasi-repeated grouping band, only eigenspace-invariant
+C     spectral reconstructions are part of the supported CS contract.
+C
+C     Near diagonal/repeated states call eig33z_near_diagonal, the
+C     generated-Fortran mirror of tensor.py's perturbation fallback.
 C----------------------------------------------------------------------
       SUBROUTINE eig33z(A, lam, V)
       IMPLICIT NONE
@@ -391,11 +681,25 @@ C     --- Local variables ---
       DOUBLE COMPLEX :: nsq1, nsq2, nsq3, best_nsq
       DOUBLE PRECISION, PARAMETER ::
      &  PI = 3.14159265358979323846d0
-      DOUBLE PRECISION :: twopi3
+      DOUBLE PRECISION :: twopi3, max_imag
       INTEGER :: i, j, k, best_idx
 
       zi = DCMPLX(0.0d0, 1.0d0)
       twopi3 = 2.0d0 * PI / 3.0d0
+
+C     Complex-step path: rotate the real state to its principal basis
+C     before applying the quasi-degenerate fallback. Repeated spectra
+C     must not depend on alignment with the input coordinate axes.
+      max_imag = 0.0d0
+      DO i = 1, 3
+        DO j = 1, 3
+          max_imag = MAX(max_imag, ABS(AIMAG(A(i,j))))
+        END DO
+      END DO
+      IF (max_imag .GT. 0.0d0) THEN
+        CALL eig33z_rotated_fallback(A, lam, V)
+        RETURN
+      END IF
 
 C     --- Invariants ---
       p1 = A(1,2)**2 + A(1,3)**2 + A(2,3)**2
@@ -415,37 +719,16 @@ C     B = A - q*I
      &   + 2.0d0 * p1
       p  = SQRT(p2 / 6.0d0)
 
-C     Guard: A is a multiple of identity
-      IF (ABS(p) .LT. 1.0d-30) THEN
-        lam(1) = q
-        lam(2) = q
-        lam(3) = q
-        CALL eye33z(V)
+C     Guard: A is a multiple of identity plus a tiny perturbation.
+      IF (ABS(DBLE(p)) .LT. 1.0d-30) THEN
+        CALL eig33z_rotated_fallback(A, lam, V)
         RETURN
       END IF
 
-C     Nearly-diagonal guard (matches Python tensor.eig)
+C     Nearly-diagonal guard (matches Python tensor.eig).
       IF (ABS(DBLE(p2)) .GT. 0.0d0 .AND.
-     &    (ABS(DBLE(p1)) .LT. 1.0d-14 * ABS(DBLE(p2)) .OR.
-     &     ABS(p1) .LT. 1.0d-18)) THEN
-        lam(1) = A(1,1)
-        lam(2) = A(2,2)
-        lam(3) = A(3,3)
-        CALL eye33z(V)
-        DO i = 1, 2
-          DO j = i+1, 3
-            IF (DBLE(lam(j)) .LT. DBLE(lam(i))) THEN
-              ztmp = lam(i)
-              lam(i) = lam(j)
-              lam(j) = ztmp
-              DO k = 1, 3
-                ztmp = V(k,i)
-                V(k,i) = V(k,j)
-                V(k,j) = ztmp
-              END DO
-            END IF
-          END DO
-        END DO
+     &    ABS(DBLE(p1)) .LT. 1.0d-14 * ABS(DBLE(p2))) THEN
+        CALL eig33z_rotated_fallback(A, lam, V)
         RETURN
       END IF
 
@@ -458,6 +741,14 @@ C     C = B / p
 
 C     r = det(C) / 2
       r = det33z(C) / 2.0d0
+
+C     Repeated/near-repeated pure-real spectra also require the rotated
+C     fallback. Raw cross-product columns are singular when a repeated
+C     eigenspace is not aligned with the input axes.
+      IF (ABS(1.0d0-ABS(DBLE(r))) .LE. 1.0d-10) THEN
+        CALL eig33z_rotated_fallback(A, lam, V)
+        RETURN
+      END IF
 
 C     Clamp real part before complex arccos, matching tensor.py eig().
 C     Near repeated eigenvalues, roundoff can push DBLE(r) just outside
@@ -528,8 +819,9 @@ C       Pick best (largest |nsq|)
           best_nsq = nsq3
         END IF
 
-C       Store eigenvector (unnormalized for CS correctness)
-        IF (ABS(best_nsq) .LT. 1.0d-50) THEN
+C       Distinct-real path stores its raw cross-product column. The
+C       eig33z API does not guarantee this scaling on every path.
+        IF (ABS(best_nsq) .EQ. 0.0d0) THEN
 C         Degenerate: coordinate basis fallback
           V(1,k) = DCMPLX(0.0d0, 0.0d0)
           V(2,k) = DCMPLX(0.0d0, 0.0d0)
@@ -779,7 +1071,7 @@ C----------------------------------------------------------------------
       INTEGER, PARAMETER :: NSERIES = 8
       INTEGER :: ks, i, j
 
-C     Step 1: Repeated square roots — B = A^{1/2^NSCALE}
+C     Step 1: Repeated square roots -- B = A^{1/2^NSCALE}
       DO i = 1, 3
         DO j = 1, 3
           B(i,j) = A(i,j)
@@ -829,7 +1121,7 @@ C     L += Xpow * X2 / k  for k = 3, 5, 7, ..., 2*NSERIES+1
         END DO
       END DO
 
-C     Step 3: Undo scaling — L = 2 * L * 2^NSCALE
+C     Step 3: Undo scaling -- L = 2 * L * 2^NSCALE
       scl = DCMPLX(DBLE(2**(NSCALE+1)), 0.0d0)
       DO i = 1, 3
         DO j = 1, 3
@@ -887,7 +1179,7 @@ C     [2/2] Pade: exp(B) ~ inv(I - B/2 + B^2/12) * (I + B/2 + B^2/12)
       CALL inv33z(D2, D2inv)
       CALL matmul33z(D2inv, N2, E)
 
-C     Step 3: Repeated squaring — E = E^{2^NSCALE}
+C     Step 3: Repeated squaring -- E = E^{2^NSCALE}
       DO ks = 1, NSCALE
         CALL matmul33z(E, E, T1)
         DO i = 1, 3
@@ -902,7 +1194,7 @@ C     Step 3: Repeated squaring — E = E^{2^NSCALE}
 
 C======================================================================
 C     CS-safe scalar trig/hyperbolic functions (DOUBLE COMPLEX)
-C     Exact complex formulas — safe for complex-step derivatives
+C     Exact complex formulas -- safe for complex-step derivatives
 C======================================================================
 
 C----------------------------------------------------------------------

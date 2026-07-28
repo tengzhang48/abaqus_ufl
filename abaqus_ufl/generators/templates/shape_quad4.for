@@ -1,5 +1,5 @@
 C======================================================================
-C     shape_quad4.for — 4-node bilinear shape functions (Quad4)
+C     shape_quad4.for -- 4-node bilinear shape functions (Quad4)
 C
 C     Node numbering:
 C

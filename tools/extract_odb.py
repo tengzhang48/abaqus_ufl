@@ -1,4 +1,14 @@
-"""Generic ODB extractor for abaqus_ufl validation cases.
+"""Simple one-record ODB extractor for abaqus_ufl integration checks.
+
+This shared helper is intentionally limited to homogeneous one-element checks.
+Multi-element, multi-instance, projected, history-dependent, or derived output
+needs an example-owned extractor that preserves stable node/element/IP identity
+and verifies complete coverage. Do not treat a flat ODB value index as a
+general output bridge.
+
+Each selected record includes the total field-record count plus its available
+instance/node or instance/element/integration-point identity. A case's frozen
+reference must assert the identity and coverage it relies on.
 
 Usage:
     abaqus python extract_odb.py --config extract_config.json
@@ -90,6 +100,24 @@ def numeric_data(data):
         return [float(data)]
 
 
+def add_record_identity(result, value):
+    """Attach the ODB identity available on a selected field-value record."""
+    node_label = getattr(value, "nodeLabel", None)
+    if node_label is not None:
+        result["node_label"] = int(node_label)
+    element_label = getattr(value, "elementLabel", None)
+    if element_label is not None:
+        result["element_label"] = int(element_label)
+    integration_point = getattr(value, "integrationPoint", None)
+    if integration_point is not None:
+        result["integration_point"] = int(integration_point)
+    instance = getattr(value, "instance", None)
+    instance_name = getattr(instance, "name", None)
+    if instance_name is not None:
+        result["instance"] = instance_name
+    return result
+
+
 def extract_field_value(field_output, element_index=0, ip_index=0, node_index=0,
                         node_label=None):
     """Extract scalar/tensor/vector data from a field output.
@@ -108,7 +136,11 @@ def extract_field_value(field_output, element_index=0, ip_index=0, node_index=0,
         if v is None:
             return None
         data = v.data
-        result = {"data": numeric_data(data)}
+        result = {
+            "data": numeric_data(data),
+            "record_count": len(values),
+        }
+        add_record_identity(result, v)
         if hasattr(v, "mises"):
             value = optional_float(v.mises)
             if value is not None:
@@ -118,7 +150,8 @@ def extract_field_value(field_output, element_index=0, ip_index=0, node_index=0,
         # Element / integration point output
         # Abaqus fieldOutput.values is a flat list of all integration points
         # for all elements. For a single-element test, we index directly.
-        # For multi-element tests, the caller must know the flat index.
+        # This flat selection is only accepted for deliberately simple
+        # one-element checks. It is not a stable multi-element identity.
         # If ip_index is explicitly provided, use it as a flat index into
         # the values list. Otherwise fall back to element_index (works for
         # single-element single-IP tests where values[0] is the only entry).
@@ -127,7 +160,11 @@ def extract_field_value(field_output, element_index=0, ip_index=0, node_index=0,
             return None
         v = values[idx]
         data = v.data
-        result = {"data": numeric_data(data)}
+        result = {
+            "data": numeric_data(data),
+            "record_count": len(values),
+        }
+        add_record_identity(result, v)
         if hasattr(v, "mises"):
             value = optional_float(v.mises)
             if value is not None:
@@ -158,6 +195,14 @@ def extract_sdv_fields(frame, element_index=0, ip_index=0, node_index=0, node_la
     if not names:
         return None
     values = []
+    common_identity = None
+    identity_keys = (
+        "record_count",
+        "instance",
+        "node_label",
+        "element_label",
+        "integration_point",
+    )
     for name in names:
         extracted = extract_field_value(
             frame.fieldOutputs[name],
@@ -166,9 +211,30 @@ def extract_sdv_fields(frame, element_index=0, ip_index=0, node_index=0, node_la
             node_index=node_index,
             node_label=node_label,
         )
-        if extracted and extracted.get("data") is not None:
-            values.extend(extracted["data"])
-    return {"data": values}
+        if not extracted or extracted.get("data") is None:
+            raise ValueError(
+                "Missing selected ODB record for {}".format(name)
+            )
+        values.extend(extracted["data"])
+        identity = {}
+        for key in identity_keys:
+            if key in extracted:
+                identity[key] = extracted[key]
+        if common_identity is None:
+            common_identity = identity
+        elif identity != common_identity:
+            raise ValueError(
+                "SDV fields do not share one record identity: {} vs {}".format(
+                    common_identity, identity
+                )
+            )
+    result = {
+        "data": values,
+        "component_count": len(names),
+    }
+    if common_identity is not None:
+        result.update(common_identity)
+    return result
 
 
 def extract_frame(odb, step_name=None, frame_spec="last"):
