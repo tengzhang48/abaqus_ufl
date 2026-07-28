@@ -1,0 +1,16 @@
+{
+  "final": {
+    "center_thetat": -0.0007274257950484753,
+    "center_u3_mm": -0.6962435841560364,
+    "max_displacement_magnitude_mm": 0.6962435841560364,
+    "max_thetat": 7.119676592992619e-05,
+    "min_thetat": -0.0007274257950484753,
+    "pressure_N_per_mm2": 320.0,
+    "step_time": 1.0
+  },
+  "frames": 6,
+  "odb": "scovazzi_fig14_n16.odb",
+  "paper_center_abs_u3_mm_approx": 0.7,
+  "punch_center_node": 1,
+  "step": "Compression"
+}

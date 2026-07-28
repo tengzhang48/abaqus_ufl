@@ -1,0 +1,30 @@
+*******************************************************************
+**  Specification Of Material Properties
+*******************************************************************
+**
+**	UNITS:	Length - mili-meters (10^-3)
+**		Time - sec
+**		Angle - radians
+**		Temperature - Kelvins
+**		Force - mili-Newtons (10^-3)
+**		Stress - mili-Newton/mili-meter^2 = kPa (10^3)
+**		Mass - Grams
+**		Density -g/mili-meter^3 = 1e3Kg/meter^3 (10^6)
+**		Conductivity - mili-Watt/mili-m-K
+**		Specific Heat - micro-J/mili-m^3-K	(10^-3)		
+**		Energy - micro-Joules			(10^-6)
+**	        Chemical potential - micro-Joules/nano-mole (10^3)
+**		Fluid content - moles/volume
+**
+*******************************************************************
+**
+** use with the following subroutines:
+**	1) uel_elasticGel.for
+**
+*******************************************************************
+**GshearKbulk	chi	D	mu0	Vmol	Rgas	theta
+8.e2,	1.e5,	0.1,	2.0e-3,	<mu0>,	1.e-4,	8.3145e-3, <theta>,
+**
+**phi0	nlSdv	ngSdv
+<phi0>,	1,	1
+*******************************************************************

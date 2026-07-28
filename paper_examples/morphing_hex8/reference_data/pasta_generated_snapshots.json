@@ -1,0 +1,71 @@
+{
+  "available_frame_count": 68,
+  "available_time_range_s": [
+    0.0,
+    360.0
+  ],
+  "field_outputs_final": [
+    "LE",
+    "NT11",
+    "U",
+    "UVARM1",
+    "UVARM2"
+  ],
+  "final_max_displacement_mm": 12.532904835410982,
+  "instance": "PART-1-1",
+  "nodes": 61464,
+  "odb": "Pasta_W15_G5_H20_B10_L127_T50_M10_V_abaqus_ufl_hex8_analysis.odb",
+  "reference_bounds_mm": {
+    "maximum": [
+      12.75,
+      2.0,
+      2.5
+    ],
+    "minimum": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "render_selection": {
+    "excluded": [
+      "U3 user elements",
+      "C3D8T control element"
+    ],
+    "included": "C3D8 dummy visualization elements"
+  },
+  "requested_times_s": [
+    0.0,
+    72.0,
+    144.0,
+    216.0,
+    288.0,
+    360.0
+  ],
+  "selected_frame_indices": [
+    0,
+    35,
+    52,
+    59,
+    63,
+    67
+  ],
+  "selected_times_s": [
+    0.0,
+    72.2706069946289,
+    139.69752502441406,
+    213.26034545898438,
+    286.2420349121094,
+    360.0
+  ],
+  "step": "Swell_Deswell",
+  "symmetry": {
+    "boundary": "ZSYMM",
+    "plane": "z=0",
+    "render_operation": "mirror deformed mesh with z -> -z"
+  },
+  "user_element_type": null,
+  "user_elements_in_odb": 0,
+  "visualization_element_type": "C3D8",
+  "visualization_elements": 54000
+}

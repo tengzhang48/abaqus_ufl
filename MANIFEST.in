@@ -16,3 +16,4 @@ recursive-include examples *.py *.for *.f90 *.md *.inp *.json *.sh
 recursive-include tools *.py *.sh
 global-exclude __pycache__ *.pyc *.pyo *.so *.o
 prune examples/*/f2py/__pycache__
+prune paper_examples

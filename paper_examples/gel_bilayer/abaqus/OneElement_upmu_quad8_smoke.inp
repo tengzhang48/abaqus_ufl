@@ -1,0 +1,65 @@
+*Heading
+One-element Chester-Anand u-p-mu Quad8 smoke test
+**
+** Purpose:
+** - isolate the generated mixed Quad8 UEL from the bending/contact deck;
+** - keep u fixed, prescribe mu on DOF 12, and solve only corner pressure DOFs;
+** - avoid Abaqus temperature initial conditions for gel mu because DOF 11 is p.
+**
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+*Node
+1, 0.0, 0.0
+2, 1.0, 0.0
+3, 1.0, 1.0
+4, 0.0, 1.0
+5, 0.5, 0.0
+6, 1.0, 0.5
+7, 0.5, 1.0
+8, 0.0, 0.5
+900001, 10.0, 0.0
+900002, 11.0, 0.0
+900003, 11.0, 1.0
+900004, 10.0, 1.0
+*User Element, Type=U1, Nodes=8, Coordinates=2, Properties=9, Variables=9, Unsymm
+1, 2, 11, 12
+5, 1, 2, 12
+*Element, type=U1, elset=GelSet
+1, 1, 2, 3, 4, 5, 6, 7, 8
+*Element, type=CPE4T, elset=TempElement
+900001, 900001, 900002, 900003, 900004
+*Nset, nset=GelAll
+1, 2, 3, 4, 5, 6, 7, 8
+*Nset, nset=GelCorners
+1, 2, 3, 4
+*Nset, nset=TempAll
+900001, 900002, 900003, 900004
+** phi0=0.99 gives initMU=-8714.5416531866 J/mol.
+** Stored mu=physical mu-initMU, so PROPS(5)=-initMU.
+*UEL PROPERTY, ELSET=GelSet
+1.e6, 1.e8, 0.1, 5.e-9, 8714.5416531866, 1.e-4, 8.3145, 298.0
+0.99
+*Solid Section, elset=TempElement, material=DummyThermal
+,
+*Material, name=DummyThermal
+*Elastic
+1.e-9, 0.3
+*Density
+1.e-9
+*Specific Heat
+1.e-9
+*Conductivity
+1.e-9
+*Step, name=PressureEquilibrium, nlgeom=YES, inc=5
+** DELTMX is omitted because Abaqus also applies it to pressure DOF 11.
+*Coupled Temperature-displacement, creep=none
+1.e-3, 1.e-3, 1.e-8, 1.e-3
+*Boundary
+GelAll, 1, 2, 0.0
+GelAll, 12, 12, 0.0
+TempAll, 1, 2, 0.0
+TempAll, 11, 11, 0.0
+*Restart, write, frequency=0
+*Output, field, frequency=1
+*Node Output, nset=GelAll
+U
+*End Step

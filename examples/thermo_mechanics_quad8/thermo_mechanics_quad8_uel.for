@@ -112,15 +112,23 @@ C     request, not Riks; mass matrices are likewise not implemented.
         END DO
       END IF
 
-C     Procedure dispatch (Abaqus UEL contract): only the static,
-C     quasi-static, and coupled thermal-stress procedures
-C     (LFLAGS(1)=1,2,71,72,73) with residual/stiffness request
-C     types LFLAGS(3)=1,2,5 are supported. Any other request
-C     returns the zeroed arrays (no dynamics, perturbation, or
-C     mass output is claimed).
+C     Procedure dispatch (Abaqus UEL contract): supported are the
+C     static/quasi-static and coupled thermal-stress procedures
+C     (LFLAGS(1)=1,2,71,72,73), general non-perturbation steps
+C     (LFLAGS(4)=0), NRHS=1 (modified Riks is not implemented),
+C     and request types LFLAGS(3)=1,2,5. Types 2 and 5 receive
+C     the full residual+stiffness evaluation, a superset of the
+C     requested output; the unused array is ignored by Abaqus.
+C     Every other request returns the zeroed arrays.
       IF (LFLAGS(1) .NE. 1 .AND. LFLAGS(1) .NE. 2 .AND.
      &    LFLAGS(1) .NE. 71 .AND. LFLAGS(1) .NE. 72 .AND.
      &    LFLAGS(1) .NE. 73) THEN
+        RETURN
+      END IF
+      IF (LFLAGS(4) .NE. 0) THEN
+        RETURN
+      END IF
+      IF (NRHS .GE. 2) THEN
         RETURN
       END IF
       IF (LFLAGS(3) .NE. 1 .AND. LFLAGS(3) .NE. 2 .AND.

@@ -1,0 +1,42 @@
+{
+  "cL_min_max": [
+    5.886921826459002e-06,
+    0.9701541662216187
+  ],
+  "field_sources": {
+    "cL": "SDV_CL",
+    "phi": "SDV_PHI",
+    "pitd": "SDV_PITD"
+  },
+  "final_step": "Step-4",
+  "final_step_time": 900.0,
+  "final_total_time": 903.0,
+  "finite_counts": {
+    "cL": 27820,
+    "phi": 27820,
+    "pitd": 27820
+  },
+  "num_final_contour_rows": 27820,
+  "num_history_rows": 747,
+  "odb": "/home/tengz/projects/abaqus_ufl_lab_wang2026_run/examples/phasefield_corrosion_cui/UELCorrosion/Cui_original_SCC_mpi8.odb",
+  "outputs": {
+    "final_phi_cL": "SCC_original_final_phi_cL.csv",
+    "pit_depth_curve": "SCC_original_pit_depth_curve.csv",
+    "pitd_history": "SCC_original_pitd_history.csv"
+  },
+  "phi_min_max": [
+    9.101647213682895e-11,
+    1.0002162456512451
+  ],
+  "pitd_final_max": 0.04664082080125809,
+  "pitd_min_max": [
+    0.0,
+    0.04664082080125809
+  ],
+  "steps": [
+    "Step-1",
+    "Step-2",
+    "Step-3",
+    "Step-4"
+  ]
+}

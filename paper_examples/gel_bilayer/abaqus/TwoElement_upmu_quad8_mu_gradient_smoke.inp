@@ -1,0 +1,76 @@
+*Heading
+Two-element Chester-Anand u-p-mu Quad8 chemical-potential gradient smoke test
+**
+** Purpose:
+** - exercise multi-element assembly for the generated mixed Quad8 UEL;
+** - test shared nodes, free interior mu DOFs, and pressure coupling;
+** - remain isolated from rubber, contact, and bending geometry.
+**
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+*Node
+1, 0.0, 0.0
+2, 1.0, 0.0
+3, 1.0, 1.0
+4, 0.0, 1.0
+5, 0.5, 0.0
+6, 1.0, 0.5
+7, 0.5, 1.0
+8, 0.0, 0.5
+9, 2.0, 0.0
+10, 2.0, 1.0
+11, 1.5, 0.0
+12, 2.0, 0.5
+13, 1.5, 1.0
+900001, 10.0, 0.0
+900002, 11.0, 0.0
+900003, 11.0, 1.0
+900004, 10.0, 1.0
+*User Element, Type=U1, Nodes=8, Coordinates=2, Properties=9, Variables=9, Unsymm
+1, 2, 11, 12
+5, 1, 2, 12
+*Element, type=U1, elset=GelSet
+1, 1, 2, 3, 4, 5, 6, 7, 8
+2, 2, 9, 10, 3, 11, 12, 13, 6
+*Element, type=CPE4T, elset=TempElement
+900001, 900001, 900002, 900003, 900004
+*Nset, nset=GelAll
+1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13
+*Nset, nset=LeftMu
+1, 4, 8
+*Nset, nset=RightMu
+9, 10, 12
+*Nset, nset=SharedMu
+2, 3, 6
+*Nset, nset=TempAll
+900001, 900002, 900003, 900004
+** phi0=0.99 gives initMU=-8714.5416531866 J/mol.
+** Stored mu=physical mu-initMU, so PROPS(5)=-initMU.
+*UEL PROPERTY, ELSET=GelSet
+1.e6, 1.e8, 0.1, 5.e-9, 8714.5416531866, 1.e-4, 8.3145, 298.0
+0.99
+*Solid Section, elset=TempElement, material=DummyThermal
+,
+*Material, name=DummyThermal
+*Elastic
+1.e-9, 0.3
+*Density
+1.e-9
+*Specific Heat
+1.e-9
+*Conductivity
+1.e-9
+*Step, name=MuGradient, nlgeom=YES, inc=5
+** DELTMX is omitted because Abaqus also applies it to pressure DOF 11.
+*Coupled Temperature-displacement, creep=none
+1.e-3, 1.e-3, 1.e-8, 1.e-3
+*Boundary
+GelAll, 1, 2, 0.0
+LeftMu, 12, 12, 0.0
+RightMu, 12, 12, -1.0
+TempAll, 1, 2, 0.0
+TempAll, 11, 11, 0.0
+*Restart, write, frequency=0
+*Output, field, frequency=1
+*Node Output, nset=GelAll
+U
+*End Step
