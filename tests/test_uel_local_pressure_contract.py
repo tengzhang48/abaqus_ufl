@@ -111,9 +111,11 @@ def generated_source(tmp_path_factory):
 
 def test_generated_source_carries_contract_guards(generated_source):
     src = generated_source.read_text()
-    assert 'LFLAGS(3) .EQ. 3 .OR. LFLAGS(3) .EQ. 4' in src
+    assert 'LFLAGS(3) .NE. 1 .AND. LFLAGS(3) .NE. 2' in src
+    assert 'LFLAGS(1) .NE. 1 .AND. LFLAGS(1) .NE. 2' in src
     assert src.count('det33d(F) .LE. 0.0d0') >= 2
     assert 'RHS(i,2) = 0.0d0' in src
+    assert 'conv_p .EQ. 0' in src
 
 
 @pytest.fixture(scope='module')
@@ -157,13 +159,13 @@ def _state():
     return U, 0.3 * U
 
 
-def _call(module, U, DU, svars_in=0.0, lflags3=1):
+def _call(module, U, DU, svars_in=0.0, lflags3=1, lflags1=72):
     svars = np.array([svars_in], dtype=float)
     props = np.array(list(PROPS.values()))
     rhs, amatrx, svars_out, pnewdt = module.drive_uel(
         svars, COORDS, np.asarray(U, float), np.asarray(DU, float), props,
         np.zeros(1, dtype=np.int32), np.array([0.1, 0.1]), 0.1, 1.0,
-        np.array([72, 1, lflags3, 0, 0, 0], dtype=np.int32),
+        np.array([lflags1, 1, lflags3, 0, 0, 0], dtype=np.int32),
         np.zeros(3), 1, 1, 1, 1, 0.0,
     )
     return rhs, amatrx, float(svars_out[0]), float(pnewdt)
@@ -171,10 +173,13 @@ def _call(module, U, DU, svars_in=0.0, lflags3=1):
 
 def test_unsupported_requests_return_zeroed_arrays(compiled):
     U, DU = _state()
-    for req in (3, 4, 6):
+    for req in (3, 4, 6, 100):
         rhs, amatrx, _, _ = _call(compiled, U, DU, lflags3=req)
         assert np.max(np.abs(rhs)) == 0.0, req
         assert np.max(np.abs(amatrx)) == 0.0, req
+    rhs, amatrx, _, _ = _call(compiled, U, DU, lflags1=99)
+    assert np.max(np.abs(rhs)) == 0.0
+    assert np.max(np.abs(amatrx)) == 0.0
 
 
 def test_nonpositive_detF_requests_cutback(compiled):

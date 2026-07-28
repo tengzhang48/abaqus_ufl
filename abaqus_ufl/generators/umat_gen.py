@@ -1031,6 +1031,15 @@ class FortranTranslator(ast.NodeVisitor):
                     idx = self.props_names.index(prop_name) + 1
                     return f'DCMPLX(props({idx}), 0.0d0)', 'scalar'
                 else:
+                    # Declaration constants: numeric class attributes that
+                    # are not runtime properties are inlined as literals,
+                    # so the declaration alone controls the generated code.
+                    const = getattr(self.material, prop_name, None) \
+                        if self.material is not None else None
+                    if isinstance(const, (int, float)) \
+                            and not isinstance(const, bool):
+                        return (f'DCMPLX({_fortran_float(float(const))}, '
+                                f'0.0d0)', 'scalar')
                     raise ValueError(
                         f"Unknown property: self.{prop_name}")
             # A.T -> transpose

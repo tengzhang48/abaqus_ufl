@@ -56,14 +56,14 @@ def run_checked(command, cwd):
         )
 
 
-def call_uel(module, coords, u, du, dtime=0.1, lflags3=1):
+def call_uel(module, coords, u, du, dtime=0.1, lflags3=1, lflags1=72):
     svars = np.zeros(1)
     jprops = np.array([0], dtype=np.int32)
     time = np.array([0.0, 0.0])
     # LFLAGS(1)=72 transient coupled thermal-stress procedure (the
     # procedure the demo decks request), LFLAGS(2)=1 nlgeom, LFLAGS(3)
     # per request type (1 = normal residual+stiffness evaluation).
-    lflags = np.array([72, 1, lflags3, 0, 0, 0], dtype=np.int32)
+    lflags = np.array([lflags1, 1, lflags3, 0, 0, 0], dtype=np.int32)
     params = np.zeros(3)
     rhs, amatrx, svars_out, pnewdt = module.drive_uel(
         svars, np.asarray(coords, dtype=float), np.asarray(u, dtype=float),
@@ -192,15 +192,20 @@ def check():
         print("[PASS] compiled AMATRX vs -dRHS/dU (rel err {:.1e})".format(
             rel))
 
-        # Contract: mass/damping requests (LFLAGS(3)=3,4,6) are outside the
-        # supported scope and must return ZEROED arrays, not the static
-        # residual and stiffness.
-        for req in (3, 4, 6):
+        # Contract: only request types 1, 2, 5 are supported; everything
+        # else (mass, damping, initial acceleration, or any unknown code)
+        # must return ZEROED arrays, not the static residual and stiffness.
+        for req in (3, 4, 6, 100):
             rhs_m, amx_m, _ = call_uel(module, coords, U, DU, lflags3=req)
             if np.max(np.abs(rhs_m)) != 0.0 or np.max(np.abs(amx_m)) != 0.0:
                 raise AssertionError(
                     "LFLAGS(3)={} returned nonzero arrays".format(req))
-        print("[PASS] unsupported procedure requests return zeroed arrays")
+        rhs_p, amx_p2, _ = call_uel(module, coords, U, DU, lflags1=99)
+        if np.max(np.abs(rhs_p)) != 0.0 or np.max(np.abs(amx_p2)) != 0.0:
+            raise AssertionError(
+                "unsupported LFLAGS(1)=99 returned nonzero arrays")
+        print("[PASS] unsupported request types and procedures return "
+              "zeroed arrays")
 
         # Contract: an invalid deformation state (det F <= 0) must request a
         # cutback instead of returning finite but meaningless matrices.

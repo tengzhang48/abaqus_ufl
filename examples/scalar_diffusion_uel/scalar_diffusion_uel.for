@@ -111,13 +111,19 @@ C     request, not Riks; mass matrices are likewise not implemented.
         END DO
       END IF
 
-C     Procedure-type dispatch (Abaqus UEL contract): this element
-C     supports the static/quasi-static residual and stiffness
-C     requests LFLAGS(3)=1,2,5. Mass, damping, and initial-
-C     acceleration requests (3,4,6) are outside the supported
-C     scope and return the zeroed arrays (no dynamics claimed).
-      IF (LFLAGS(3) .EQ. 3 .OR. LFLAGS(3) .EQ. 4 .OR.
-     &    LFLAGS(3) .EQ. 6) THEN
+C     Procedure dispatch (Abaqus UEL contract): only the static,
+C     quasi-static, and coupled thermal-stress procedures
+C     (LFLAGS(1)=1,2,71,72,73) with residual/stiffness request
+C     types LFLAGS(3)=1,2,5 are supported. Any other request
+C     returns the zeroed arrays (no dynamics, perturbation, or
+C     mass output is claimed).
+      IF (LFLAGS(1) .NE. 1 .AND. LFLAGS(1) .NE. 2 .AND.
+     &    LFLAGS(1) .NE. 71 .AND. LFLAGS(1) .NE. 72 .AND.
+     &    LFLAGS(1) .NE. 73) THEN
+        RETURN
+      END IF
+      IF (LFLAGS(3) .NE. 1 .AND. LFLAGS(3) .NE. 2 .AND.
+     &    LFLAGS(3) .NE. 5) THEN
         RETURN
       END IF
 
