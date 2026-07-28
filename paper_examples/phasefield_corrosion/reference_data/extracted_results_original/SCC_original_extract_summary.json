@@ -18,7 +18,7 @@
   },
   "num_final_contour_rows": 27820,
   "num_history_rows": 747,
-  "odb": "/home/tengz/projects/abaqus_ufl_lab_wang2026_run/examples/phasefield_corrosion_cui/UELCorrosion/Cui_original_SCC_mpi8.odb",
+  "odb": "UELCorrosion/Cui_original_SCC_mpi8.odb",
   "outputs": {
     "final_phi_cL": "SCC_original_final_phi_cL.csv",
     "pit_depth_curve": "SCC_original_pit_depth_curve.csv",

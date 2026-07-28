@@ -6,9 +6,9 @@
     "mean_signed_difference": 0.00013586394762767225,
     "root_mean_square_difference": 0.0011081248973969678
   },
-  "generated_fields": "/home/tengz/projects/abaqus_ufl_lab/examples/phasefield_corrosion_cui/abaqus_test_from_cui/extracted_results_diag_fixed_order_20260611/SCC_abaqus_ufl_mpi8_final_phi_cL.csv",
+  "generated_fields": "abaqus_test_from_cui/extracted_results_diag_fixed_order_20260611/SCC_abaqus_ufl_mpi8_final_phi_cL.csv",
   "grain": "instance, element, integration_point",
-  "original_fields": "/home/tengz/projects/abaqus_ufl_lab/examples/phasefield_corrosion_cui/UELCorrosion/extracted_results_original/SCC_original_final_phi_cL.csv",
+  "original_fields": "UELCorrosion/extracted_results_original/SCC_original_final_phi_cL.csv",
   "phi": {
     "count": 27820,
     "max_absolute_difference": 0.009355943308073322,

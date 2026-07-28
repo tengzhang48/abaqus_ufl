@@ -1,8 +1,8 @@
 """
 Cui-style uniform-Q8R phase-field corrosion UEL.
 
-This is the first abaqus_ufl step toward reproducing the shared
-``feacheap/UELCorrosion/PhaseFieldSCC.f`` benchmark.  It matches the original
+This is the first abaqus_ufl step toward reproducing the authors'
+shared ``PhaseFieldSCC.f`` reference UEL.  It matches the original
 UEL's interpolation and quadrature choice:
 
   - Q8 displacement, phase field, and concentration

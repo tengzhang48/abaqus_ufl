@@ -50,13 +50,9 @@ from pathlib import Path
 
 import numpy as np
 
-_home_here = (Path.home() / "abaqus_ufl_dev" / "abaqus_ufl_lab" / "examples"
-              / "scovazzi_2023_stabilized_utheta")
 _pwd_repo = Path(os.environ.get("PWD", os.getcwd()))
 _logical_here = _pwd_repo / "examples" / "scovazzi_2023_stabilized_utheta"
-if _home_here.is_dir():
-    HERE = _home_here
-elif _logical_here.is_dir():
+if _logical_here.is_dir():
     HERE = _logical_here
 else:
     HERE = Path(__file__).absolute().parent

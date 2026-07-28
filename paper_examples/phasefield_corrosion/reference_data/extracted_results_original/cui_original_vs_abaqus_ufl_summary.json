@@ -3,11 +3,11 @@
   "final_abaqus_ufl_minus_original_um": 7.609655980900243e-07,
   "final_cui_original_pit_depth_um": 46.64082080125809,
   "final_time_s": 903.0,
-  "generated_curve": "/home/tengz/projects/abaqus_ufl_lab/examples/phasefield_corrosion_cui/abaqus_test_from_cui/extracted_results_diag_fixed_order_20260611/SCC_abaqus_ufl_Tdummy_diag_pit_depth_curve.csv",
+  "generated_curve": "abaqus_test_from_cui/extracted_results_diag_fixed_order_20260611/SCC_abaqus_ufl_Tdummy_diag_pit_depth_curve.csv",
   "max_abs_difference_um": 0.6301605541169707,
   "mean_abs_difference_um": 0.13018709131529957,
   "num_compared_points": 747,
-  "original_curve": "/home/tengz/projects/abaqus_ufl_lab/examples/phasefield_corrosion_cui/UELCorrosion/extracted_results_original/SCC_original_pit_depth_curve.csv",
+  "original_curve": "UELCorrosion/extracted_results_original/SCC_original_pit_depth_curve.csv",
   "outputs": {
     "comparison_curve": "cui_original_vs_abaqus_ufl_pit_depth.csv"
   }

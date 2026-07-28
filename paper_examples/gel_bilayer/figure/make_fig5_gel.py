@@ -1,9 +1,9 @@
 """Build Figure 5: mixed-order plane-strain gel-bilayer swelling.
 
 Panels (a) and (b) summarize the generated mixed ``u-p-mu`` Quad8 field
-supports and the gel/rubber bilayer in
-``examples/gel_chester_anand/u_p_mu_quad8/SwellInducedBending_upmu_quad8.inp``.
-The accepted corrected run is documented in the case-local
+supports and the gel/rubber bilayer in this package's accepted deck,
+``../abaqus/SwellInducedBending_upmu_quad8.inp``.
+The accepted corrected run is documented in the private case record
 ``BOUNDARY_CONDITION_AUDIT_2026-07-26.md``.
 
 Panels (c)--(f) reproduce the uploaded Abaqus/CAE exports at 0, 30 min, 1 h,
