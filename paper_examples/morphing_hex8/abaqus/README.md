@@ -1,29 +1,32 @@
 # Pasta Morphing With the Generated Local-Pressure Hex8 UEL
 
-This folder is a portable copy of the exact Abaqus input files and user
-subroutine used for the completed three-dimensional pasta-morphing simulation
-in the EML manuscript. It contains no scheduler-specific submission script and
-no generated Abaqus result files.
+This folder contains the exact Abaqus input files used for the completed
+three-dimensional pasta-morphing simulation in the EML manuscript. The exact
+submitted user subroutine is retained in the sibling `archived_submitted/`
+directory. The package contains no scheduler-specific submission script and no
+generated Abaqus result files.
 
-The files were copied without modification from the completed Abaqus/Standard
-2022 run on 2026-07-20.
+The three Abaqus input files and archived source were copied without
+modification from the completed Abaqus/Standard 2022 run on 2026-07-20.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `Pasta_W15_G5_H20_B10_L127_T50_M10_V_abaqus_ufl_hex8.inp` | Main Abaqus input deck |
-| `Pasta_W15_G5_H20_B10_L127_T50_M10_V_edummy.inp` | C3D8 visualization-element connectivity included by the main deck |
+| `Pasta_W15_G5_H20_B10_L127_T50_M10_V_edummy.inp` | Mechanically active C3D8 companion-mesh connectivity included by the main deck |
 | `ElasticGelProps_mm.inp` | Nine UEL material properties included by the main deck |
-| `chester_anand_local_pressure_hex8_pasta.for` | Exact generated UEL and UVARM source submitted with the completed run |
+| `../archived_submitted/chester_anand_local_pressure_hex8_pasta.for` | Exact generated UEL and UVARM source submitted with the completed run |
 
-Keep all four files in the same directory. The main deck uses relative
-`*Include` references to the visualization connectivity and material-property
-files.
+Keep the three Abaqus input files in this directory. The main deck uses
+relative `*Include` references to the visualization connectivity and
+material-property files. The submitted Fortran source can remain in
+`../archived_submitted/` when the relative path shown below is passed to
+Abaqus.
 
 The large ODB, solver logs, and cluster submission script are intentionally not
 included. Reduced result data and the manuscript figure inputs are retained
-under `EML_paper/figures/`.
+in the sibling `../reference_data/` and `../figure/` directories.
 
 ## Formulation
 
@@ -57,9 +60,14 @@ eight pressure diagnostic slots.
 
 ## Visualization Fields
 
-The duplicate `elDummy` C3D8 mesh shares the physical nodes with the U3 mesh
-and makes the deformed geometry and integration-point diagnostics visible in
-the ODB.
+The duplicate `elDummy` C3D8 mesh shares the physical nodes with the U3 mesh,
+makes the deformed geometry and integration-point diagnostics visible in the
+ODB, and contributes to the global mechanical equilibrium. It is not a
+negligible-stiffness, output-only overlay: the deck assigns a Neo-Hookean
+material with initial shear modulus 200, while the UEL shear modulus is 800 in
+the same stress units. Figure 6 therefore records the response of the combined
+UEL/native-element model. A companion-mesh stiffness-sensitivity audit remains
+pending.
 
 | ODB field | Meaning |
 |---|---|
@@ -87,7 +95,7 @@ First run a serial datacheck from this directory:
 abaqus \
   job=pasta_morphing_hex8_datacheck \
   input=Pasta_W15_G5_H20_B10_L127_T50_M10_V_abaqus_ufl_hex8.inp \
-  user=chester_anand_local_pressure_hex8_pasta.for \
+  user=../archived_submitted/chester_anand_local_pressure_hex8_pasta.for \
   datacheck \
   cpus=1 \
   interactive \
@@ -106,7 +114,7 @@ After the datacheck passes, run the analysis:
 abaqus \
   job=pasta_morphing_hex8 \
   input=Pasta_W15_G5_H20_B10_L127_T50_M10_V_abaqus_ufl_hex8.inp \
-  user=chester_anand_local_pressure_hex8_pasta.for \
+  user=../archived_submitted/chester_anand_local_pressure_hex8_pasta.for \
   cpus=32 \
   mp_mode=threads \
   interactive \
@@ -157,15 +165,21 @@ SHA-256 checksums of the completed-run inputs are:
 f85968a58da1b2a99631376a4276ab6381f5c3fc88e8b15eb8a9f00963fa5b7b  Pasta_W15_G5_H20_B10_L127_T50_M10_V_abaqus_ufl_hex8.inp
 e323f3ccddcb5b43a7eef012414c3012cea7d4b34d91afc87330984a9b10ef7b  Pasta_W15_G5_H20_B10_L127_T50_M10_V_edummy.inp
 32db8a591a6f4d8af128d3ecc08613d389e51a7ec15b49c1525af3846e1c46f6  ElasticGelProps_mm.inp
-e3d788b287717faf2482e64365996ec31d0f6f5efcc17bd80c524f6bb2a8c780  chester_anand_local_pressure_hex8_pasta.for
+e3d788b287717faf2482e64365996ec31d0f6f5efcc17bd80c524f6bb2a8c780  ../archived_submitted/chester_anand_local_pressure_hex8_pasta.for
 ```
 
+On 2026-07-28, the exact archived source was compiled and passed the complete
+black-box condensed-Jacobian comparison, with pressure re-solved for every
+perturbation, at a relative error of `6.494e-10`. This verifies the condensed
+tangent in the production source. It does not assign the current generators'
+later dispatch, cutback, or state-commit guards to the historical run.
+
 The submitted UEL is intentionally retained rather than replaced by
-`examples/gel_chester_anand/chester_anand_local_pressure_hex8.for`. The current
-generator source has subsequently changed, including the default UVARM element
-offset and shared tensor-helper template. A current-generator rerun must update
-the UEL and dummy-element numbering together and must be treated as a separate
-validation run.
+the current `../pressuregel_local_pressure_hex8.for` emitted by
+`../pipeline_hex8.py`. The generator source has subsequently changed, including
+the default UVARM element offset and shared tensor-helper template. A
+current-generator rerun must update the UEL and dummy-element numbering
+together and must be treated as a separate validation run.
 
 The inherited heading in the main input deck says "Plane strain swell induced
 bending." The retained model itself is three-dimensional; the old heading was

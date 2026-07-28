@@ -1,100 +1,180 @@
 # abaqus_ufl
 
-Generate **Abaqus** user subroutines (**UMAT** / **UEL**) from a compact symbolic
-model definition written in Python, with automatic tangent generation and
-material-method tangent verification.
+`abaqus_ufl` helps researchers turn a supported constitutive model or
+coupled-field element declaration written in Python into inspectable,
+self-contained Fortran for Abaqus/Standard.
 
-You write the constitutive response (or an element weak form) once, in Python.
-`abaqus_ufl` differentiates the implemented methods and emits fixed-form
-Fortran. Material `verify()` checks complex-step tangents against finite
-differences; a UEL still needs the assembled element checks defined below.
+The practical aim is not simply to write Fortran faster. It is to separate the
+parts of a user subroutine that are otherwise difficult to audit: field and
+state definitions, constitutive responses, residual terms, tangent blocks,
+local-variable treatment, DOF packing, and Abaqus interface conventions.
 
-## Install
-
-```bash
-pip install -e .
+```text
+Python declaration
+  → consistency and model-specific checks
+  → generated fixed-form Fortran
+  → compiled element or material checks
+  → user-owned Abaqus analysis
 ```
 
-or, for a full environment with a Fortran compiler (for `f2py`-compiled checks):
+## What it is—and what it is not
+
+The package currently generates:
+
+- **UMAT** source from supported material-response declarations; and
+- **UEL** source from supported field, interpolation, balance, material, and
+  local-variable templates.
+
+The name reflects an important design influence: the interface is inspired by
+the declarative style of the Unified Form Language used in the FEniCS
+ecosystem. `abaqus_ufl` is **not UFL-compatible**. It neither depends on nor
+implements FEniCS UFL, and it is not a general compiler for arbitrary
+variational expressions.
+
+The package also does not generate an entire finite-element analysis. Meshes,
+sections, contact, loads, boundary conditions, procedures, solver controls,
+units, and physical validation remain the responsibility of the researcher
+and the individual example.
+
+## Who it is for
+
+`abaqus_ufl` is intended for researchers who:
+
+- need a custom Abaqus material or coupled-field user element;
+- want the problem-specific declaration to be shorter and more reviewable than
+  a monolithic hand-written UEL;
+- need generated tangent blocks and repeatable source generation; and
+- are willing to verify the material, assembled element, Abaqus setup, and
+  scientific result at the level required by their claim.
+
+It is a research tool, not a substitute for finite-element formulation
+knowledge or an assurance that a declared model is physically valid.
+
+## Try a complete local workflow
+
+The Neo-Hookean example demonstrates the path from Python declaration through
+an independent closed-form check to a compiled call of the generated UMAT.
+From a clone of this repository:
+
+```bash
+pip install -e ".[dev]"
+cd examples/neo_hookean_umat
+python build.py
+python check_reference.py
+python check_compiled.py
+```
+
+The last command requires `gfortran`, f2py, Meson, and Ninja. The development
+extra above installs the Python-side build tools. A conda environment
+specification is also provided; create it from the repository root:
 
 ```bash
 conda env create -f environment.yml
 conda activate abaqus-ufl
 ```
 
-Requires Python ≥ 3.8, NumPy, and SymPy.
+The example's Python declaration is in
+[`examples/neo_hookean_umat/build.py`](examples/neo_hookean_umat/build.py).
+For a deliberately simple directory that can be copied and adapted, see
+[`examples/_template/`](examples/_template/).
 
-## Quickstart — a UMAT in a dozen lines
+Requirements for Python-only generation are Python 3.8 or newer, NumPy, and
+SymPy.
 
-```python
-import abaqus_ufl as au
-from abaqus_ufl.core.tensor import det, inv, log
+## What a passing check means
 
+The package distinguishes several kinds of evidence because they catch
+different failures:
 
-class NeoHookean(au.Material):
-    props = dict(G=0.5, K=50.0)          # maps to *User Material constants, in order
+- `Material.verify()` compares the implemented complex-step tangent with
+  finite differences for the selected state.
+- A model-specific oracle checks a limit, invariant, analytic solution, or
+  independently implemented response.
+- Deterministic regeneration checks that the committed Fortran matches the
+  declaration and generator revision.
+- A compiled call checks the actual generated subroutine boundary.
+- An assembled UEL check tests residuals, tangent blocks, DOF/state layout,
+  quadrature, and local-variable behavior.
+- An Abaqus run checks the selected deck and solver path.
+- An output-bridge audit checks that the field plotted or compared is the
+  field the element actually computed.
 
-    def stress_PK1(self, F):             # 1st Piola-Kirchhoff stress
-        J = det(F)
-        FinvT = inv(F).T
-        return self.G * (F - FinvT) + self.K * log(J) * FinvT
+These checks are complementary. `verify()` is a first consistency gate; it
+does not establish that the governing equation is correct. Python and
+generated Fortran can reproduce the same mistake. Likewise, solver completion
+does not by itself establish quantitative reproduction or physical
+validation.
 
+The full example contract, including known-broken controls and clean-release
+checks, is in [`HOWTO_ADD_AN_EXAMPLE.md`](HOWTO_ADD_AN_EXAMPLE.md).
 
-model = NeoHookean()
-assert model.verify()                    # complex-step vs finite-difference tangent
-au.generate_umat(model, "neo_hookean_umat.for")
-```
+## Examples
 
-`verify()` is the first gate: if the tangent it derives doesn't match, it fails
-before any Fortran is written. For an element-level weak form, subclass
-`au.WeakForm` and call `au.generate_uel(...)` instead.
+[`examples/README.md`](examples/README.md) describes the curated public
+examples and the evidence each one actually carries. That allowlist is a
+release subset, not a capability table for the larger research project.
 
-## The pipeline
+[`paper_examples/`](paper_examples/), available in repository checkouts but
+excluded from the Python source distribution, contains the declarations,
+generated sources, decks, reduced data, and figure materials assembled around
+the manuscript examples. Read each package README for its evidence level and
+provenance; code-to-code reproduction, component verification, and execution
+demonstration are not interchangeable labels.
 
-The package sits inside a verification pipeline already exercised by the
-development examples:
-
-1. map the theory, assumptions, conventions, fields, and state layout;
-2. implement the Python material or weak form;
-3. check tangents plus model-specific regimes, invariants, and an independent
-   quantitative oracle;
-4. generate the Fortran reproducibly and compile it;
-5. call nontrivial generated code directly through f2py or another checked
-   compiled runtime;
-6. add a solver run only where it provides useful evidence; and
-7. verify the output bridge before comparing or plotting solver results.
-
-`verify()` is one consistency gate in this chain. For a UEL,
-`problem.verify()` does not replace an assembled residual/tangent check.
-Abaqus mesh, contact, loading, procedure, solver-control, and launch choices
-remain example/user-owned; the package does not attempt to automate the whole
-FEM-analysis workflow.
-
-The working [`examples/_template/`](examples/_template/) demonstrates the
-local Python-to-compiled-UMAT loop. The complete shared contract is in
-[`HOWTO_ADD_AN_EXAMPLE.md`](HOWTO_ADD_AN_EXAMPLE.md).
-
-## Layout
-
-```
-abaqus_ufl/            the package: core/ (model API, tangents) + generators/ (UMAT/UEL codegen)
-examples/              public allowlist + working pipeline demonstration
-tools/                 shared Abaqus run / ODB-extract / compare machinery
-docs/                  usage, theory, and design documentation
-ai_skills/             an operational guide for AI coding assistants
-```
-
-Every released example reports separate evidence for theory/oracles, tangent
-or element consistency, generated/compiled execution, solver runs, and output
-bridges. See [`examples/README.md`](examples/README.md).
+**Release provenance note.** The accepted gel-bilayer deck is our deck for the
+swell-induced bending problem of Chester, Di Leo, and Anand; its mesh
+discretization follows their supplemental example, with attribution. Their
+original supplemental files are not redistributed. Regenerating the deck with
+`build.py` requires a separately obtained copy of their supplemental input as
+the mesh seed. The corrosion comparison mesh retains third-party lineage for
+which the precise BSD notice and redistribution status must still be recorded.
+See [`CREDITS.md`](CREDITS.md).
 
 ## Documentation
 
-- **Usage:** [`docs/API_USAGE.md`](docs/API_USAGE.md) — entry points, the tensor DSL, and the example pipeline.
-- **Theory:** [`docs/theory.md`](docs/theory.md), [`docs/complex_step_patterns.md`](docs/complex_step_patterns.md), [`docs/JAUMANN_RESOLUTION.md`](docs/JAUMANN_RESOLUTION.md).
-- **Design:** the code-generator and tangent-engine internals — see the [`docs/` index](docs/README.md).
-- **Lessons learned:** general Abaqus UMAT/UEL + codegen lessons — see [`docs/lessons/`](docs/lessons/).
+- [API usage](docs/API_USAGE.md): entry points, declaration methods, tensor
+  operations, UMAT/UEL generation, and example workflows.
+- [Theory and conventions](docs/theory.md): residual, sign, field, and gel
+  conventions.
+- [Complex-step patterns and limits](docs/complex_step_patterns.md): analytic
+  paths, branching, state, and verification.
+- [Design documentation](docs/README.md): generator and tangent-engine
+  internals.
+- [Lessons learned](docs/lessons/): distilled Abaqus, Fortran, code-generation,
+  validation, and release lessons.
+- [AI-assistant guide](ai_skills/README.md): operational project guidance for
+  coding agents.
+
+## Scientific lineage and credit
+
+The framework grew from prior coupled-mechanics research and from careful
+study of shared or published UEL/UMAT implementations. Important sources
+include:
+
+- Shawn A. Chester, Claudio V. Di Leo, and Lallit Anand's gel theory and
+  supplemental UEL/decks;
+- Bibekananda Datta and Thao D. Nguyen's modular hydrogel UEL;
+- Professor Allan Bower's EN234_FEA teaching code at Brown University, the
+  basis of the internal `feacheap` validation host;
+- Chuanjie Cui, Rujin Ma, and Emilio Martínez-Pañeda's reference
+  stress-corrosion formulation and UEL.
+
+These sources contributed theory, conventions, execution infrastructure, or
+independent benchmarks in different ways. They are not all incorporated into
+this repository, and the MIT license of `abaqus_ufl` does not replace their
+licenses. Exact roles, citations, redistribution boundaries, discussion
+acknowledgements, and open provenance items are recorded in
+[`CREDITS.md`](CREDITS.md).
+
+## Citation
+
+Citation metadata is provided in [`CITATION.cff`](CITATION.cff). Until a
+release DOI is recorded there, cite the repository URL and the exact version
+or commit used.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Project-authored `abaqus_ufl` package source is MIT licensed; see
+[`LICENSE`](LICENSE). Separately licensed, attribution-only, or
+provenance-pending reference and derived artifacts are governed by their own
+terms and are identified in [`CREDITS.md`](CREDITS.md).

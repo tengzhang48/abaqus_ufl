@@ -4,6 +4,7 @@
 # the same gates recorded in the example READMEs.
 include LICENSE
 include CITATION.cff
+include CREDITS.md
 include conftest.py
 include README.md
 include HOWTO_ADD_AN_EXAMPLE.md

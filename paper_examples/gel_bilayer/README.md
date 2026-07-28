@@ -13,15 +13,16 @@ maps).
 - `figure/` — the Fig. 5 script with the exact Abaqus/CAE exports and
   legends at t = 0, 30 min, 1 h, 6 h.
 
-This example is an execution demonstration (see the paper's Table S1);
-the formulation is the pressure-based adaptation described in the
-paper's Supplementary Material.
+This example is an execution demonstration; its evidence level is stated in
+the manuscript Supplement. The formulation is the pressure-based adaptation
+described there.
 
 ## Regenerating the deck
 
-`build.py` derives the bilayer mesh from the original Chester--Di
-Leo--Anand supplementary input (IJSS 2011 supplementary material),
-which is not redistributed here. To regenerate the deck, obtain their
-`gelUEL` supplementary folder and place it at
-`../gelUEL/gelUEL/code/` relative to this package; the UEL generation
-itself and the included accepted deck do not require it.
+The accepted input deck is our deck for the swell-induced bending problem of
+Chester, Di Leo, and Anand. Its mesh discretization follows their supplemental
+example, with attribution; their original supplemental files are not
+redistributed here. To regenerate the deck with `build.py`, obtain their
+`gelUEL` supplemental folder and place it at `../gelUEL/gelUEL/code/` relative
+to this package. The UEL generation itself and the included accepted deck do
+not require that external mesh seed.
