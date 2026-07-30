@@ -9,6 +9,8 @@ theory-to-compiled-code-to-output example pipeline.
 - [API_USAGE.md](API_USAGE.md) — import patterns, the generator entry points
   (`generate_umat` / `generate_uel`), the tensor DSL rules, and the
   verification ladder.
+- [ABAQUS_VALIDATION_2026-07-30.md](ABAQUS_VALIDATION_2026-07-30.md) — fresh
+  public-clone generation, compiled, Abaqus smoke-solve, and datacheck results.
 
 ## Theory
 

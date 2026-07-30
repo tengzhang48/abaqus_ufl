@@ -314,8 +314,10 @@ C     Assemble full x-p blocks, x = [u, mu]
         IF (NPROPS .GE. 9 .AND. DABS(detF_diag) .GT. 1.0d-30)
      &    phi_diag = PROPS(9) * Je_diag / detF_diag
         CALL localp_store_uvarm(JELEM, kk, phi_diag, p_elem)
-        IF (NSVARS .GE. 1 + NGP) SVARS(1+kk) = phi_diag
-        IF (NSVARS .GE. 1 + 2*NGP) SVARS(1+NGP+kk) = p_elem
+        IF (LFLAGS(3) .EQ. 1 .AND. NSVARS .GE. 1 + NGP)
+     &    SVARS(1+kk) = phi_diag
+        IF (LFLAGS(3) .EQ. 1 .AND. NSVARS .GE. 1 + 2*NGP)
+     &    SVARS(1+NGP+kk) = p_elem
         R_p = R_p + rp_real*wdetJ
         K_pp = K_pp + drp_dp*wdetJ
 
@@ -415,13 +417,15 @@ C           storage has no d/dmu term
           AMATRX(i,j) = Kxx(i,j) - Kxp(i)*Kpx(j)/K_pp
         END DO
       END DO
-      IF (NSVARS .GE. 1) SVARS(1) = p_elem
+      IF (LFLAGS(3) .EQ. 1 .AND. NSVARS .GE. 1)
+     &  SVARS(1) = p_elem
 C     Optional diagnostic layouts.
 C     Preserve solver state in SVARS(1).  If enough slots exist,
 C     store UVARM-like diagnostics by integration point:
 C       SVARS(1+i)       = phi at GP i
 C       SVARS(1+NGP+i)   = local pressure at GP i
-      IF (ndim .EQ. 2 .AND. NSVARS .GE. 32) THEN
+      IF (LFLAGS(3) .EQ. 1 .AND. ndim .EQ. 2
+     &    .AND. NSVARS .GE. 32) THEN
         SVARS(1) = p_elem
         SVARS(9) = p_elem
         SVARS(17) = p_elem

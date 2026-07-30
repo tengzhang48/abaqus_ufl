@@ -106,7 +106,11 @@ The packaged files were rechecked with Abaqus/Standard 2022 on 2026-07-28.
 The datacheck completed in 54 s with zero errors, 13 `.dat` warnings, and one
 `.msg` warning. The warnings include the two intentionally unconnected regions,
 the dummy coupled-thermal/contact packaging, and the unsupported request for
-element output directly on user elements.
+element output directly on user elements. A fresh public-clone datacheck on
+2026-07-30 repeated this result in 65 s with zero errors, 13 `.dat` warnings,
+and one `.msg` warning. The current `../pressuregel_local_pressure_hex8.for`
+also regenerated and compiled, but it was not substituted for the exact
+submitted source in this production deck.
 
 After the datacheck passes, run the analysis:
 

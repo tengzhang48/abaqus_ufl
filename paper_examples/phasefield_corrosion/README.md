@@ -20,6 +20,16 @@ and Martinez-Paneda (JMPS 2021).
   fields), the basis of the Fig. 3 comparison.
 - `figure/` — the Fig. 3 script and its image inputs.
 
+## Generation and Abaqus check
+
+Run `python phasefield_corrosion_cui.py` from this directory. It verifies the
+material tangents and writes both current sources under `generated/`.
+
+On 2026-07-30, both sources regenerated and passed fixed-form gfortran
+compilation. The tracked full deck and freshly generated diagonal UEL also
+completed an Abaqus/Standard 2022 datacheck with zero errors. The full
+corrosion analysis was not repeated in that fresh-clone validation.
+
 Reference distribution (not redistributed): obtain from the authors and
 verify SHA-256:
 - `PhaseFieldSCC.f`:

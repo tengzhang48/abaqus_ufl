@@ -500,9 +500,21 @@ def main() -> None:
         mat_prefix="chesteranandupmu",
     )
     _write_material_include(HERE / "ElasticGelProps_upmu_quad8.inp")
-    _write_converted_input(HERE / "SwellInducedBending_upmu_quad8.inp")
     print("Generated chester_anand_upmu_quad8.for")
     print("Generated ElasticGelProps_upmu_quad8.inp")
+
+    if not SOURCE_INP.exists():
+        print(
+            "Skipped bilayer deck regeneration: the separately distributed "
+            f"mesh seed is not present at {SOURCE_INP}"
+        )
+        print(
+            "Use the accepted public deck at "
+            "abaqus/SwellInducedBending_upmu_quad8.inp"
+        )
+        return
+
+    _write_converted_input(HERE / "SwellInducedBending_upmu_quad8.inp")
     print("Generated SwellInducedBending_upmu_quad8.inp")
 
 

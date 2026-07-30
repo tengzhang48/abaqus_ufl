@@ -4,8 +4,8 @@ These four packages collect materials associated with the examples in the
 manuscript *Making coupled-field Abaqus user elements simple*. Across the
 packages, those materials include Python declarations, generation entry
 points, generated or submitted Fortran, Abaqus decks, reduced reference data,
-and figure inputs. At public revision `e0985d9`, they are evidence bundles,
-not yet clean-archive end-to-end reproduction packages.
+and figure inputs. They are evidence bundles, not collectively clean-archive
+end-to-end reproduction packages.
 
 | Package | Manuscript section / figure | Pipeline command |
 |---|---|---|
@@ -20,24 +20,26 @@ below.
 
 ## Current portability and provenance status
 
-The July 28 clean-archive audit found:
+The July 30 fresh-clone validation found:
 
-- all four figure scripts retain paths from the manuscript/lab layout and do
-  not run unmodified from the public archive;
-- the corrosion pipeline generates source but then fails on a missing lab
-  destination, and the included raw/reduced inputs do not reconstruct the
-  complete Figure 3 comparison;
-- the included accepted bilayer deck is this project's deck for the
-  swell-induced bending problem of Chester, Di Leo, and Anand, and its mesh
-  discretization follows their supplemental example; only rerunning
-  `build.py` requires their separately obtained input as the mesh seed;
-- at revision `a1b5825`, the morphing run instructions referenced generated
-  source outside the stated working directory; the current package README
-  corrects that path; and
-- the public suite at `e0985d9` reports `135 passed` and includes the complete
-  current-generator Quad4/Hex8 local-pressure contract and condensed-Jacobian
-  tests, but it does not execute the `paper_examples/` pipelines, figure
-  scripts, or exact archived production sources.
+- all four declaration-to-Fortran entry points now complete in the public
+  layout; when the non-redistributed gel mesh seed is absent, `build.py`
+  regenerates the UEL and properties and explicitly skips only deck
+  conversion;
+- all freshly generated manuscript Fortran sources compile with gfortran;
+- the current corrosion source passes an Abaqus/Standard 2022 datacheck with
+  the tracked full deck, the current Tet4 source completes a generated `n=2`
+  Abaqus smoke solve, and the current mixed-order gel source completes both
+  tracked one- and two-element smoke solves;
+- the exact archived pasta source and production deck pass a fresh Abaqus 2022
+  datacheck;
+- all four figure scripts still retain assumptions from the manuscript/lab
+  layout and were not validated as standalone public-archive entry points; and
+- the included corrosion raw/reduced inputs still do not reconstruct the
+  complete Figure 3 comparison.
+
+See `../docs/ABAQUS_VALIDATION_2026-07-30.md` for the environment, exact
+scope, solver outcomes, expected warnings, and remaining boundaries.
 
 The exact submitted sources and retained reduced results remain useful
 provenance. Do not describe the four packages collectively as cleanly
@@ -82,6 +84,5 @@ layout and still require portability repair. The corrosion package also needs
 additional source data before its complete published comparison can be
 reconstructed from this checkout.
 
-These packages are excluded from the Python source distribution; they
-live in the repository only. A public tag and archive DOI were still pending
-at revision `e0985d9`.
+These packages are excluded from the Python source distribution; they live in
+the repository only. A public tag and archive DOI remain pending.

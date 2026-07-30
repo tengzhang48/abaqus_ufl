@@ -142,6 +142,8 @@ See [`CREDITS.md`](CREDITS.md).
   internals.
 - [Lessons learned](docs/lessons/): distilled Abaqus, Fortran, code-generation,
   validation, and release lessons.
+- [Fresh-clone Abaqus validation](docs/ABAQUS_VALIDATION_2026-07-30.md):
+  current-source smoke solves, paper-case datachecks, and remaining scope.
 - [AI-assistant guide](ai_skills/README.md): operational project guidance for
   coding agents.
 

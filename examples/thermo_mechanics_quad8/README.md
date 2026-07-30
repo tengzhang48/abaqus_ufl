@@ -69,7 +69,7 @@ python check_compiled.py   # regeneration parity, gfortran, f2py element calls
 | Fortran compile | `python check_compiled.py` | gfortran fixed-form, no errors |
 | Compiled parity | `python check_compiled.py` | f2py `RHS`/`AMATRX` vs reference assembly at 3 states, 7.6e-15 / 2.6e-16 |
 | Compiled tangent | `python check_compiled.py` | compiled `AMATRX` vs `-dRHS/dU`, rel err 1.5e-07 |
-| Abaqus execution | not included in this bundle | none claimed |
+| Abaqus execution | included one-element deck with current generated source | Abaqus/Standard 2022 completed 10 increments with zero cutbacks, errors, numerical-problem warnings, or negative-eigenvalue warnings |
 
 The mixed-order DOF maps are exercised end to end: the same interleaved
 layout must be produced by the Python reference assembly and consumed by
@@ -87,8 +87,9 @@ the structure of an internal case that passed Abaqus 2022 with an
 earlier generated UEL (near-zero-stiffness overlay plus a small remote
 `CPE8T` element to activate DOF 11). Temperature is prescribed on the
 two bottom corners only, leaving the top-corner scalar DOFs free for a
-genuine transient solve. The deck has NOT been run with the current
-generated source; an Abaqus rerun remains a pending release gate.
+genuine transient solve. On 2026-07-30, the included deck and current
+generated source completed in Abaqus/Standard 2022 with 10 increments,
+zero cutbacks, and no numerical-problem or negative-eigenvalue warnings.
 
 The generated UEL does not maintain the Abaqus `ENERGY` array, so
 energy-balance output is not meaningful for this element. Property

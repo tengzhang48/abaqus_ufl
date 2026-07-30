@@ -16,7 +16,6 @@ implementation option described in Cui's documentation.
 """
 
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -402,7 +401,7 @@ def _apply_visualization_bridge(path):
     state_marker = (
         "        SVARS(LOC + 13) = DBLE(xL_new_z)\n"
         "        SVARS(LOC + 14) = DBLE(ti_new_z)\n"
-        "        SVARS(LOC + 15) = DBLE(ei_new_z)\n\n"
+        "        SVARS(LOC + 15) = DBLE(ei_new_z)\n"
     )
     uservar_insert = state_marker + (
         "C       Store fields for duplicate CPE8R visualization elements.\n"
@@ -470,18 +469,12 @@ def generate(output_path=None):
     problem = CuiJ2Corrosion()
     if output_path is None:
         output_path = os.path.join(
-            os.path.dirname(__file__), "phasefield_corrosion_cui_uel.for")
+            os.path.dirname(__file__), "generated",
+            "phasefield_corrosion_cui_uel.for")
     generate_uel(problem, output_path, element="Quad8R",
                  formulation="standard")
     _apply_visualization_bridge(output_path)
     _strip_trailing_whitespace(output_path)
-    default_output = os.path.join(
-        os.path.dirname(__file__), "phasefield_corrosion_cui_uel.for")
-    if os.path.abspath(output_path) == os.path.abspath(default_output):
-        abaqus_copy = os.path.join(
-            os.path.dirname(__file__), "abaqus_test_from_cui",
-            "phasefield_corrosion_cui_uel.for")
-        shutil.copyfile(output_path, abaqus_copy)
     return output_path, problem
 
 
@@ -524,24 +517,20 @@ class CuiJ2CorrosionDiag(CuiJ2Corrosion):
 def generate_diag(output_path=None):
     """Generate the block-diagonal Cui-style UEL.
 
-    Writes ``phasefield_corrosion_cui_diag_uel.for`` and copies it next to
-    the Abaqus decks.  Run it with the ``*_diag`` deck (which drops
-    ``unsymm``).  Cui's ``xkap = 1e-7`` comes from the
+    Writes ``generated/phasefield_corrosion_cui_diag_uel.for``. Run it with
+    the ``*_diag`` deck (which drops ``unsymm``). Cui's ``xkap = 1e-7`` comes
+    from the
     :class:`CuiJ2CorrosionDiagMaterial` declaration.
     """
     problem = CuiJ2CorrosionDiag()
     if output_path is None:
         output_path = os.path.join(
-            os.path.dirname(__file__),
+            os.path.dirname(__file__), "generated",
             "phasefield_corrosion_cui_diag_uel.for")
     generate_uel(problem, output_path, element="Quad8R",
                  formulation="standard")
     _apply_visualization_bridge(output_path)
     _strip_trailing_whitespace(output_path)
-    abaqus_copy = os.path.join(
-        os.path.dirname(__file__), "abaqus_test_from_cui",
-        "phasefield_corrosion_cui_diag_uel.for")
-    shutil.copyfile(output_path, abaqus_copy)
     return output_path, problem
 
 
