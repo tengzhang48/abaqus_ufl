@@ -35,16 +35,16 @@ const figureAssets: Record<string, FigureAsset[]> = {
       src: tetTheta,
       path: siteData.paperEvidence[0].figurePaths[1],
       alt: "Abaqus rendering of the stabilized Tet4 theta field in the compressed block",
-      caption: "Retained θ̃ field from the same completed run",
+      caption: "θ̃ field from the same Abaqus run",
     },
   ],
   pasta: [
-    { src: pasta0, path: siteData.paperEvidence[1].figurePaths[0], alt: "First retained export of the grooved gel sheet morphing sequence", caption: "Retained export 1" },
-    { src: pasta45, path: siteData.paperEvidence[1].figurePaths[1], alt: "Second retained export of the grooved gel sheet morphing sequence", caption: "Retained export 2" },
-    { src: pasta90, path: siteData.paperEvidence[1].figurePaths[2], alt: "Third retained export of the grooved gel sheet morphing sequence", caption: "Retained export 3" },
-    { src: pasta150, path: siteData.paperEvidence[1].figurePaths[3], alt: "Fourth retained export of the grooved gel sheet morphing sequence", caption: "Retained export 4" },
-    { src: pasta200, path: siteData.paperEvidence[1].figurePaths[4], alt: "Fifth retained export of the grooved gel sheet morphing sequence", caption: "Retained export 5" },
-    { src: pasta360, path: siteData.paperEvidence[1].figurePaths[5], alt: "Sixth retained export of the grooved gel sheet morphing sequence", caption: "Retained export 6" },
+    { src: pasta0, path: siteData.paperEvidence[1].figurePaths[0], alt: "Frame 1 of six from the grooved gel sheet morphing sequence", caption: "Sequence frame 1" },
+    { src: pasta45, path: siteData.paperEvidence[1].figurePaths[1], alt: "Frame 2 of six from the grooved gel sheet morphing sequence", caption: "Sequence frame 2" },
+    { src: pasta90, path: siteData.paperEvidence[1].figurePaths[2], alt: "Frame 3 of six from the grooved gel sheet morphing sequence", caption: "Sequence frame 3" },
+    { src: pasta150, path: siteData.paperEvidence[1].figurePaths[3], alt: "Frame 4 of six from the grooved gel sheet morphing sequence", caption: "Sequence frame 4" },
+    { src: pasta200, path: siteData.paperEvidence[1].figurePaths[4], alt: "Frame 5 of six from the grooved gel sheet morphing sequence", caption: "Sequence frame 5" },
+    { src: pasta360, path: siteData.paperEvidence[1].figurePaths[5], alt: "Frame 6 of six from the grooved gel sheet morphing sequence", caption: "Sequence frame 6" },
   ],
   gel: [
     { src: gel0, path: siteData.paperEvidence[2].figurePaths[0], alt: "Gel bilayer in its initial flat state", caption: "0 min" },
@@ -79,7 +79,7 @@ function App() {
           <a href="#how-it-works">How it works</a>
           <a href="#scope">Scope</a>
           <a href="#examples">Examples</a>
-          <a href="#paper-evidence">Paper evidence</a>
+          <a href="#paper-evidence">Manuscript examples</a>
           <a href="#status">Status</a>
         </nav>
         <a className="header-link" href={repository}>GitHub <Arrow /></a>
@@ -89,7 +89,7 @@ function App() {
             <a href="#how-it-works" onClick={closeMobileMenu}>How it works</a>
             <a href="#scope" onClick={closeMobileMenu}>Scope</a>
             <a href="#examples" onClick={closeMobileMenu}>Examples</a>
-            <a href="#paper-evidence" onClick={closeMobileMenu}>Paper evidence</a>
+            <a href="#paper-evidence" onClick={closeMobileMenu}>Manuscript examples</a>
             <a href="#status" onClick={closeMobileMenu}>Status</a>
             <a href={repository} onClick={closeMobileMenu}>GitHub</a>
           </nav>
@@ -101,16 +101,16 @@ function App() {
           <div className="hero-grid shell">
             <div className="hero-copy">
               <p className="eyebrow light">Open research software · v{siteData.repository.version}</p>
-              <h1>From Python declarations to inspectable Abaqus user subroutines.</h1>
+              <h1>Generate Abaqus UMAT and UEL source from Python models.</h1>
               <p className="hero-lede">
-                <code>abaqus_ufl</code> generates self-contained Fortran for supported UMAT and UEL models—while keeping field definitions, constitutive choices, tangent construction, and interface conventions open to review.
+                <code>abaqus_ufl</code> generates self-contained fixed-form Fortran UMATs and UELs from supported Python models. The Python model and generated source show the fields, constitutive response, tangent construction, and Abaqus interface.
               </p>
               <div className="hero-actions">
-                <a className="button primary" href={`${repository}#try-a-complete-local-workflow`}>Try the local workflow <Arrow /></a>
-                <a className="button ghost" href="#paper-evidence">Inspect the evidence</a>
+                <a className="button primary" href={`${repository}#try-a-complete-local-workflow`}>Run an example <Arrow /></a>
+                <a className="button ghost" href="#paper-evidence">View manuscript examples</a>
               </div>
               <p className="hero-boundary">
-                Not UFL-compatible, not a general variational compiler, and not a generator for complete Abaqus analyses.
+                The package supports a defined set of models. It does not implement FEniCS UFL, compile arbitrary weak forms, or create a complete Abaqus analysis.
               </p>
             </div>
 
@@ -121,8 +121,8 @@ function App() {
               </div>
               <pre><code><span className="kw">class</span> <span className="type">NeoHookean</span>(au.Material):{"\n"}  props = dict(G=<span className="num">0.5</span>, K=<span className="num">50.0</span>){"\n\n"}  <span className="kw">def</span> <span className="fn">stress_PK1</span>(self, F):{"\n"}    J = det(F){"\n"}    FinvT = inv(F).T{"\n"}    <span className="kw">return</span> (self.G * (F - FinvT) +{"\n"}      self.K * log(J) * FinvT){"\n\n"}model = NeoHookean(){"\n"}model.verify(){"\n"}au.generate_umat(model, <span className="str">"model.for"</span>)</code></pre>
               <div className="code-footer">
-                <span><i className="signal green" /> declaration check</span>
-                <span><i className="signal amber" /> scientific validation is example-owned</span>
+                <span><i className="signal green" /> material and tangent checks</span>
+                <span><i className="signal amber" /> application validation depends on the example</span>
               </div>
             </aside>
           </div>
@@ -132,10 +132,10 @@ function App() {
           <div className="shell">
             <div className="section-heading split-heading">
               <div>
-                <p className="eyebrow">A visible generation path</p>
-                <h2>Keep the declaration short. Keep the generated boundary inspectable.</h2>
+                <p className="eyebrow">Generation and verification</p>
+                <h2>From a Python model to an Abaqus analysis</h2>
               </div>
-              <p>Each gate catches a different class of mistake. Passing an earlier gate does not replace assembled checks, solver execution, or comparison with physical evidence.</p>
+              <p>The Python model, compiled subroutine, and Abaqus analysis are checked separately because they can fail in different ways.</p>
             </div>
             <ol className="workflow" aria-label="abaqus ufl workflow">
               {siteData.workflow.map((step) => (
@@ -153,8 +153,8 @@ function App() {
           <div className="shell">
             <div className="section-heading centered">
               <p className="eyebrow">Current generation scope</p>
-              <h2>Two targets, with different responsibilities</h2>
-              <p>The public API supports selected material-response and coupled-element patterns. The surrounding Abaqus model stays explicit and user-owned.</p>
+              <h2>Supported UMAT and UEL generation</h2>
+              <p>The current API covers selected material-response and coupled-element patterns. Users still define the mesh, steps, loads, boundary conditions, units, and solver controls in the Abaqus model.</p>
             </div>
             <div className="scope-grid">
               {siteData.scopes.map((scope) => (
@@ -168,14 +168,14 @@ function App() {
                     {scope.included.map((item) => <li key={item}>{item}</li>)}
                   </ul>
                   <div className="boundary compact">
-                    <strong>Boundary</strong>
+                    <strong>Limits</strong>
                     <p>{scope.boundary}</p>
                   </div>
                 </article>
               ))}
             </div>
             <p className="scope-note">
-              The declaration style is inspired by FEniCS UFL, but <code>abaqus_ufl</code> neither depends on nor implements UFL. <a href={repoFile("CREDITS.md")}>Read the scientific lineage <Arrow /></a>
+              The declaration style is inspired by FEniCS UFL, but <code>abaqus_ufl</code> neither depends on nor implements UFL. <a href={repoFile("CREDITS.md")}>See credits and references <Arrow /></a>
             </p>
           </div>
         </section>
@@ -184,10 +184,10 @@ function App() {
           <div className="shell">
             <div className="section-heading split-heading">
               <div>
-                <p className="eyebrow">Six release examples</p>
-                <h2>Small enough to audit, complete enough to exercise the boundary</h2>
+                <p className="eyebrow">Included examples</p>
+                <h2>Four UMAT and two UEL examples</h2>
               </div>
-              <p>These are the public allowlist—not a capability inventory for a larger research archive. Each bundle records its own oracle, generated source, compiled path, and execution boundary.</p>
+              <p>Each directory contains the Python model, a reference check, generated source, compiled checks, and any Abaqus result available for that example.</p>
             </div>
             <div className="examples-grid">
               {siteData.examples.map((example, index) => (
@@ -199,12 +199,12 @@ function App() {
                   <h3>{example.title}</h3>
                   <p>{example.summary}</p>
                   <dl>
-                    <dt>Retained evidence</dt>
+                    <dt>Checks included</dt>
                     <dd>{example.evidence}</dd>
-                    <dt>Boundary</dt>
+                    <dt>Limits</dt>
                     <dd>{example.boundary}</dd>
                   </dl>
-                  <a className="text-link" href={repoFile(example.path)}>Open example record <Arrow /></a>
+                  <a className="text-link" href={repoFile(example.path)}>Open example <Arrow /></a>
                 </article>
               ))}
             </div>
@@ -214,9 +214,9 @@ function App() {
         <section className="section paper-section" id="paper-evidence">
           <div className="shell">
             <div className="section-heading paper-heading">
-              <p className="eyebrow light">Manuscript-scale evidence</p>
-              <h2>Results first. Source, provenance, and limits beside them.</h2>
-              <p>The four packages accompany <em>Making coupled-field Abaqus user elements simple</em>. They retain declarations, sources, selected decks, reduced records, and figure inputs at different evidence levels.</p>
+              <p className="eyebrow light">Submitted manuscript</p>
+              <h2>Examples from <em>Making coupled-field Abaqus user elements simple</em></h2>
+              <p>These four example packages contain the available declarations, generated sources, selected Abaqus decks, reduced results, and figure inputs. Each package states which checks were repeated from a fresh clone.</p>
             </div>
 
             {siteData.paperEvidence.map((paper, paperIndex) => {
@@ -228,9 +228,9 @@ function App() {
                     <p className="eyebrow">{paper.eyebrow}</p>
                     <h3>{paper.title}</h3>
                     <p className="paper-summary">{paper.summary}</p>
-                    <div className="result-line"><strong>Retained result</strong><p>{paper.result}</p></div>
+                    <div className="result-line"><strong>Available result</strong><p>{paper.result}</p></div>
                     <div className="result-line"><strong>Fresh-clone check</strong><p>{paper.freshCheck}</p></div>
-                    <div className="boundary"><strong>Claim boundary</strong><p>{paper.boundary}</p></div>
+                    <div className="boundary"><strong>Limits</strong><p>{paper.boundary}</p></div>
                     <a className="text-link" href={repoFile(paper.path)}>Read the package record <Arrow /></a>
                   </div>
                   {figures.length > 0 ? (
@@ -250,8 +250,8 @@ function App() {
                       <div>
                         <p className="eyebrow light">Text record only</p>
                         <h4>Figure not republished on this site</h4>
-                        <p>The public repository records a derived-mesh provenance item that must be resolved before further distribution. This website therefore does not copy the corrosion image into its Pages artifact.</p>
-                        <a className="text-link" href={repoFile("CREDITS.md")}>Read credits and redistribution boundaries <Arrow /></a>
+                        <p>The comparison mesh came from a third-party distribution whose complete BSD license notice has not been located. The corrosion figure is therefore omitted from this site.</p>
+                        <a className="text-link" href={repoFile("CREDITS.md")}>Read the provenance record <Arrow /></a>
                       </div>
                     </aside>
                   )}
@@ -260,7 +260,7 @@ function App() {
             })}
 
             <div className="paper-index-link">
-              <p>Exact submitted sources and current generator outputs are retained separately where they differ.</p>
+              <p>The repository keeps the submitted source and the current generated version separately when they differ.</p>
               <a className="button light-button" href={repoFile("paper_examples/README.md")}>Open the paper-package index <Arrow /></a>
             </div>
           </div>
@@ -271,9 +271,9 @@ function App() {
             <div className="section-heading split-heading">
               <div>
                 <p className="eyebrow">Fresh-clone record · {siteData.validation.date}</p>
-                <h2>What was actually exercised</h2>
+                <h2>Fresh-clone checks</h2>
               </div>
-              <p>A fresh clone started from <code>{siteData.validation.sourceRevision}</code>; corrections and this report are retained in <code>{siteData.validation.reportRevision}</code>. Checks used Abaqus/Standard 2022, Intel Fortran 19.1.1.217, and the documented Python environment.</p>
+              <p>The check began at revision <code>{siteData.validation.sourceRevision}</code>; corrections and the report are in <code>{siteData.validation.reportRevision}</code>. Abaqus checks used Abaqus/Standard 2022, Intel Fortran 19.1.1.217, and the documented Python environment.</p>
             </div>
             <div className="metric-grid">
               {siteData.validation.metrics.map((metric) => (
@@ -286,17 +286,17 @@ function App() {
             <div className="status-grid">
               <article>
                 <span className="status-kicker complete">Completed solver checks</span>
-                <h3>Small analyses run through Abaqus</h3>
+                <h3>Small verification analyses</h3>
                 <ul>{siteData.validation.completeSolves.map((item) => <li key={item}>{item}</li>)}</ul>
               </article>
               <article>
                 <span className="status-kicker datacheck">Datacheck only</span>
-                <h3>Paper-scale setup and compilation checks</h3>
+                <h3>Manuscript input and compilation checks</h3>
                 <ul>{siteData.validation.datachecks.map((item) => <li key={item}>{item}</li>)}</ul>
               </article>
             </div>
             <div className="boundary status-boundary">
-              <strong>How to read this record</strong>
+              <strong>What an Abaqus datacheck establishes</strong>
               <p>{siteData.validation.boundary}</p>
               <a className="text-link" href={repoFile(siteData.validation.sourcePath)}>Read the complete validation report <Arrow /></a>
             </div>
@@ -306,9 +306,9 @@ function App() {
         <section className="section start-section" id="start">
           <div className="shell start-grid">
             <div>
-              <p className="eyebrow light">Start with one inspectable material</p>
-              <h2>Generate locally. Review the Fortran. Add evidence for your claim.</h2>
-              <p>Python-only generation requires Python 3.8+, NumPy, and SymPy. Compiled example checks additionally use gfortran, f2py, Meson, and Ninja. Abaqus is not required by the package CI.</p>
+              <p className="eyebrow light">Neo-Hookean UMAT example</p>
+              <h2>Generate and verify the example locally</h2>
+              <p>These commands generate the UMAT, run its closed-form reference checks, compile it with gfortran and f2py, and compare its output with the Python calculation. Python 3.8+, NumPy, and SymPy are required; compiled checks also require gfortran, f2py, Meson, and Ninja.</p>
               <div className="hero-actions">
                 <a className="button primary" href={repoFile("docs/API_USAGE.md")}>Read the API guide <Arrow /></a>
                 <a className="button ghost" href={repoFile("HOWTO_ADD_AN_EXAMPLE.md")}>Example contract</a>
@@ -323,7 +323,7 @@ function App() {
         <div className="shell footer-grid">
           <div className="footer-brand">
             <span className="brand-mark" aria-hidden="true">a/u</span>
-            <div><strong>abaqus_ufl</strong><p>Project-authored source is MIT licensed. Third-party and provenance-pending artifacts retain their separately documented terms.</p></div>
+            <div><strong>abaqus_ufl</strong><p>Project-authored source is MIT licensed. Third-party materials and items with unresolved redistribution terms are documented separately.</p></div>
           </div>
           <nav aria-label="Documentation">
             <strong>Documentation</strong>

@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const data = JSON.parse(await readFile(resolve(here, "../site-data.json"), "utf8"));
 
-test("workflow keeps Abaqus analysis user-owned", () => {
+test("workflow ends with a documented Abaqus analysis", () => {
   assert.equal(data.workflow.length, 5);
-  assert.match(data.workflow.at(-1).detail, /user owns/i);
+  assert.match(data.workflow.at(-1).detail, /Abaqus model/i);
+  assert.match(data.workflow.at(-2).detail, /UEL residual and tangent blocks/i);
 });
 
 test("scope names UMAT and UEL without merging their boundaries", () => {
@@ -33,5 +34,5 @@ test("fresh validation never conflates datacheck and completed analysis", () => 
   assert.equal(data.validation.reportRevision, "c5d2a59");
   assert.equal(data.validation.completeSolves.length, 6);
   assert.equal(data.validation.datachecks.length, 3);
-  assert.match(data.validation.boundary, /does not establish nonlinear convergence/i);
+  assert.match(data.validation.boundary, /does not run the nonlinear increments/i);
 });
