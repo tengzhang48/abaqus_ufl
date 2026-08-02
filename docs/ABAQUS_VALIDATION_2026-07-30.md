@@ -1,8 +1,9 @@
 # Public Abaqus Validation, 2026-07-30
 
 This report records a fresh-clone validation of the public repository. The
-clone started at revision `0f52533` on `main`. Solver output was written to
-temporary compute-node storage and is not retained in Git.
+clone started at revision `0f52533` on `main`; the corrections found during
+the pass and this report were committed in `c5d2a59`. Solver output was
+written to temporary compute-node storage and is not retained in Git.
 
 ## Environment
 

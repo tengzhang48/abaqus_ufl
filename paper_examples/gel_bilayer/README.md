@@ -8,11 +8,16 @@ maps).
 - `build.py` — declaration, generation, and deterministic deck builder
   (`python build.py` always regenerates the UEL and regenerates the bilayer
   deck when the separately distributed mesh seed is available).
-- `abaqus/` — the accepted bilayer deck (2160 increments to 21600 s,
-  final right-edge straightness 2.3e-9 m), the one- and two-element
-  smoke decks, and the shared property include.
+- `abaqus/` — the accepted bilayer deck, configured for a final time of
+  21600 s and a 50000-increment ceiling, plus the one- and two-element
+  smoke decks and shared property include.
 - `figure/` — the Fig. 5 script with the exact Abaqus/CAE exports and
   legends at t = 0, 30 min, 1 h, 6 h.
+
+The historical project record reported final right-edge straightness of
+2.3e-9 m. This checkout does not retain the full-run solver log or a
+machine-readable result record supporting that value, so it is not presented
+as retained public evidence.
 
 This example is an execution demonstration; its evidence level is stated in
 the manuscript Supplement. The formulation is the pressure-based adaptation

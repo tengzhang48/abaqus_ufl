@@ -1,0 +1,30 @@
+{
+  "name": "abaqus-ufl-website",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "verify:evidence": "node scripts/check-evidence.mjs",
+    "test": "node --test scripts/site-data.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build && node scripts/check-build.mjs",
+    "preview": "vite preview",
+    "check": "npm run verify:evidence && npm run test && npm run typecheck && npm run build"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "6.0.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "vite": "8.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "typescript": "5.9.3"
+  }
+}

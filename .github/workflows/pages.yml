@@ -1,0 +1,94 @@
+name: Deploy abaqus_ufl website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web/**"
+      - "examples/**"
+      - "paper_examples/**"
+      - "docs/ABAQUS_VALIDATION_2026-07-30.md"
+      - "docs/API_USAGE.md"
+      - "docs/theory.md"
+      - "README.md"
+      - "HOWTO_ADD_AN_EXAMPLE.md"
+      - "CITATION.cff"
+      - "CREDITS.md"
+      - "LICENSE"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - "examples/**"
+      - "paper_examples/**"
+      - "docs/ABAQUS_VALIDATION_2026-07-30.md"
+      - "docs/API_USAGE.md"
+      - "docs/theory.md"
+      - "README.md"
+      - "HOWTO_ADD_AN_EXAMPLE.md"
+      - "CITATION.cff"
+      - "CREDITS.md"
+      - "LICENSE"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('abaqus-ufl-pages-pr-{0}', github.event.pull_request.number) || 'abaqus-ufl-pages-production' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      VITE_BASE_PATH: /abaqus_ufl/
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install locked website dependencies
+        run: npm ci
+
+      - name: Check source evidence, types, tests, and production build
+        run: npm run check
+
+      - name: Configure GitHub Pages
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
+
+      - name: Upload website artifact
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

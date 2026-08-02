@@ -1,0 +1,190 @@
+{
+  "repository": {
+    "name": "abaqus_ufl",
+    "version": "0.1.0",
+    "author": "Teng Zhang",
+    "url": "https://github.com/tengzhang48/abaqus_ufl",
+    "pagesUrl": "https://tengzhang48.github.io/abaqus_ufl/",
+    "contact": "mailto:tzhang48@syr.edu"
+  },
+  "workflow": [
+    {
+      "number": "01",
+      "title": "Declare",
+      "detail": "Write a supported material response or coupled weak form in Python."
+    },
+    {
+      "number": "02",
+      "title": "Check",
+      "detail": "Exercise tangent consistency and an example-specific independent oracle."
+    },
+    {
+      "number": "03",
+      "title": "Generate",
+      "detail": "Emit deterministic, self-contained fixed-form Fortran for review."
+    },
+    {
+      "number": "04",
+      "title": "Compile & assemble",
+      "detail": "Call the generated boundary and, for UELs, inspect residual and tangent blocks."
+    },
+    {
+      "number": "05",
+      "title": "Run in Abaqus",
+      "detail": "The user owns the mesh, steps, loads, controls, units, outputs, and scientific claim."
+    }
+  ],
+  "scopes": [
+    {
+      "target": "UMAT",
+      "title": "Material response",
+      "description": "Finite-strain and small-strain paths for supported constitutive declarations, including state threading and Abaqus stress/tangent conventions.",
+      "included": ["finite- and small-strain generators", "complex-step tangent construction", "compiled subroutine checks"],
+      "boundary": "A generated UMAT does not choose an Abaqus element, procedure, mesh, load history, or material calibration."
+    },
+    {
+      "target": "UEL",
+      "title": "Coupled-field elements",
+      "description": "Supported field, interpolation, balance, material, and local-variable templates for coupled residuals and tangent blocks.",
+      "included": ["Quad4/8, Tet4, Hex8/20 templates", "mixed-order and local-pressure paths", "assembled residual/tangent checks"],
+      "boundary": "This is not a compiler for arbitrary variational expressions and does not generate a complete Abaqus analysis."
+    }
+  ],
+  "examples": [
+    {
+      "title": "Neo-Hookean",
+      "target": "UMAT",
+      "summary": "Finite-strain stateless response with Cauchy stress and Jaumann DDSDDE conversion.",
+      "evidence": "Closed-form uniaxial/shear oracle, deterministic generation, compiled stress parity, and a finite-difference tangent check.",
+      "boundary": "No retained Abaqus run.",
+      "path": "examples/neo_hookean_umat/README.md"
+    },
+    {
+      "title": "Small-strain J2",
+      "target": "UMAT",
+      "summary": "Stateful radial return with elastic/plastic branches and engineering-shear handling.",
+      "evidence": "Exact shear oracle and a compiled 40-increment stress/STATEV path.",
+      "boundary": "No retained Abaqus run.",
+      "path": "examples/small_strain_j2_umat/README.md"
+    },
+    {
+      "title": "Viscoelasticity",
+      "target": "UMAT",
+      "summary": "History- and time-step-dependent response with tensor state packed into STATEV.",
+      "evidence": "Exact discrete-relaxation oracle and a compiled 30-increment history.",
+      "boundary": "No retained Abaqus run.",
+      "path": "examples/small_strain_viscoelastic_umat/README.md"
+    },
+    {
+      "title": "Ogden spectral path",
+      "target": "UMAT",
+      "summary": "Explicit eigenspace reconstruction, including repeated-spectrum tangent states.",
+      "evidence": "Eigenspace-independent oracles, compiled parity, and distinct/repeated-spectrum tangent checks.",
+      "boundary": "No retained Abaqus run.",
+      "path": "examples/ogden_umat/README.md"
+    },
+    {
+      "title": "Thermo-mechanical Quad4",
+      "target": "UEL",
+      "summary": "Two-field displacement-temperature element with cross-field blocks and node-interleaved DOFs.",
+      "evidence": "Closed-form force and heat-balance checks, compiled assembled parity, and a current-source Abaqus 2022 smoke solve.",
+      "boundary": "One-element integration check; not a general thermo-mechanical validation.",
+      "path": "examples/scalar_diffusion_uel/README.md"
+    },
+    {
+      "title": "Mixed-order Quad8",
+      "target": "UEL",
+      "summary": "Quadratic displacement with bilinear corner temperature and deformation-dependent pulled-back flux.",
+      "evidence": "Independent flux-ratio oracle, assembled/compiled tangent checks, and a current-source Abaqus 2022 smoke solve.",
+      "boundary": "One-element integration check; not a paper-scale analysis.",
+      "path": "examples/thermo_mechanics_quad8/README.md"
+    }
+  ],
+  "paperEvidence": [
+    {
+      "id": "tet4",
+      "eyebrow": "Sec. 3.2 · Fig. 4",
+      "title": "Stabilized mixed u–θ Tet4",
+      "summary": "Quarter-block compression using the kinematically stabilized equal-order tetrahedron of Scovazzi, Zorrilla, and Rossi.",
+      "result": "Retained full-run value: u₃ = −0.696244 mm at full follower pressure, within about 1% of the published n=16 curve.",
+      "freshCheck": "The current source regenerated and compiled; the tracked n=16 deck passed datacheck. A generated n=2 model completed 24 increments with zero cutbacks.",
+      "boundary": "The full n=16 analysis was not repeated in the 2026-07-30 fresh-clone pass.",
+      "path": "paper_examples/stabilized_tet4/README.md",
+      "figurePaths": [
+        "paper_examples/stabilized_tet4/figure/Tet4_u_mag.png",
+        "paper_examples/stabilized_tet4/figure/Tet4_NT11.png"
+      ]
+    },
+    {
+      "id": "pasta",
+      "eyebrow": "Sec. 3.4 · Fig. 6",
+      "title": "Diffusion-driven morphing sequence",
+      "summary": "A grooved sheet evolves with a Hex8 displacement–chemical-potential UEL and one condensed pressure variable per element.",
+      "result": "Six tracked Abaqus/CAE frames and reduced ODB snapshots document the completed production sequence.",
+      "freshCheck": "The exact archived production source and deck passed a fresh Abaqus 2022 datacheck; the current generator also passed its local-pressure contract checks.",
+      "boundary": "The production analysis was not rerun. A shared-node native C3D8 companion mesh contributes stiffness, and its sensitivity audit remains pending.",
+      "path": "paper_examples/morphing_hex8/README.md",
+      "figurePaths": [
+        "paper_examples/morphing_hex8/figure/pasta_t0.png",
+        "paper_examples/morphing_hex8/figure/pasta_t45.png",
+        "paper_examples/morphing_hex8/figure/pasta_t90.png",
+        "paper_examples/morphing_hex8/figure/pasta_t150.png",
+        "paper_examples/morphing_hex8/figure/pasta_t200.png",
+        "paper_examples/morphing_hex8/figure/pasta_t360.png"
+      ]
+    },
+    {
+      "id": "gel",
+      "eyebrow": "Sec. 3.3 · Fig. 5",
+      "title": "Mixed-order gel bilayer",
+      "summary": "Plane-strain swelling with quadratic displacement and chemical potential, bilinear corner pressure, and 28 element DOFs.",
+      "result": "The public checkout retains the accepted deck and four historical Abaqus/CAE exports at 0, 30 min, 1 h, and 6 h; it does not retain a full-run solver log or machine-readable result record.",
+      "freshCheck": "Current-source one- and two-element gel smoke decks completed in Abaqus/Standard 2022 with zero cutbacks.",
+      "boundary": "The full bilayer was not rerun. Regenerating its deck requires the separately obtained Chester–Di Leo–Anand mesh seed; their original supplemental files are not redistributed.",
+      "path": "paper_examples/gel_bilayer/README.md",
+      "figurePaths": [
+        "paper_examples/gel_bilayer/figure/gel_bilayer_00min.png",
+        "paper_examples/gel_bilayer/figure/gel_bilayer_30min.png",
+        "paper_examples/gel_bilayer/figure/gel_bilayer_1h.png",
+        "paper_examples/gel_bilayer/figure/gel_bilayer_6h.png"
+      ]
+    },
+    {
+      "id": "corrosion",
+      "eyebrow": "Sec. 3.1 · Fig. 3",
+      "title": "Phase-field corrosion comparison",
+      "summary": "Three-field displacement–phase-field–concentration Quad8 declaration compared with the Cui–Ma–Martínez-Pañeda reference implementation.",
+      "result": "Tracked reduced reference histories and fields support the retained code-to-code comparison record.",
+      "freshCheck": "Both current Fortran variants regenerated and compiled; the tracked full deck with the fresh diagonal source passed Abaqus 2022 datacheck.",
+      "boundary": "The full analysis was not rerun. The comparison mesh has third-party lineage; its precise BSD notice and redistribution status remain an open provenance item.",
+      "path": "paper_examples/phasefield_corrosion/README.md",
+      "figurePaths": []
+    }
+  ],
+  "validation": {
+    "date": "2026-07-30",
+    "sourceRevision": "0f52533",
+    "reportRevision": "c5d2a59",
+    "sourcePath": "docs/ABAQUS_VALIDATION_2026-07-30.md",
+    "metrics": [
+      { "value": "137", "label": "public tests passed with f2py enabled" },
+      { "value": "6", "label": "released example bundles covered" },
+      { "value": "4 / 4", "label": "manuscript generation entry points exercised" },
+      { "value": "3", "label": "paper-scale decks passed datacheck" }
+    ],
+    "completeSolves": [
+      "Working UMAT template: 10 increments",
+      "Scalar-diffusion Quad4 UEL: 10 increments",
+      "Thermo-mechanical Quad8 UEL: 10 increments",
+      "Gel pressure-equilibrium smoke: 1 increment",
+      "Gel chemical-potential-gradient smoke: 1 increment",
+      "Generated n=2 Tet4: 24 increments"
+    ],
+    "datachecks": [
+      "Tracked n=16 Tet4 deck",
+      "Tracked Cui corrosion deck with fresh diagonal UEL",
+      "Exact pasta production deck with archived source"
+    ],
+    "boundary": "A datacheck verifies input processing, compilation/linking, procedure compatibility, and model setup. It does not establish nonlinear convergence or reproduce a published result. Full corrosion, n=16 Tet4, gel-bilayer, and pasta analyses were not repeated in this pass."
+  }
+}

@@ -33,8 +33,9 @@ The July 30 fresh-clone validation found:
   tracked one- and two-element smoke solves;
 - the exact archived pasta source and production deck pass a fresh Abaqus 2022
   datacheck;
-- all four figure scripts still retain assumptions from the manuscript/lab
-  layout and were not validated as standalone public-archive entry points; and
+- all four figure scripts still retain assumptions from the original
+  manuscript-production layout and were not validated as standalone
+  public-archive entry points; and
 - the included corrosion raw/reduced inputs still do not reconstruct the
   complete Figure 3 comparison.
 
@@ -69,12 +70,13 @@ Chester--Di Leo--Anand UEL; the current pipeline uses the neutral
 ## Third-party material
 
 The corrosion package compares against the reference implementation of
-Cui, Ma, and Martinez-Paneda (JMPS 2021), distributed by its authors
-under a BSD license. Our comparison decks derive their mesh from that
-distribution (with attribution); the reference UEL and deck themselves
-are **not** redistributed here — obtain them from the authors'
-repository and verify against the SHA-256 hashes recorded in the
-package README.
+Cui, Ma, and Martinez-Paneda (JMPS 2021). The authors' UEL header says the
+code is distributed under a BSD license, but the audited distributions do not
+include the exact BSD text or copyright notice. Our comparison deck has mesh
+lineage from that distribution (with attribution); the reference UEL and deck
+themselves are **not** redistributed here. Obtain them from the authors'
+repository and verify against the SHA-256 hashes and open provenance boundary
+recorded in the package README.
 
 ## Figure kits
 

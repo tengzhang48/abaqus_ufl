@@ -3,8 +3,8 @@
 Panels (a) and (b) summarize the generated mixed ``u-p-mu`` Quad8 field
 supports and the gel/rubber bilayer in this package's accepted deck,
 ``../abaqus/SwellInducedBending_upmu_quad8.inp``.
-The accepted corrected run is documented in the private case record
-``BOUNDARY_CONDITION_AUDIT_2026-07-26.md``.
+The public package does not retain a full-run solver log or machine-readable
+comparison record; see the package README for the evidence boundary.
 
 Panels (c)--(f) reproduce the uploaded Abaqus/CAE exports at 0, 30 min, 1 h,
 and 6 h.  The colored contours are maximum in-plane principal logarithmic

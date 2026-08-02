@@ -69,16 +69,23 @@ Martínez-Pañeda:
 > the Mechanics and Physics of Solids* 147 (2021), 104254.
 > [doi:10.1016/j.jmps.2020.104254](https://doi.org/10.1016/j.jmps.2020.104254)
 
-The authors' reference source states that it is distributed under a BSD
-license. The original UEL and deck are not redistributed here. Their exact
+The authors' reference UEL header states that the code is distributed under a
+BSD license. The original UEL and deck are not redistributed here. Their exact
 identities are recorded by SHA-256 in
 [`paper_examples/phasefield_corrosion/README.md`](paper_examples/phasefield_corrosion/README.md).
 The public comparison deck derives its mesh from that distribution and retains
 attribution. The source repository is
 [`ChuanjieCui/Phase-field-modelling-of-corrosion`](https://github.com/ChuanjieCui/Phase-field-modelling-of-corrosion).
-Before any further public distribution, the precise BSD license text and the
-redistribution status of the derived mesh must be recorded with the artifact,
-or the mesh must be replaced.
+
+An audit on 2026-08-02 checked upstream Git commit
+`cd1fb320a90ada8ebb7a9437254549a0d181a0e0`, its complete public history, and
+the separate Oxford Mechanics of Materials Lab download. The recorded source
+hashes match those distributions, but neither distribution includes the exact
+BSD variant, license text, or copyright notice. The project therefore does not
+infer missing terms: the public website does not bundle the corrosion image,
+and the derived-mesh redistribution question remains open. Before republishing
+that deck or its mesh-derived output elsewhere, obtain an exact notice from the
+authors or replace the mesh with a project-authored one.
 
 The original package's `VisualMesh.m`, which is not included here, credits
 E. Martínez-Pañeda and M. Muñiz-Calvente and requests citation of the
@@ -166,6 +173,8 @@ public example, record:
 5. the license and required notices; and
 6. whether the original or a derivative is redistributed.
 
-When any item is unknown, do not add or further distribute the artifact.
-Record the provenance gap explicitly rather than inferring permission; if the
-artifact is already present, remove or quarantine it until the gap is resolved.
+When any item is unknown, do not add the artifact or broaden its distribution.
+Record the provenance gap explicitly rather than inferring permission. If an
+artifact is already public, stop copying it to new surfaces and either obtain
+the missing terms or replace or quarantine it according to the documented
+risk.

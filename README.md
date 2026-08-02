@@ -4,6 +4,10 @@
 coupled-field element declaration written in Python into inspectable,
 self-contained Fortran for Abaqus/Standard.
 
+[Project website](https://tengzhang48.github.io/abaqus_ufl/) ·
+[source repository](https://github.com/tengzhang48/abaqus_ufl) ·
+[fresh-clone validation record](docs/ABAQUS_VALIDATION_2026-07-30.md)
+
 The practical aim is not simply to write Fortran faster. It is to separate the
 parts of a user subroutine that are otherwise difficult to audit: field and
 state definitions, constitutive responses, residual terms, tangent blocks,
