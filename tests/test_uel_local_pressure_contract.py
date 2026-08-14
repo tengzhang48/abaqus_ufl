@@ -221,9 +221,11 @@ def test_unsupported_requests_return_zeroed_arrays(compiled):
         rhs, amatrx, _, _ = _call(module, case, U, DU, lflags3=req)
         assert np.max(np.abs(rhs)) == 0.0, req
         assert np.max(np.abs(amatrx)) == 0.0, req
-    rhs, amatrx, _, _ = _call(module, case, U, DU, lflags1=99)
-    assert np.max(np.abs(rhs)) == 0.0
-    assert np.max(np.abs(amatrx)) == 0.0
+    for procedure in (0, 99):
+        rhs, amatrx, _, _ = _call(
+            module, case, U, DU, lflags1=procedure)
+        assert np.max(np.abs(rhs)) == 0.0, procedure
+        assert np.max(np.abs(amatrx)) == 0.0, procedure
     rhs, amatrx, _, _ = _call(module, case, U, DU, lflags4=1)
     assert np.max(np.abs(rhs)) == 0.0, "perturbation step not rejected"
     assert np.max(np.abs(amatrx)) == 0.0

@@ -502,4 +502,3 @@ For this package, the design decision is:
 - General SVARS read/write for arbitrary post-processing variables
 - Time-dependent boundary conditions
 - Full original-package-style dummy-mesh UVARM/global-state visualization
-- LFLAGS check for initial stiffness call

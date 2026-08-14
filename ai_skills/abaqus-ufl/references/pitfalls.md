@@ -12,6 +12,11 @@ Use it when debugging generated UMAT/UEL behavior.
 - `DTIME = 0` can occur during initial stiffness calls. Guard divisions by
   `DTIME`.
 - Explicitly zero `RHS` and `AMATRX`; do not trust incoming memory.
+- A non-Abaqus host must populate the Abaqus request contract. In particular,
+  `LFLAGS(1)=0` is not a default procedure: a guarded generated UEL returns its
+  pre-zeroed `RHS`/`AMATRX`, which the host can misread as convergence. Pin a
+  supported procedure/request in the adapter, leave at least one DOF free, and
+  assert a nonzero element contribution or a known interior response.
 - Use `PNEWDT` for inverted elements, large increments, or detected invalid
   states. Set `PNEWDT` to a fraction such as `0.25` to request a cutback and
   to `1.0` when the state is acceptable. Larger growth requests are

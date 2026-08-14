@@ -75,7 +75,16 @@ The working template ships a tested one-point f2py UMAT driver. A UEL or
 coupled example needs its own checked element driver or an equivalent direct
 compiled runtime. A feacheap run may serve as the compiled FE rung when that
 case has a reliable, checked driver. Neither route removes the need for an
-independent physics oracle.
+independent physics oracle. FeaCheap is a development-time host and is not
+distributed with this public repository; see [`CREDITS.md`](CREDITS.md).
+
+Treat every non-Abaqus UEL call adapter as code under test. It must populate
+the Abaqus request contract, including a supported procedure in `LFLAGS(1)`;
+the zero-initialized value `LFLAGS(1)=0` is not a procedure. Generated UELs
+return zeroed `RHS` and `AMATRX` for unsupported requests, so a broken adapter
+can look like immediate convergence. Include at least one free or interior DOF
+and assert a nonzero element contribution or a known analytical response. An
+all-Dirichlet run that exits successfully is not evidence that the UEL ran.
 
 ## 5. Add solver evidence only when useful
 

@@ -279,6 +279,21 @@ UEL, step, and output includes, but the user still owns Abaqus modeling choices
 such as boundary conditions, element sets, output requests, hourglass controls,
 and `UNSYMM`.
 
+### External UEL Host Contract
+
+Generated UEL entry points follow the Abaqus request contract. A direct driver
+or non-Abaqus FE host must pass `NRHS=1`, `LFLAGS(4)=0`, a supported procedure
+type in `LFLAGS(1)` (`1`, `2`, `71`, `72`, or `73`), and a supported request in
+`LFLAGS(3)` (`1`, `2`, or `5`). In particular, zero-initializing the array and
+leaving `LFLAGS(1)=0` does not select a default procedure.
+
+Unsupported combinations return the deliberately pre-zeroed `RHS` and
+`AMATRX`. This protects Abaqus from an invalid request, but an external host can
+misread it as immediate convergence. Test the adapter with at least one free or
+interior DOF and require a nonzero element contribution or a known analytical
+solution; process completion and prescribed boundary values alone do not prove
+that the generated UEL executed.
+
 ## Tensor DSL Rules
 
 The translator is a 3x3 continuum-mechanics DSL, not a general NumPy compiler.

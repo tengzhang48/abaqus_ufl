@@ -200,10 +200,14 @@ def check():
             if np.max(np.abs(rhs_m)) != 0.0 or np.max(np.abs(amx_m)) != 0.0:
                 raise AssertionError(
                     "LFLAGS(3)={} returned nonzero arrays".format(req))
-        rhs_p, amx_p2, _ = call_uel(module, coords, U, DU, lflags1=99)
-        if np.max(np.abs(rhs_p)) != 0.0 or np.max(np.abs(amx_p2)) != 0.0:
-            raise AssertionError(
-                "unsupported LFLAGS(1)=99 returned nonzero arrays")
+        for procedure in (0, 99):
+            rhs_p, amx_p2, _ = call_uel(
+                module, coords, U, DU, lflags1=procedure)
+            if (np.max(np.abs(rhs_p)) != 0.0 or
+                    np.max(np.abs(amx_p2)) != 0.0):
+                raise AssertionError(
+                    "unsupported LFLAGS(1)={} returned nonzero arrays".format(
+                        procedure))
         print("[PASS] unsupported request types and procedures return "
               "zeroed arrays")
 

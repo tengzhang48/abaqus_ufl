@@ -90,6 +90,12 @@ beliefs are wrong:
   tangent is symmetric and declare the Abaqus interface consistently, but do
   not make a user- or machine-specific solver configuration part of the
   package contract.
+- **Do not accept instant convergence as proof that a UEL ran.** A non-Abaqus
+  host must pass supported Abaqus procedure/request flags; `LFLAGS(1)=0` is
+  unsupported and makes a guarded generated UEL return zeroed arrays. Exercise
+  at least one free or interior DOF and require a nonzero element contribution
+  or a known analytical response. An all-Dirichlet process-exit check is
+  vacuous here.
 
 ## Generator-Friendly Python
 

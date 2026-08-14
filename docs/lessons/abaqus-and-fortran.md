@@ -76,6 +76,20 @@ debug.
       END DO
 ```
 
+### External hosts must populate Abaqus request flags
+
+A generated UEL dispatches on Abaqus's request metadata. A non-Abaqus host
+that initializes `LFLAGS` to zero but never assigns `LFLAGS(1)` presents an
+unsupported procedure. The UEL then returns the zeroed `RHS` and `AMATRX`, and
+the host may report false one-iteration convergence even though no element
+calculation ran.
+
+**Fix:** Make the adapter pass a real supported procedure and request (for
+example, `LFLAGS(1)=1` and `LFLAGS(3)=1` for a normal static evaluation). Add a
+regression with at least one free or interior DOF and check a nonzero element
+contribution or analytical field value. An all-Dirichlet success check can pass
+by echoing prescribed values and therefore cannot detect a dead UEL.
+
 ### Guard against degenerate (inverted) elements
 
 During Newton iterations in large-deformation problems, elements can
