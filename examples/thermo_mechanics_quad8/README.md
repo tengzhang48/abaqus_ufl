@@ -82,14 +82,13 @@ mixed-order layout: data line `1, 2, 11` for corner positions 1-4 and a
 second data line `5, 1, 2` so midside positions 5-8 carry displacement
 only, with `Unsymm` on the element card and `unsymm=YES` on `*Step`.
 The step is a `*Coupled Temperature-displacement` procedure: Abaqus
-rejects DOF-11 boundary conditions under `*Static`, so the deck mirrors
-the structure of an internal case that passed Abaqus 2022 with an
-earlier generated UEL (near-zero-stiffness overlay plus a small remote
-`CPE8T` element to activate DOF 11). Temperature is prescribed on the
-two bottom corners only, leaving the top-corner scalar DOFs free for a
-genuine transient solve. On 2026-07-30, the included deck and current
-generated source completed in Abaqus/Standard 2022 with 10 increments,
-zero cutbacks, and no numerical-problem or negative-eigenvalue warnings.
+rejects DOF-11 boundary conditions under `*Static`. A near-zero-stiffness
+overlay shares the UEL nodes, and a small remote `CPE8T` element activates
+DOF 11. Temperature is prescribed on the two bottom corners only, leaving
+the top-corner scalar DOFs free for a genuine transient solve. On 2026-07-30,
+the included deck and current generated source completed in Abaqus/Standard
+2022 with 10 increments, zero cutbacks, and no numerical-problem or
+negative-eigenvalue warnings.
 
 The generated UEL does not maintain the Abaqus `ENERGY` array, so
 energy-balance output is not meaningful for this element. Property

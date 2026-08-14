@@ -1,14 +1,13 @@
 *Heading
 abaqus_ufl scalar_diffusion_uel: coupled thermo-mechanical Quad4 UEL
-** STATUS: NOT YET RUN with the current generated source. This deck
-** documents the intended *USER ELEMENT interface (DOF lists, UNSYMM,
-** property order) and mirrors the deck structure of an internal case
-** that passed Abaqus 2022 with an earlier generated UEL: a coupled
-** temperature-displacement procedure carries the scalar on DOF 11
-** (Abaqus rejects DOF-11 boundaries under *STATIC), and a small remote
-** CPE4T element activates the temperature DOF in the procedure. The
-** license-free gates (check_reference/check_compiled/check_assembled)
-** are the verified evidence; an Abaqus rerun is a pending release gate.
+** VALIDATION: this included deck and the current generated source
+** completed 10 increments with zero cutbacks in Abaqus/Standard 2022
+** on 2026-07-30. See docs/ABAQUS_VALIDATION_2026-07-30.md; transient
+** solver artifacts are not retained in Git. The coupled
+** temperature-displacement procedure carries the scalar on DOF 11,
+** and a small remote CPE4T element activates that DOF. The reproducible
+** license-free gates are check_reference.py, check_assembled.py, and
+** check_compiled.py.
 *Preprint, echo=NO, model=NO, history=NO, contact=NO
 **
 ** The complex-step tangent is the full coupled dR/dU, which is NOT

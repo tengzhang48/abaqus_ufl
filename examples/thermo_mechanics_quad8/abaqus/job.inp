@@ -1,15 +1,13 @@
 *Heading
 abaqus_ufl thermo_mechanics_quad8: mixed-order thermo-mechanical Quad8 UEL
-** STATUS: NOT YET RUN with the current generated source. This deck
-** documents the intended *USER ELEMENT interface for the mixed-order
-** DOF lists (corners carry u1, u2 and T on DOF 11; midsides u1, u2
-** only) and mirrors the deck structure of an internal case that passed
-** Abaqus 2022 with an earlier generated UEL: a coupled
-** temperature-displacement procedure carries the scalar on DOF 11
-** (Abaqus rejects DOF-11 boundaries under *STATIC), and a small remote
-** CPE8T element activates the temperature DOF in the procedure. The
-** license-free gates (check_reference/check_compiled/check_assembled)
-** are the verified evidence; an Abaqus rerun is a pending release gate.
+** VALIDATION: this included deck and the current generated source
+** completed 10 increments with zero cutbacks in Abaqus/Standard 2022
+** on 2026-07-30. See docs/ABAQUS_VALIDATION_2026-07-30.md; transient
+** solver artifacts are not retained in Git. The coupled
+** temperature-displacement procedure carries the corner scalar on
+** DOF 11, while midside nodes carry displacement only; a small remote
+** CPE8T element activates DOF 11. The reproducible license-free gates
+** are check_reference.py, check_assembled.py, and check_compiled.py.
 *Preprint, echo=NO, model=NO, history=NO, contact=NO
 **
 ** Full coupled complex-step tangent (nonsymmetric): Unsymm on the

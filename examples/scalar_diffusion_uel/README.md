@@ -83,10 +83,9 @@ to end in the exact Fortran that Abaqus would compile.
 `*Step` (the complex-step tangent is the full nonsymmetric coupled
 `dR/dU`), and `*UEL PROPERTY` in the declared props order. The step is a
 `*Coupled Temperature-displacement` procedure: Abaqus rejects DOF-11
-boundary conditions under `*Static`, so the deck mirrors the structure
-of an internal case that passed Abaqus 2022 (near-zero-stiffness overlay
-sharing the UEL nodes plus a small remote `CPE4T` element whose material
-carries density/conductivity/specific heat to activate DOF 11).
+boundary conditions under `*Static`. A near-zero-stiffness overlay shares
+the UEL nodes, and a small remote `CPE4T` element whose material carries
+density/conductivity/specific heat activates DOF 11.
 Temperature is prescribed on the left edge only, leaving the right-edge
 scalar DOFs free for a genuine transient solve. On 2026-07-30, the included
 deck and current generated source completed in Abaqus/Standard 2022 with 10
