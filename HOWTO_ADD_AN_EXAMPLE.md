@@ -75,7 +75,7 @@ The working template ships a tested one-point f2py UMAT driver. A UEL or
 coupled example needs its own checked element driver or an equivalent direct
 compiled runtime. A feacheap run may serve as the compiled FE rung when that
 case has a reliable, checked driver. Neither route removes the need for an
-independent physics oracle. FeaCheap is a development-time host and is not
+independent physics oracle. `feacheap` is a development-time host and is not
 distributed with this public repository; see [`CREDITS.md`](CREDITS.md).
 
 Treat every non-Abaqus UEL call adapter as code under test. It must populate
