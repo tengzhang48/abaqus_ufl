@@ -6,6 +6,10 @@ theory-to-compiled-code-to-output example pipeline.
 
 ## Usage
 
+- [LIVEBENCH.md](LIVEBENCH.md) — runnable f2py benchmarks and the live results
+  page, including the serial FE mesh oracles.
+- [Serial FE runtime](../abaqus_ufl/fe/README.md) — the optional standard Quad4
+  mesh driver, compiled adapter, and supported API.
 - [API_USAGE.md](API_USAGE.md) — import patterns, the generator entry points
   (`generate_umat` / `generate_uel`), the tensor DSL rules, and the
   verification ladder.

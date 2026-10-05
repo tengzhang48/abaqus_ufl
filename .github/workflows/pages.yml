@@ -1,35 +1,9 @@
-name: Deploy abaqus_ufl website
+name: Livebench and website
 
 on:
   push:
     branches: [main]
-    paths:
-      - "web/**"
-      - "examples/**"
-      - "paper_examples/**"
-      - "docs/ABAQUS_VALIDATION_2026-07-30.md"
-      - "docs/API_USAGE.md"
-      - "docs/theory.md"
-      - "README.md"
-      - "HOWTO_ADD_AN_EXAMPLE.md"
-      - "CITATION.cff"
-      - "CREDITS.md"
-      - "LICENSE"
-      - ".github/workflows/pages.yml"
   pull_request:
-    paths:
-      - "web/**"
-      - "examples/**"
-      - "paper_examples/**"
-      - "docs/ABAQUS_VALIDATION_2026-07-30.md"
-      - "docs/API_USAGE.md"
-      - "docs/theory.md"
-      - "README.md"
-      - "HOWTO_ADD_AN_EXAMPLE.md"
-      - "CITATION.cff"
-      - "CREDITS.md"
-      - "LICENSE"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -40,7 +14,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  livebench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Fortran compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gfortran
+      - name: Install package and build tools
+        run: python -m pip install -e ".[dev]"
+      - name: Run all seven benchmarks through f2py
+        run: python tools/run_livebench.py
+      - name: Retain report and logs, including numerical failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livebench-results
+          path: benchmark-results/
+          if-no-files-found: error
+
   build:
+    needs: livebench
+    if: ${{ !cancelled() && (needs.livebench.result == 'success' || needs.livebench.result == 'failure') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -64,21 +66,37 @@ jobs:
       - name: Install locked website dependencies
         run: npm ci
 
+      - name: Use this run's benchmark report and logs
+        uses: actions/download-artifact@v4
+        with:
+          name: livebench-results
+          path: web/public/livebench
+
+      - name: Require a complete benchmark report
+        run: node scripts/check-livebench.mjs
+
       - name: Check source evidence, types, tests, and production build
         run: npm run check
 
       - name: Configure GitHub Pages
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.repository == 'tengzhang48/abaqus_ufl' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/configure-pages@v6
 
       - name: Upload website artifact
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.repository == 'tengzhang48/abaqus_ufl' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v5
         with:
           path: web/dist
 
+      - name: Retain website preview for pull requests and forks
+        if: github.event_name == 'pull_request' || github.repository != 'tengzhang48/abaqus_ufl'
+        uses: actions/upload-artifact@v4
+        with:
+          name: livebench-website-preview
+          path: web/dist
+
   deploy:
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.repository == 'tengzhang48/abaqus_ufl' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10

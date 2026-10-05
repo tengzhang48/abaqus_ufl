@@ -8,6 +8,13 @@ self-contained Fortran for Abaqus/Standard.
 [source repository](https://github.com/tengzhang48/abaqus_ufl) ·
 [fresh-clone validation record](docs/ABAQUS_VALIDATION_2026-07-30.md)
 
+**Published paper:** Teng Zhang, [Making coupled-field Abaqus user elements
+simple](https://doi.org/10.1016/j.eml.2026.102530), *Extreme Mechanics Letters*
+**89** (2026), 102530.
+
+[![Livebench](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml/badge.svg)](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml)
+[Live benchmark results](https://tengzhang48.github.io/abaqus_ufl/#livebench)
+
 The practical aim is not simply to write Fortran faster. It is to separate the
 parts of a user subroutine that are otherwise difficult to audit: field and
 state definitions, constitutive responses, residual terms, tangent blocks,
@@ -84,6 +91,45 @@ For a deliberately simple directory that can be copied and adapted, see
 
 Requirements for Python-only generation are Python 3.8 or newer, NumPy, and
 SymPy.
+
+## Livebench
+
+Run all six public examples and the serial FE mesh benchmark without an
+Abaqus installation or license:
+
+```bash
+pip install -e ".[dev]"
+python tools/run_livebench.py
+```
+
+Install `gfortran` first (for example, `sudo apt-get install gfortran` on
+Ubuntu). The runner executes independent reference checks, assembled checks
+for the two UELs, and deterministic regeneration, compilation, and direct
+f2py calls for every example. It saves full-precision numerical errors, check
+status, elapsed time, source revision, environment, and logs in
+`benchmark-results/`. Missing tools and failed checks produce a failing exit
+code; they are never counted as passes. The seventh case checks affine
+mechanics and transient diffusion on small meshes using the optional
+[`abaqus_ufl.fe` runtime](abaqus_ufl/fe/README.md).
+
+The [project website](https://tengzhang48.github.io/abaqus_ufl/#livebench)
+shows the latest published run. GitHub Actions reruns the livebench on relevant
+pushes and pull requests; repository collaborators can also select **Run
+workflow** in [Livebench and website](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml).
+Other users can run locally or run the workflow in their own fork. See
+[the livebench guide](docs/LIVEBENCH.md) for individual cases and report details.
+
+These runs check the generated subroutine at material-point or element level.
+The paper-scale Abaqus analyses retain their separate evidence records.
+
+## Optional serial FE runtime
+
+`abaqus_ufl.fe` provides a small SciPy mesh driver and a packaged f2py UEL
+adapter. Install it with `pip install -e ".[fe]"` and run
+`python tools/check_fe_runtime.py`. It currently supports standard 2D Quad4
+elements with uniform degree-one nodal fields and no material/local state
+variables. Transient nodal history is explicit. Read the
+[runtime API and verification scope](abaqus_ufl/fe/README.md) before adapting it.
 
 ## What a passing check means
 
@@ -174,9 +220,26 @@ acknowledgements, and open provenance items are recorded in
 
 ## Citation
 
-Citation metadata is provided in [`CITATION.cff`](CITATION.cff). Until a
-release DOI is recorded there, cite the repository URL and the exact version
-or commit used.
+Please cite the published paper and record the repository version or commit
+used. GitHub's **Cite this repository** uses the preferred article citation in
+[`CITATION.cff`](CITATION.cff). The article DOI identifies the paper; a separate
+software archive DOI remains pending.
+
+```bibtex
+@article{zhang2026abaqusufl,
+  author = {Zhang, Teng},
+  title = {Making coupled-field Abaqus user elements simple},
+  journal = {Extreme Mechanics Letters},
+  volume = {89},
+  pages = {102530},
+  year = {2026},
+  doi = {10.1016/j.eml.2026.102530}
+}
+```
+
+The [publication metadata and sources](docs/publication.json) were verified
+against Elsevier and Crossref on 5 October 2026. The publisher assigns the
+December 2026 issue; no separate online publication date was inferred.
 
 ## License
 
