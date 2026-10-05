@@ -108,7 +108,7 @@ def fd_jaumann_tangent(module, F1, eps=1.0e-6):
     return stress0, tangent
 
 
-def check():
+def check(*, record=None):
     if shutil.which("gfortran") is None:
         raise RuntimeError("gfortran is required for the compiled pipeline gate")
 
@@ -196,6 +196,30 @@ def check():
                 "(relative error {:.3e})".format(tangent_error)
             )
         print("[PASS] DDSDDE vs Jaumann-corrected FD tangent")
+        if record is not None:
+            from tools.livebench_data import comparison_curve
+            stretches = np.linspace(0.75, 1.5, 41)
+            values = [call_umat(module, np.diag([lam, 1.0, 1.0]))[0][0] for lam in stretches]
+            expected = G * (stretches - 1 / stretches) + K * np.log(stretches) / stretches
+            record(comparison_curve(
+                "stretch", "Constrained uniaxial stretch", "Stretch λ", "Cauchy stress σ₁₁ (model units)",
+                stretches, values, expected,
+                "F = diag(λ, 1, 1); transverse stretches are fixed. G = 0.5, K = 50. "
+                "The reference is G(λ − 1/λ) + K log(λ)/λ; this is not a traction-free uniaxial test."))
+            shear = np.linspace(0, 1, 41)
+            stresses = []
+            for gamma in shear:
+                F = np.eye(3)
+                F[0, 1] = gamma
+                stresses.append(call_umat(module, F)[0])
+            record(comparison_curve(
+                "shear", "Simple shear", "Engineering shear γ", "Shear stress σ₁₂ (model units)",
+                shear, np.asarray(stresses)[:, 3], G * shear,
+                "F = I + γ e₁ ⊗ e₂, J = 1. The closed-form shear stress is Gγ, with G = 0.5."))
+            record(comparison_curve(
+                "normal", "Normal stress in shear", "Engineering shear γ", "Normal stress σ₁₁ (model units)",
+                shear, np.asarray(stresses)[:, 0], G * shear ** 2,
+                "The same compiled shear calls give the normal-stress effect σ₁₁ = Gγ²."))
         return {
             "stress_max_abs_error": max(stress_errors),
             "tangent_rel_error": tangent_error,

@@ -1,9 +1,9 @@
 {
-  "neo_hookean_umat": {"title": "Neo-Hookean", "target": "UMAT", "directory": "examples/neo_hookean_umat", "scripts": ["check_reference.py", "check_compiled.py"]},
-  "ogden_umat": {"title": "Ogden", "target": "UMAT", "directory": "examples/ogden_umat", "scripts": ["check_reference.py", "check_compiled.py"]},
-  "small_strain_j2_umat": {"title": "J2 plasticity", "target": "UMAT", "directory": "examples/small_strain_j2_umat", "scripts": ["check_reference.py", "check_compiled.py"]},
-  "small_strain_viscoelastic_umat": {"title": "Viscoelastic relaxation", "target": "UMAT", "directory": "examples/small_strain_viscoelastic_umat", "scripts": ["check_reference.py", "check_compiled.py"]},
-  "scalar_diffusion_uel": {"title": "Thermo-mechanical Quad4", "target": "UEL", "directory": "examples/scalar_diffusion_uel", "scripts": ["check_reference.py", "check_assembled.py", "check_compiled.py"]},
-  "thermo_mechanics_quad8": {"title": "Thermo-mechanical Quad8", "target": "UEL", "directory": "examples/thermo_mechanics_quad8", "scripts": ["check_reference.py", "check_assembled.py", "check_compiled.py"]},
-  "serial_fe": {"title": "Serial FE mesh solves", "target": "FE", "directory": "tools", "scripts": ["check_fe_runtime.py"]}
+  "neo_hookean_umat": {"title": "Neo-Hookean", "target": "UMAT", "directory": "examples/neo_hookean_umat", "scripts": ["check_reference.py", "check_compiled.py"], "plots": ["stretch", "shear", "normal"]},
+  "ogden_umat": {"title": "Ogden", "target": "UMAT", "directory": "examples/ogden_umat", "scripts": ["check_reference.py", "check_compiled.py"], "plots": ["stretch"]},
+  "small_strain_j2_umat": {"title": "J2 plasticity", "target": "UMAT", "directory": "examples/small_strain_j2_umat", "scripts": ["check_reference.py", "check_compiled.py"], "plots": ["stress", "plastic-strain"]},
+  "small_strain_viscoelastic_umat": {"title": "Viscoelastic relaxation", "target": "UMAT", "directory": "examples/small_strain_viscoelastic_umat", "scripts": ["check_reference.py", "check_compiled.py"], "plots": ["relaxation"]},
+  "scalar_diffusion_uel": {"title": "Thermo-mechanical Quad4", "target": "UEL", "directory": "examples/scalar_diffusion_uel", "scripts": ["check_reference.py", "check_assembled.py", "check_compiled.py"], "plots": ["thermal-load", "storage"]},
+  "thermo_mechanics_quad8": {"title": "Thermo-mechanical Quad8", "target": "UEL", "directory": "examples/thermo_mechanics_quad8", "scripts": ["check_reference.py", "check_assembled.py", "check_compiled.py"], "plots": ["pull-back"]},
+  "serial_fe": {"title": "Serial FE mesh solves", "target": "FE", "directory": "tools", "scripts": ["check_fe_runtime.py"], "plots": ["temperature-16", "temperature-8", "temperature-4", "temperature-field", "convergence", "patch"]}
 }

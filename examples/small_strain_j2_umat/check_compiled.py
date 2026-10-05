@@ -81,7 +81,7 @@ def call_umat(module, stress, statev, dstran, stran, time_now, dtime):
     )
 
 
-def check():
+def check(*, record=None):
     if shutil.which("gfortran") is None:
         raise RuntimeError("gfortran is required for the compiled pipeline gate")
 
@@ -149,6 +149,7 @@ def check():
         statev = np.zeros(1)
         elastic_checked = False
         ep_errors = []
+        shear_path, stresses, plastic_strains, reference_stresses, reference_ep = [0.0], [0.0], [0.0], [0.0], [0.0]
         for inc in range(NINC):
             stran = inc * dstran
             stress, statev, ddsdde, pnewdt = call_umat(
@@ -160,6 +161,11 @@ def check():
                                      + str(inc + 1))
             e_now = (inc + 1) * de
             tau_ref, ep_ref = closed_form(e_now)
+            shear_path.append(2 * e_now)
+            stresses.append(float(stress[3]))
+            plastic_strains.append(float(statev[0]))
+            reference_stresses.append(tau_ref)
+            reference_ep.append(ep_ref)
             if abs(stress[3] - tau_ref) > 1e-10:
                 raise AssertionError(
                     "increment {}: compiled shear stress {} != closed form "
@@ -199,6 +205,16 @@ def check():
         print("[PASS] STATEV(1) round trip matches closed-form ep")
         print("[PASS] elastic DDSDDE(4,4)=G; plastic DDSDDE(4,4)="
               "GH/(3G+H) exact")
+        if record is not None:
+            from tools.livebench_data import comparison_curve
+            description = ("40 proportional pure-shear increments cross elastic yield into linear isotropic hardening. "
+                           "G = 10, λ = 20, σy = 0.1, H = 5; γ = 2ε₁₂. "
+                           "The reference is the hand-derived J2 consistency solution, not another material implementation.")
+            record(comparison_curve("stress", "Yield and hardening", "Engineering shear γ", "Shear stress τ (model units)",
+                                    shear_path, stresses, reference_stresses, description))
+            record(comparison_curve("plastic-strain", "Accumulated plastic strain", "Engineering shear γ", "Equivalent plastic strain εp",
+                                    shear_path, plastic_strains, reference_ep,
+                                    "STATEV(1) is read back after each increment. Plastic strain remains zero before yield."))
         return {
             "final_tau_abs_error": abs(float(stress[3]) - tau_ref),
             "max_ep_abs_error": max(ep_errors),

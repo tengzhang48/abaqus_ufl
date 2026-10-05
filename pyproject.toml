@@ -22,6 +22,7 @@ fe = [
 ]
 dev = [
     "build",
+    "matplotlib>=3.5",
     "pytest",
     "scipy",
     "meson",

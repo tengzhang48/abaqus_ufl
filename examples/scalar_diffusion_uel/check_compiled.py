@@ -73,7 +73,7 @@ def call_uel(module, coords, u, du, dtime=0.1, lflags3=1, lflags1=72):
     return rhs, amatrx, pnewdt
 
 
-def check():
+def check(*, record=None):
     if shutil.which("gfortran") is None:
         raise RuntimeError("gfortran is required for the compiled pipeline gate")
 
@@ -219,6 +219,29 @@ def check():
                 "(PNEWDT={})".format(pnewdt_bad))
         print("[PASS] nonpositive det(F) requests a cutback")
 
+        if record is not None:
+            from tools.livebench_data import comparison_curve
+            temperatures = np.linspace(0, 10, 31)
+            loads, storage = [], []
+            dt = 0.1
+            for temperature in temperatures:
+                U = set_T(np.zeros(12), [temperature] * 4)
+                rhs, _, _ = call_uel(module, unit_square(), U, np.zeros(12), dtime=dt)
+                loads.append(float(rhs[3]))
+                rhs, _, _ = call_uel(module, unit_square(), U, U.copy(), dtime=dt)
+                storage.append(float(-np.sum(rhs[T_DOFS])))
+            mat = problem._mat
+            record(comparison_curve(
+                "thermal-load", "Thermal expansion coupling", "Uniform temperature T (model units)", "Right-corner thermal RHS (model units)",
+                temperatures, loads, 0.5 * mat.K * mat.alpha * temperatures,
+                "A unit Quad4 is fully constrained and uniformly heated, with zero temperature increment. "
+                "Thermal pressure produces a right-corner x load KαT/2 in the Abaqus RHS convention. "
+                "K = 10, α = 0.001; integration gives the exact factor 1/2."))
+            record(comparison_curve(
+                "storage", "Transient heat balance", "Temperature increment ΔT (model units)", "Integrated storage rate (model units)",
+                temperatures, storage, mat.rho_cp * temperatures / dt,
+                "A uniform heating step on a unit-area Quad4 has no conductive gradient. "
+                "The signed thermal residual sums to ρcp ΔT/Δt; ρcp = 1 and Δt = 0.1."))
         return {
             "max_rhs_abs_error": max(rhs_errors),
             "max_amatrx_rel_error": max(amx_errors),

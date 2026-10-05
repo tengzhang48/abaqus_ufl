@@ -117,7 +117,7 @@ def fd_jaumann_tangent(module, F1, props, eps=1.0e-6):
     return stress0, tangent
 
 
-def check():
+def check(*, record=None):
     if shutil.which("gfortran") is None:
         raise RuntimeError("gfortran is required for the compiled pipeline gate")
 
@@ -236,6 +236,21 @@ def check():
             print("[PASS] DDSDDE vs FD-Jaumann tangent at {} spectrum".format(
                 name))
 
+        if record is not None:
+            from tools.livebench_data import comparison_curve
+            stretches = np.linspace(0.75, 1.75, 41)
+            values, expected = [], []
+            for lam in stretches:
+                principal = np.array([lam, 1 / math.sqrt(lam), 1 / math.sqrt(lam)])
+                values.append(call_umat(module, np.diag(principal), props)[0][0])
+                powers = principal ** ALPHA
+                expected.append(2 * MU / ALPHA * (powers[0] - np.mean(powers)))
+            record(comparison_curve(
+                "stretch", "Isochoric uniaxial stretch", "Stretch λ", "Cauchy stress σ₁₁ (model units)",
+                stretches, values, expected,
+                "F = diag(λ, λ⁻¹ᐟ², λ⁻¹ᐟ²), J = 1; μ = 1, α = 3.5, K = 100. "
+                "Direct principal-stretch powers give the reference without an eigensolver. "
+                "The two transverse eigenvalues are repeated throughout the sweep."))
         return {
             "stress_parity_max_abs_error": max(parity_errors),
             "alpha2_closed_form_max_abs_error": closed_form_error,

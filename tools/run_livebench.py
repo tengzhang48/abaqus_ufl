@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 REPOSITORY = "https://github.com/tengzhang48/abaqus_ufl"
 CASES = json.loads((ROOT / "tools/livebench_cases.json").read_text(encoding="utf-8"))
 CHECK_LABELS = {
@@ -35,15 +37,18 @@ CHECK_LABELS = {
 # stdout. Numerical metrics come directly from its return value; assertions and
 # the example's numerical tolerances remain the acceptance gate.
 CHECK_COMMAND = """
+import inspect
 import json
 from pathlib import Path
 import runpy
 import sys
 sys.path.insert(0, str(Path(sys.argv[1]).parent))
 namespace = runpy.run_path(sys.argv[1])
-result = namespace['check']()
+plots = []
+check = namespace['check']
+result = check(record=plots.append) if 'record' in inspect.signature(check).parameters else check()
 metrics = result if isinstance(result, dict) else {}
-Path(sys.argv[2]).write_text(json.dumps(metrics, allow_nan=False), encoding='utf-8')
+Path(sys.argv[2]).write_text(json.dumps({'metrics': metrics, 'plots': plots}, allow_nan=False), encoding='utf-8')
 """
 
 
@@ -62,7 +67,7 @@ def _command_line(command):
 
 def _environment():
     versions = {}
-    for name in ("numpy", "sympy", "scipy", "meson", "ninja"):
+    for name in ("numpy", "sympy", "scipy", "meson", "ninja", "matplotlib"):
         try:
             versions[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
@@ -108,7 +113,7 @@ def _validate_metrics(metrics):
     return metrics
 
 
-def run_check(case_id, script, output, timeout):
+def run_check(case_id, script, output, timeout, source=None):
     started = time.perf_counter()
     log_path = Path("logs") / (case_id + "-" + Path(script).stem + ".log")
     check = {
@@ -118,6 +123,7 @@ def run_check(case_id, script, output, timeout):
         "exit_code": None,
         "duration_seconds": 0.0,
         "metrics": {},
+        "plots": [],
         "log": log_path.as_posix(),
     }
     path = ROOT / CASES[case_id]["directory"] / script
@@ -148,10 +154,14 @@ def run_check(case_id, script, output, timeout):
                 log += "\n[TIMEOUT] check exceeded {} seconds\n".format(timeout)
             check["exit_code"] = process.returncode
             if process.returncode == 0 and check["status"] != "timed_out":
-                metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-                check["metrics"] = _validate_metrics(metrics)
+                result = json.loads(metrics_path.read_text(encoding="utf-8"))
+                check["metrics"] = _validate_metrics(result["metrics"])
+                check["plots"] = result["plots"]
+                if check["plots"]:
+                    from tools.livebench_figures import write_figures
+                    write_figures(check["plots"], output, case_id, CASES[case_id]["title"], source or _source())
                 check["status"] = "passed"
-    except (OSError, ValueError) as error:
+    except (OSError, ValueError, RuntimeError, ImportError, KeyError, TypeError) as error:
         log += "\n[ERROR] {}: {}\n".format(type(error).__name__, error)
     check["duration_seconds"] = round(time.perf_counter() - started, 3)
     (output / log_path).write_text(log, encoding="utf-8")
@@ -176,7 +186,7 @@ def run_benchmarks(case_ids, output, timeout=300.0):
         scripts = case["scripts"]
         checks = []
         for script in scripts:
-            check = run_check(case_id, script, output, timeout)
+            check = run_check(case_id, script, output, timeout, source=report["source"])
             checks.append(check)
             print("[{}] {} / {} ({:.2f}s)".format(
                 check["status"].upper(), case_id, script,

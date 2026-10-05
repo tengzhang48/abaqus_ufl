@@ -36,21 +36,42 @@ for an affine mechanics patch and three refined transient diffusion meshes.
 Both tests have independent quantitative closed-form oracles. The case
 manifest is `tools/livebench_cases.json`, shared by the runner and website.
 
-The Python 3.12 CI suite delegates these same compiled bundle and mesh gates
-to the livebench job, avoiding a second execution on that Python version.
-Python 3.10 retains them for compatibility coverage. Independent generator,
-compiler-helper, manifest, and failure-path tests remain in both CI jobs.
+CI runs the complete test suite on Python 3.10 and 3.12. The livebench job
+also runs the bundles on Python 3.12 to produce the website's numerical
+report. Compiled coverage remains independent of the website workflow.
+
+The livebench records 16 plots and fields during these checks:
+
+| Case | Numerical comparisons |
+| --- | --- |
+| Neo-Hookean | Constrained stretch, shear stress, and normal stress in shear versus closed forms |
+| Ogden | Isochoric stretch versus direct principal-stretch powers, including repeated eigenvalues |
+| J2 | Shear stress and plastic strain versus the exact consistency solution at every increment |
+| Viscoelastic | Stress relaxation versus the exact discrete recurrence, with the continuous solution shown separately |
+| Quad4 | Thermal nodal loading and integrated heat storage versus closed forms |
+| Quad8 | Deformed thermal-load ratio versus the exact C⁻¹ pull-back factor 1/λ² |
+| Serial FE | Three temperature profiles, the temperature field, spatial convergence, and an affine displacement patch |
+
+Optional `record` callbacks capture the existing state histories and mesh
+solutions. Additional material/element sweeps reuse the module already
+compiled by the check. Exporting plots does not build a second copy of the
+Fortran module or repeat the mesh solves. Every response-curve sample is
+gated against its independent reference; all numerical data remain finite.
+Model-unit labels and setup parameters accompany the plots.
 
 The runner saves:
 
 - `report.json`: every required check's result, returned numerical metrics,
+  response curves and nodal mesh fields,
   wall time, source commit and dirty-tree flag, Python/compiler/package
   versions, and GitHub Actions run URL when available;
 - `logs/`: the complete output and traceback of each check.
+- `figures/`: standalone Matplotlib SVG figures for every view and each
+  response-curve discrepancy, including the setup and source revision.
 
 Metric values come from the check functions' return values, not rounded
 console output. Checks that return no metrics still retain their assertions
-and logs. Timings include generation and compilation where applicable and
+and logs. Timings include generation, compilation, and figure export where applicable and
 are diagnostics for the recorded environment, not comparative solver-speed
 claims. Exit status is zero only when all requested checks pass.
 
@@ -69,11 +90,28 @@ result. A setup or website-build failure leaves the previous published
 report in place; the displayed timestamp and commit identify that older
 run. Pull requests and forks do not deploy the upstream website.
 
-The page permits filtering results by case type and status and downloading the
-JSON and logs. Without an available report it shows an unavailable state,
-never an inferred pass. Browsers inspect recorded results; they do not run
-Fortran. To inspect a local report on the site, copy its directory into
-`web/public/livebench/`, then follow `web/README.md`.
+Choose a physical problem, then select its response, field, or convergence
+view. Curves overlay the computed samples and the independent reference;
+the difference view exposes discrepancies that are hidden by overlapping
+lines. Pointer and keyboard controls inspect individual samples or nodes.
+CSV downloads retain the original numerical precision. Downloadable SVG
+figures are generated with Matplotlib from the same recorded arrays.
+The source, metrics, logs, and run environment remain available
+in the details.
+
+Plot data are optional additions to the version-1 report format. Older
+reports remain readable and explicitly state that response data were not
+recorded. The publication gate requires all current plot IDs for successful
+cases. Invalid arrays, nonfinite data, inconsistent agreement claims, or
+invalid mesh connectivity are rejected. Without an available report the
+page shows an unavailable state. Browsers inspect recorded results; they
+do not run Fortran. To preview local data, run:
+
+```bash
+python tools/run_livebench.py --output web/public/livebench
+cd web
+npm run dev
+```
 
 ## Scientific scope
 

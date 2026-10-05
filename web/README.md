@@ -4,11 +4,21 @@ This directory is the maintainable source for the `abaqus_ufl` GitHub Pages
 website. The deployed site is a static React/TypeScript build; it does not run
 Abaqus or execute generated subroutines in a visitor's browser.
 
-The livebench section reads `public/livebench/report.json` and lets visitors
-filter recorded cases, inspect numerical metrics, and download individual
-logs. The Python runner and browser share `../tools/livebench_cases.json`.
-The report parser rejects missing checks, duplicate cases, nonfinite metrics,
-and contradictory pass/fail statuses. An unavailable report stays unavailable.
+The livebench reads `public/livebench/report.json` and presents recorded
+stress/strain histories, relaxation, thermal-element comparisons, and FE
+profiles, mesh fields, and convergence. Visitors select a physical problem
+and view, overlay reference curves, inspect samples, and download CSV/SVG
+data. Scientific plots use the actual f2py results; browser controls do not
+recompute them. Metrics and logs are in each case's details.
+Standalone SVGs are rendered by Matplotlib from the recorded arrays and
+shipped with the report; CSV downloads use the same full-precision data.
+
+The Python runner and browser share `../tools/livebench_cases.json`.
+The parser rejects missing checks, duplicate cases, nonfinite metrics or
+plot arrays, inconsistent agreement claims, and invalid mesh connectivity.
+Older reports without plots show an explicit data-unavailable message.
+The publication gate requires every declared plot for successful cases.
+An unavailable report stays unavailable.
 Published article metadata comes from `../docs/publication.json` and is checked
 against `../CITATION.cff` during the build.
 

@@ -10,5 +10,12 @@ assert.equal(report.source.dirty, false, "a published Actions report must come f
 assert.match(report.source.commit, /^[a-f0-9]{40}$/);
 for (const item of report.cases) {
   for (const check of item.checks) await access(new URL(check.log, base));
+  if (item.status === "passed") assert.deepEqual(item.checks.flatMap((check) => check.plots ?? []).map((plot) => plot.id), manifest[item.id].plots, `record every numerical plot for ${item.id}`);
+  for (const plot of item.checks.flatMap((check) => check.plots ?? [])) {
+    if (item.status === "passed") assert.ok(plot.figure, `export a standalone figure for ${item.id}/${plot.id}`);
+    if (plot.figure) await access(new URL(plot.figure, base));
+    if (plot.kind === "curve" && plot.comparison && item.status === "passed") assert.ok(plot.difference_figure);
+    if (plot.kind === "curve" && plot.difference_figure) await access(new URL(plot.difference_figure, base));
+  }
 }
 console.log(`Checked a complete ${report.status} report and its ${report.cases.flatMap((item) => item.checks).length} logs.`);
