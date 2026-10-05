@@ -70,7 +70,7 @@ def call_uel(module, coords, u, du, dtime=0.1, lflags3=1, lflags1=72):
     return rhs, amatrx, pnewdt
 
 
-def check():
+def check(*, record=None):
     if shutil.which("gfortran") is None:
         raise RuntimeError("gfortran is required for the compiled pipeline gate")
 
@@ -212,6 +212,21 @@ def check():
                 "(PNEWDT={})".format(pnewdt_bad))
         print("[PASS] nonpositive det(F) requests a cutback")
 
+        if record is not None:
+            from tools.livebench_data import comparison_curve
+            from check_reference import KAPPA
+            stretches = np.linspace(0.8, 1.8, 41)
+            loads = []
+            for lam in stretches:
+                U = build_U(unit_square(), lam, lambda x, y: 2.0 * x)
+                rhs, _, _ = call_uel(module, unit_square(), U, np.zeros(NDOFEL))
+                loads.append(float(rhs[2]) / KAPPA)
+            record(comparison_curve(
+                "pull-back", "Heat flux under stretch", "Homogeneous stretch λ", "Thermal load / undeformed load",
+                stretches, loads, 1 / stretches ** 2,
+                "A quadratic-displacement, bilinear-temperature Quad8 is stretched in x with T = 2X. "
+                "The C⁻¹ flux pull-back gives an exact nodal thermal-load ratio 1/λ². "
+                "This curve compares the compiled UEL directly with the integrated closed form."))
         return {
             "max_rhs_abs_error": max(rhs_errors),
             "max_amatrx_rel_error": max(amx_errors),

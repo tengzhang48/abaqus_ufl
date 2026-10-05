@@ -52,6 +52,21 @@ def test_metric_precision_is_retained_and_nan_is_rejected(tmp_path, monkeypatch)
     assert result["status"] == "failed"
 
 
+def test_response_data_is_recorded_during_the_same_check(tmp_path, monkeypatch):
+    output = _case(tmp_path, monkeypatch,
+                   "calls = 0\ndef check(*, record=None):\n"
+                   "    global calls\n    calls += 1\n"
+                   "    record({'kind': 'curve', 'id': 'curve', 'title': 'Response', 'description': 'Test samples', "
+                   "'x': [0, 0.1], 'x_label': 'strain', 'y_label': 'stress', 'x_scale': 'linear', 'y_scale': 'linear', "
+                   "'series': [{'label': 'Compiled', 'role': 'computed', 'values': [0, 1.234567890123456]}]})\n"
+                   "    return {'calls': calls}\n")
+    result = runner.run_check("broken", "check_reference.py", output, 5)
+    assert result["status"] == "passed"
+    assert result["metrics"]["calls"] == 1
+    assert result["plots"][0]["series"][0]["values"][1] == 1.234567890123456
+    assert (output / result["plots"][0]["figure"]).is_file()
+
+
 @pytest.mark.parametrize("timeout", ["0", "-1", "nan", "inf"])
 def test_invalid_timeout_is_rejected(timeout):
     with pytest.raises(SystemExit) as error:

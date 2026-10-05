@@ -82,7 +82,7 @@ def call_umat(module, stress, statev, dstran, stran, time_now):
     )
 
 
-def check():
+def check(*, record=None):
     if shutil.which("gfortran") is None:
         raise RuntimeError("gfortran is required for the compiled pipeline gate")
 
@@ -148,6 +148,7 @@ def check():
         statev = np.zeros(9)
         stran = np.zeros(6)
         tau_errors, statev_errors = [], []
+        stresses, references = [], []
         for n in range(1, NINC + 1):
             dstran = step if n == 1 else hold
             stress, statev, ddsdde, pnewdt = call_umat(
@@ -156,6 +157,8 @@ def check():
             stran = stran + dstran
 
             tau_ref = discrete_relaxation(n)
+            stresses.append(float(stress[3]))
+            references.append(tau_ref)
             tau_errors.append(abs(float(stress[3]) - tau_ref))
             if tau_errors[-1] > 1e-12:
                 raise AssertionError(
@@ -195,6 +198,19 @@ def check():
         print("[PASS] tensor STATEV column-major layout (symmetric shear "
               "slots, empty diagonal)")
         print("[PASS] exact SLS algorithmic tangent at every increment")
+        if record is not None:
+            from tools.livebench_data import comparison_curve
+            times = np.arange(1, NINC + 1) * DT
+            continuum = 2 * SHEAR * (G_INF + G_V * np.exp(-times / TAU))
+            record(comparison_curve(
+                "relaxation", "Step-shear stress relaxation", "Time t / τ", "Shear stress τ₁₂ (model units)",
+                times / TAU, stresses, references,
+                "Engineering shear γ = 0.02 is applied in the first step, then held. "
+                "G∞ = 10, Gv = 5, relaxation time τ = 0.5, Δt = 0.1. "
+                "The exact backward-Euler recurrence is the verification reference. "
+                "The continuous solution shows the finite-time-step difference.",
+                reference_label="Exact backward Euler",
+                extra_series=[{"label": "Continuous solution", "role": "guide", "values": continuum.tolist()}]))
         return {
             "max_tau_abs_error": max(tau_errors),
             "max_statev_abs_error": max(statev_errors),

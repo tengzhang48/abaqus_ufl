@@ -51,3 +51,42 @@ test("a real failed check stays failed, while selected subsets remain explicit",
   subset.cases = subset.cases.slice(0, 1);
   assert.equal(validateReport(subset, manifest).cases.length, 1);
 });
+
+const curve = () => ({
+  kind: "curve", id: "stress", title: "Stress", description: "Closed-form comparison",
+  x_label: "strain", y_label: "stress", x: [0, 0.1], x_scale: "linear", y_scale: "linear",
+  series: [{label: "Compiled", role: "computed", values: [0, 1]}, {label: "Reference", role: "reference", values: [0, 1]}],
+  comparison: {max_abs_error: 0, rtol: 1e-9, atol: 1e-11},
+});
+
+test("plot samples retain their data and old reports remain readable", () => {
+  const report = validReport();
+  report.cases[0].checks[1].plots = [curve()];
+  assert.deepEqual(validateReport(report, manifest).cases[0].checks[1].plots[0].x, [0, 0.1]);
+  assert.equal(validateReport(validReport(), manifest).cases.length, 7);
+});
+
+test("invalid plots and a false agreement claim cannot appear as verified data", () => {
+  for (const mutate of [
+    (p) => { p.series[0].values[1] = NaN; },
+    (p) => { p.series[0].values.pop(); },
+    (p) => { p.series[0].values[1] = 1.1; p.comparison.max_abs_error = 0.1; },
+    (p) => { p.comparison.max_abs_error = 1; },
+    (p) => { p.x[1] = 0; },
+    (p) => { p.x_scale = "log"; },
+  ]) {
+    const report = validReport();
+    const p = curve(); mutate(p);
+    report.cases[0].checks[1].plots = [p];
+    assert.throws(() => validateReport(report, manifest));
+  }
+});
+
+test("mesh fields require valid nodal values and Quad4 connectivity", () => {
+  const mesh = {kind: "mesh", id: "field", title: "Field", description: "Nodal solution", nodes: [[0,0],[1,0],[1,1],[0,1]], elements: [[0,1,2,3]], values: [0,1,1,0]};
+  const report = validReport();
+  report.cases.at(-1).checks[0].plots = [mesh];
+  assert.equal(validateReport(report, manifest).cases.at(-1).checks[0].plots[0].nodes.length, 4);
+  mesh.elements[0][3] = 4;
+  assert.throws(() => validateReport(report, manifest));
+});

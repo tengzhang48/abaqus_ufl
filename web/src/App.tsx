@@ -1,5 +1,6 @@
 import siteData from "../site-data.json";
 import type { MouseEvent } from "react";
+import { useEffect } from "react";
 import publication from "../../docs/publication.json";
 import Livebench from "./Livebench";
 
@@ -70,6 +71,12 @@ function closeMobileMenu(event: MouseEvent<HTMLAnchorElement>) {
 }
 
 function App() {
+  useEffect(() => {
+    const anchor = window.location.hash.slice(1);
+    if (!anchor) return;
+    const frame = requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView({ behavior: "instant" }));
+    return () => cancelAnimationFrame(frame);
+  }, []);
   return (
     <>
       <header className="site-header">

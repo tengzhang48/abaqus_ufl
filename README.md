@@ -113,7 +113,9 @@ mechanics and transient diffusion on small meshes using the optional
 [`abaqus_ufl.fe` runtime](abaqus_ufl/fe/README.md).
 
 The [project website](https://tengzhang48.github.io/abaqus_ufl/#livebench)
-shows the latest published run. GitHub Actions reruns the livebench on relevant
+shows response curves, reference comparisons, mesh fields, and convergence
+from the latest published run. Inspect numerical differences and download
+full-precision CSV data or standalone scientific figures. GitHub Actions reruns the livebench on
 pushes and pull requests; repository collaborators can also select **Run
 workflow** in [Livebench and website](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml).
 Other users can run locally or run the workflow in their own fork. See
