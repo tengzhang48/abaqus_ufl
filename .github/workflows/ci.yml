@@ -26,17 +26,7 @@ jobs:
       - name: Install package (dev extras)
         run: python -m pip install -e ".[dev]"
       - name: Run test suite (includes example verification bundles)
-        env:
-          TEST_PYTHON: ${{ matrix.python-version }}
-        run: |
-          if [ "$TEST_PYTHON" = "3.12" ]; then
-            # These exact compiled bundles run in the Livebench job on 3.12.
-            # Keep independent compiler/helper tests here; retain the full
-            # bundles on 3.10 for Python-version compatibility coverage.
-            python -m pytest tests -q -k "not test_compiled_pipeline and not test_serial_fe_mesh_oracles"
-          else
-            python -m pytest tests -q
-          fi
+        run: python -m pytest tests -q
 
   regeneration:
     runs-on: ubuntu-latest

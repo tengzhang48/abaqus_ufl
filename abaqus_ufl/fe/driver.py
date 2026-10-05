@@ -71,6 +71,7 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
     all Newton and line-search trials. Singular/nonfinite solves and failed
     convergence raise an error; this small driver has no automatic time
     cutback, distributed assembly, contact, or material-state transaction.
+    ``tol`` is relative to the larger of 1 and the largest residual entry, reactions included.
     """
     nodes, elems, size = _mesh_inputs(nodes, elems, dof_per_node)
     if not np.isfinite(tol) or tol <= 0:
@@ -90,7 +91,8 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
     for iteration in range(max_iter + 1):
         residual, tangent = assemble(nodes, elems, dof_per_node, element_fn, U, U - previous)
         norm = np.linalg.norm(residual[free], ord=np.inf) if len(free) else 0.0
-        if norm <= tol:
+        # Reactions carry the force scale, so tol is relative to them (or 1).
+        if norm <= tol * max(1.0, np.linalg.norm(residual, ord=np.inf)):
             return U
         if iteration == max_iter:
             break

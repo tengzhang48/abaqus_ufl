@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from abaqus_ufl.fe import (CompiledAbaqusElement, assemble,
+from abaqus_ufl.fe import (CompiledAbaqusElement, assemble, boundary_nodes,
                            newton_solve, structured_quad_mesh)
 from abaqus_ufl.fe.compiled_element import _signature
 
@@ -27,6 +27,18 @@ def test_serial_fe_mesh_oracles():
     assert metrics["affine_patch_max_abs_error"] < 1e-9
     assert metrics["transient_mode_max_abs_error"] < 1e-10
     assert 1.9 < metrics["spatial_convergence_rate"] < 2.1
+
+
+@pytest.mark.parametrize("stiffness", [1.0, 2e11])
+def test_convergence_tolerance_scales_with_reactions(stiffness):
+    # Each Quad4 couples its four edges; a linear field is the exact solution.
+    ring = np.array([[2, -1, 0, -1], [-1, 2, -1, 0], [0, -1, 2, -1], [-1, 0, -1, 2]], float)
+    nodes, elems = structured_quad_mesh(3, 3)
+    exact = nodes[:, 0] + 2 * nodes[:, 1]
+    conditions = {int(i): float(exact[i]) for i in boundary_nodes(nodes)}
+    element = lambda index, coordinates, U, DU: (stiffness * ring @ U, stiffness * ring)
+    U = newton_solve(nodes, elems, 1, element, conditions)
+    assert np.allclose(U, exact, rtol=0, atol=1e-12)
 
 
 def _fake_element(response):

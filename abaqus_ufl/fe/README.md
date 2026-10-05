@@ -48,6 +48,7 @@ including constructor overrides. It requests both residual and tangent and
 converts Abaqus's `RHS` into `R=-RHS`, retaining `K=AMATRX=dR/dU`. A UEL
 cutback, nonfinite output, singular global matrix, or unconverged Newton
 solve raises an error. No rejected trial is returned as a solution.
+Newton's `tol` is relative to the larger of 1 and the largest residual entry, reactions included.
 
 For successive steps, retain the accepted `U` as `U_previous`, call
 `element.begin_increment(kinc, time_begin=previous_time, dt=dt)`, and solve
