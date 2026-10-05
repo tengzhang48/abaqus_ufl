@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use abaqus_ufl, please cite it as below."
+message: "If you use abaqus_ufl, please cite the published paper and record the software version or commit used."
 title: "abaqus_ufl: coupled-field Abaqus user elements from declared weak forms"
 type: software
 authors:
@@ -7,7 +7,22 @@ authors:
     given-names: Teng
     affiliation: "Syracuse University"
     email: tzhang48@syr.edu
+    orcid: "https://orcid.org/0000-0001-5001-8485"
 license: MIT
 version: 0.1.0
 repository-code: "https://github.com/tengzhang48/abaqus_ufl"
 # date-released and doi: add at the v0.1.0 tag / archival deposit.
+preferred-citation:
+  type: article
+  title: "Making coupled-field Abaqus user elements simple"
+  authors:
+    - family-names: Zhang
+      given-names: Teng
+      orcid: "https://orcid.org/0000-0001-5001-8485"
+  journal: "Extreme Mechanics Letters"
+  volume: "89"
+  start: "102530"
+  year: 2026
+  month: 12
+  doi: "10.1016/j.eml.2026.102530"
+  url: "https://doi.org/10.1016/j.eml.2026.102530"

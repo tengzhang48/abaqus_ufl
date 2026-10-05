@@ -1,0 +1,18 @@
+{
+  "title": "Making coupled-field Abaqus user elements simple",
+  "authors": [{ "given": "Teng", "family": "Zhang", "orcid": "https://orcid.org/0000-0001-5001-8485" }],
+  "journal": "Extreme Mechanics Letters",
+  "volume": "89",
+  "articleNumber": "102530",
+  "year": 2026,
+  "issueMonth": 12,
+  "doi": "10.1016/j.eml.2026.102530",
+  "url": "https://doi.org/10.1016/j.eml.2026.102530",
+  "publisherUrl": "https://www.sciencedirect.com/science/article/pii/S235243162600091X",
+  "verifiedOn": "2026-10-05",
+  "sources": [
+    "https://api.crossref.org/works/10.1016/j.eml.2026.102530",
+    "https://api.elsevier.com/content/article/pii/S235243162600091X?httpAccept=text/xml"
+  ],
+  "dateNote": "The publisher assigns the December 2026 issue. The DOI record does not supply a separate online publication date."
+}

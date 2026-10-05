@@ -143,6 +143,12 @@ def prescribed_temperature(self, time):
 
 ## Generator Entry Points
 
+For license-free mesh-level checks of standard Quad4 generated UELs, see the
+optional [`abaqus_ufl.fe` runtime](../abaqus_ufl/fe/README.md). Its serial API
+supports uniform degree-one nodal fields and explicit nodal history; material
+state variables, local fields, mixed interpolation, and other topologies are
+excluded. [`LIVEBENCH.md`](LIVEBENCH.md) describes the executable public gates.
+
 ### `generate_umat`
 
 ```python

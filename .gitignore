@@ -38,3 +38,7 @@ examples/**/abaqus/*_report.json
 # OS / editor
 .DS_Store
 *.swp
+
+# Generated livebench reports and website copies
+/benchmark-results/
+/web/public/livebench/

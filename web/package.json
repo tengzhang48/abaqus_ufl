@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "verify:evidence": "node scripts/check-evidence.mjs",
-    "test": "node --test scripts/site-data.test.mjs",
+    "test": "node --test scripts/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "build": "vite build && node scripts/check-build.mjs",
     "preview": "vite preview",

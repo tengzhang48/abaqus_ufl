@@ -1,5 +1,7 @@
 import siteData from "../site-data.json";
 import type { MouseEvent } from "react";
+import publication from "../../docs/publication.json";
+import Livebench from "./Livebench";
 
 import tetDisplacement from "../../paper_examples/stabilized_tet4/figure/Tet4_u_mag.png";
 import tetTheta from "../../paper_examples/stabilized_tet4/figure/Tet4_NT11.png";
@@ -79,7 +81,8 @@ function App() {
           <a href="#how-it-works">How it works</a>
           <a href="#scope">Scope</a>
           <a href="#examples">Examples</a>
-          <a href="#paper-evidence">Manuscript examples</a>
+          <a href="#livebench">Livebench</a>
+          <a href="#paper-evidence">Paper examples</a>
           <a href="#status">Status</a>
         </nav>
         <a className="header-link" href={repository}>GitHub <Arrow /></a>
@@ -89,7 +92,8 @@ function App() {
             <a href="#how-it-works" onClick={closeMobileMenu}>How it works</a>
             <a href="#scope" onClick={closeMobileMenu}>Scope</a>
             <a href="#examples" onClick={closeMobileMenu}>Examples</a>
-            <a href="#paper-evidence" onClick={closeMobileMenu}>Manuscript examples</a>
+            <a href="#livebench" onClick={closeMobileMenu}>Livebench</a>
+            <a href="#paper-evidence" onClick={closeMobileMenu}>Paper examples</a>
             <a href="#status" onClick={closeMobileMenu}>Status</a>
             <a href={repository} onClick={closeMobileMenu}>GitHub</a>
           </nav>
@@ -106,9 +110,10 @@ function App() {
                 <code>abaqus_ufl</code> generates self-contained fixed-form Fortran UMATs and UELs from supported Python models. The Python model and generated source show the fields, constitutive response, tangent construction, and Abaqus interface.
               </p>
               <div className="hero-actions">
-                <a className="button primary" href={`${repository}#try-a-complete-local-workflow`}>Run an example <Arrow /></a>
-                <a className="button ghost" href="#paper-evidence">View manuscript examples</a>
+                <a className="button primary" href="#livebench">Open the livebench <Arrow /></a>
+                <a className="button ghost" href={publication.url}>Read the published paper <Arrow /></a>
               </div>
+              <p className="publication-link">Published in <em>{publication.journal}</em> {publication.volume} ({publication.year}), {publication.articleNumber} · <a href={publication.url}>DOI <Arrow /></a></p>
               <p className="hero-boundary">
                 The package supports a defined set of models. It does not implement FEniCS UFL, compile arbitrary weak forms, or create a complete Abaqus analysis.
               </p>
@@ -211,11 +216,14 @@ function App() {
           </div>
         </section>
 
+        <Livebench />
+
         <section className="section paper-section" id="paper-evidence">
           <div className="shell">
             <div className="section-heading paper-heading">
-              <p className="eyebrow light">Submitted manuscript</p>
-              <h2>Examples from <em>Making coupled-field Abaqus user elements simple</em></h2>
+              <p className="eyebrow light">Published paper · {publication.journal}</p>
+              <h2>Examples from <em>{publication.title}</em></h2>
+              <p>Teng Zhang · Volume {publication.volume} ({publication.year}), article {publication.articleNumber} · <a className="text-link" href={publication.url}>Read the paper <Arrow /></a></p>
               <p>These four example packages contain the available declarations, generated sources, selected Abaqus decks, reduced results, and figure inputs. Each package states which checks were repeated from a fresh clone.</p>
             </div>
 
@@ -334,6 +342,7 @@ function App() {
           </nav>
           <nav aria-label="Project records">
             <strong>Project records</strong>
+            <a href={publication.url}>Published paper</a>
             <a href={repoFile("CITATION.cff")}>Citation</a>
             <a href={repoFile("CREDITS.md")}>Credits & provenance</a>
             <a href={repoFile("LICENSE")}>MIT license</a>

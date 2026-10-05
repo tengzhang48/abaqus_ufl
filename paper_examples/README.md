@@ -1,7 +1,8 @@
 # Paper example packages
 
 These four packages collect materials associated with the examples in the
-manuscript *Making coupled-field Abaqus user elements simple*. Across the
+published paper [*Making coupled-field Abaqus user elements simple*](https://doi.org/10.1016/j.eml.2026.102530),
+Teng Zhang, *Extreme Mechanics Letters* **89** (2026), 102530. Across the
 packages, those materials include Python declarations, generation entry
 points, generated or submitted Fortran, Abaqus decks, reduced reference data,
 and figure inputs. They are evidence bundles, not collectively clean-archive
