@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import siteData from "../site-data.json";
 import manifest from "../../tools/livebench_cases.json";
 import { validateReport } from "./livebench-report";
 import type { BenchmarkReport } from "./livebench-report";
@@ -98,6 +99,13 @@ export default function Livebench() {
   const plots = selected?.checks.flatMap((check) => check.plots ?? []) ?? [];
   const plot = plots.find((item) => item.id === plotId) ?? plots[0];
   const info = selected ? explanations[selected.id] : null;
+  const example = selected
+    ? siteData.examples.find(
+        (item) =>
+          item.path ===
+          `${manifest[selected.id as keyof typeof manifest].directory}/README.md`,
+      )
+    : undefined;
   const passed =
     report?.cases.filter((item) => item.status === "passed").length ?? 0;
   const checks = report?.cases.flatMap((item) => item.checks) ?? [];
@@ -160,9 +168,6 @@ export default function Livebench() {
               </time>
               <div>
                 {report.run_url && <a href={report.run_url}>Recorded run ↗</a>}
-                <button type="button" onClick={() => setRefresh((n) => n + 1)}>
-                  Refresh
-                </button>
               </div>
             </div>
             {report.cases.length !== Object.keys(manifest).length && (
@@ -234,6 +239,20 @@ export default function Livebench() {
                   </span>
                 </div>
                 <p className="bench-problem-summary">{info.setup}</p>
+                {example && (
+                  <div className="bench-example-links" aria-label="Example files">
+                    <a
+                      href={`${repository}/blob/${report.source.commit || "main"}/${example.path}`}
+                    >
+                      Example guide ↗
+                    </a>
+                    <a
+                      href={`${repository}/tree/${report.source.commit || "main"}/${example.path.replace("/README.md", "")}`}
+                    >
+                      Model & Fortran ↗
+                    </a>
+                  </div>
+                )}
                 {plot ? (
                   <>
                     <div className="bench-view-select">
@@ -268,8 +287,27 @@ export default function Livebench() {
                   <span>Reference & acceptance</span>
                   <p>{info.reference}</p>
                 </div>
-                <details className="bench-diagnostics">
-                  <summary>Numerical checks & source</summary>
+                <details className="bench-diagnostics" key={selected.id}>
+                  <summary>
+                    {example
+                      ? "Example evidence & numerical checks"
+                      : "Numerical checks & source"}
+                  </summary>
+                  {example && (
+                    <div className="bench-example-evidence">
+                      <p>{example.summary}</p>
+                      <dl>
+                        <div>
+                          <dt>Checks included</dt>
+                          <dd>{example.evidence}</dd>
+                        </div>
+                        <div>
+                          <dt>Abaqus coverage</dt>
+                          <dd>{example.boundary}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  )}
                   {selected.checks.map((check) => (
                     <div className="bench-check" key={check.script}>
                       <div className="bench-check-heading">

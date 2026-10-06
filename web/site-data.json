@@ -10,28 +10,18 @@
   "workflow": [
     {
       "number": "01",
-      "title": "Declare",
-      "detail": "Define a supported material response or coupled weak form in Python."
+      "title": "Define and verify",
+      "detail": "Write a supported material or coupled-field model in Python. Check its response and tangent against a reference."
     },
     {
       "number": "02",
-      "title": "Check the Python model",
-      "detail": "Check tangent consistency and compare selected responses with an analytical or independently implemented reference."
+      "title": "Generate and compare",
+      "detail": "Generate Fortran, compile with f2py, and compare UMAT stress and state or UEL residual and tangent blocks with Python."
     },
     {
       "number": "03",
-      "title": "Generate Fortran",
-      "detail": "Write deterministic, self-contained fixed-form Fortran for inspection and compilation."
-    },
-    {
-      "number": "04",
-      "title": "Verify generated code",
-      "detail": "Compile and call the generated UMAT or UEL. Compare the returned stress and state values, or UEL residual and tangent blocks, with the Python reference."
-    },
-    {
-      "number": "05",
-      "title": "Run in Abaqus",
-      "detail": "Use the generated subroutine in an Abaqus model with documented mesh, steps, loads, units, solver controls, and output checks."
+      "title": "Use in Abaqus",
+      "detail": "Add the subroutine to your Abaqus model with its mesh, loads, boundary conditions, and solver settings."
     }
   ],
   "scopes": [

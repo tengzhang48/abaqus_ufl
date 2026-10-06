@@ -19,6 +19,7 @@ const credits = await readFile(resolve(repoRoot, "CREDITS.md"), "utf8");
 const gelRecord = await readFile(resolve(repoRoot, "paper_examples/gel_bilayer/README.md"), "utf8");
 const corrosionRecord = await readFile(resolve(repoRoot, "paper_examples/phasefield_corrosion/README.md"), "utf8");
 const appSource = await readFile(resolve(webRoot, "src/App.tsx"), "utf8");
+const paperSource = await readFile(resolve(webRoot, "src/PaperExamples.tsx"), "utf8");
 const webReadme = await readFile(resolve(webRoot, "README.md"), "utf8");
 const notices = await readFile(resolve(webRoot, "public/THIRD_PARTY_NOTICES.txt"), "utf8");
 
@@ -41,7 +42,7 @@ assert.deepEqual(data.paperEvidence.map((item) => item.id), ["tet4", "pasta", "g
 assert.equal(data.paperEvidence.find((item) => item.id === "corrosion").figurePaths.length, 0);
 assert.ok(!appSource.includes("phasefield_corrosion/figure"), "corrosion figure must not be bundled while redistribution status is open");
 assert.ok(!appSource.includes('caption: "t ='), "pasta exports must not receive inferred time captions");
-assert.equal(data.workflow.length, 5);
+assert.equal(data.workflow.length, 3);
 assert.equal(data.validation.sourceRevision, "0f52533");
 assert.equal(data.validation.reportRevision, "c5d2a59");
 assert.match(citation, /version: 0\.1\.0/);
@@ -54,7 +55,7 @@ assert.ok(citation.includes(`start: "${publication.articleNumber}"`));
 assert.equal(publication.url, `https://doi.org/${publication.doi}`);
 assert.equal(publication.journal, "Extreme Mechanics Letters");
 assert.ok(publication.sources.includes(`https://api.crossref.org/works/${publication.doi}`));
-assert.ok(appSource.includes("publication.title"));
+assert.ok(paperSource.includes("publication.title"));
 assert.ok(appSource.includes("<Livebench />"));
 assert.match(credits, /cd1fb320a90ada8ebb7a9437254549a0d181a0e0/);
 assert.match(credits, /neither distribution includes the exact\s+BSD variant, license text, or copyright notice/);

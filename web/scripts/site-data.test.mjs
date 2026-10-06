@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const data = JSON.parse(await readFile(resolve(here, "../site-data.json"), "utf8"));
 
 test("workflow ends with a documented Abaqus analysis", () => {
-  assert.equal(data.workflow.length, 5);
+  assert.equal(data.workflow.length, 3);
   assert.match(data.workflow.at(-1).detail, /Abaqus model/i);
   assert.match(data.workflow.at(-2).detail, /UEL residual and tangent blocks/i);
 });

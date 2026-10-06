@@ -9,6 +9,38 @@ const format = (n: number) =>
       ? n.toExponential(2)
       : Number(n.toPrecision(4)).toString();
 
+function niceTicks(min: number, max: number, target: number): number[] {
+  if (min === max) return [min];
+  const base = 10 ** Math.floor(Math.log10((max - min) / target));
+  let best: number[] = [];
+  for (const mag of [base / 10, base, base * 10]) {
+    for (const multiplier of [1, 2, 2.5, 5]) {
+      const step = multiplier * mag;
+      const ticks: number[] = [];
+      for (
+        let value = Math.ceil(min / step - 1e-9) * step;
+        value <= max + step * 1e-9;
+        value += step
+      ) {
+        ticks.push(Number(value.toPrecision(12)));
+      }
+      if (
+        ticks.length >= 2 &&
+        (best.length < 2 ||
+          Math.abs(ticks.length - target) < Math.abs(best.length - target))
+      ) {
+        best = ticks;
+      }
+    }
+  }
+  return best;
+}
+
+const formatTick = (value: number) =>
+  value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 10000)
+    ? value.toExponential()
+    : String(value);
+
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
@@ -36,7 +68,13 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
   const { ref, width } = useWidth();
   const [point, setPoint] = useState(Math.floor(plot.x.length / 2));
   const [difference, setDifference] = useState(false);
-  const [hidden, setHidden] = useState<number[]>([]);
+  const [hidden, setHidden] = useState<number[]>(() =>
+    caseId === "serial_fe" && plot.id.startsWith("temperature-")
+      ? plot.series.flatMap((series, index) =>
+          series.label === "Continuum backward Euler" ? [index] : [],
+        )
+      : [],
+  );
   const computed = plot.series.find((s) => s.role === "computed")!;
   const reference = plot.series.find((s) => s.role === "reference");
   const errors = reference
@@ -74,10 +112,13 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
   const py = (y: number) =>
     bottom - ((ty(y) - ymin) / (ymax - ymin)) * (bottom - top);
   const tickCount = width < 500 ? 3 : 5;
-  const ticks = Array.from(
-    { length: tickCount },
-    (_, i) => i / (tickCount - 1),
-  );
+  const xTicks = niceTicks(Math.min(...plot.x), Math.max(...plot.x), tickCount);
+  const yTicks = yLog
+    ? Array.from(
+        { length: Math.max(0, Math.floor(ymax) - Math.ceil(ymin) + 1) },
+        (_, i) => 10 ** (Math.ceil(ymin) + i),
+      )
+    : niceTicks(ymin, ymax, tickCount);
   const color = (index: number) =>
     difference
       ? colors[0]
@@ -165,11 +206,10 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
         >
           <title>{plot.title}</title>
           <desc>{plot.description}</desc>
-          {ticks.map((t) => {
-            const y = bottom - t * (bottom - top),
-              value = ymin + t * (ymax - ymin);
+          {yTicks.map((value) => {
+            const y = py(value);
             return (
-              <g key={`y${t}`}>
+              <g key={`y${value}`}>
                 <line x1={left} x2={right} y1={y} y2={y} stroke="#e5eaeb" />
                 <text
                   x={left - 10}
@@ -178,16 +218,15 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
                   fontSize="11"
                   fill="#5d6976"
                 >
-                  {format(yLog ? 10 ** value : value)}
+                  {formatTick(value)}
                 </text>
               </g>
             );
           })}
-          {ticks.map((t) => {
-            const x = left + t * (right - left),
-              value = xmin + t * (xmax - xmin);
+          {xTicks.map((value) => {
+            const x = px(value);
             return (
-              <g key={`x${t}`}>
+              <g key={`x${value}`}>
                 <line x1={x} x2={x} y1={top} y2={bottom} stroke="#f0f2f2" />
                 <text
                   x={x}
@@ -196,7 +235,7 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
                   fontSize="11"
                   fill="#5d6976"
                 >
-                  {format(xLog ? 10 ** value : value)}
+                  {formatTick(value)}
                 </text>
               </g>
             );
@@ -221,37 +260,52 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
             {difference ? "Absolute discrepancy" : plot.y_label}
             {yLog ? " · log scale" : ""}
           </text>
-          {[...series].reverse().map((s) => {
+          {[
+            ...series.filter((s) => s.role === "reference"),
+            ...series.filter((s) => s.role === "guide"),
+            ...series.filter((s) => s.role === "computed"),
+          ].map((s) => {
             const index = series.indexOf(s);
             return (
-              <g key={s.label}>
-                <polyline
-                  points={plot.x
-                    .map((x, i) => `${px(x)},${py(s.values[i])}`)
-                    .join(" ")}
-                  fill="none"
-                  stroke={color(index)}
-                  strokeWidth={s.role === "computed" ? 2 : 2.5}
-                  strokeDasharray={
-                    s.role === "reference"
-                      ? "7 5"
-                      : s.role === "guide"
-                        ? "3 4"
-                        : undefined
-                  }
-                />
+              <g key={s.label} data-series={s.label}>
+                {(s.role !== "computed" || difference) && (
+                  <polyline
+                    points={plot.x
+                      .map((x, i) => `${px(x)},${py(s.values[i])}`)
+                      .join(" ")}
+                    fill="none"
+                    stroke={color(index)}
+                    strokeWidth={
+                      s.role === "reference"
+                        ? 6
+                        : s.role === "computed"
+                          ? 2
+                          : 2.5
+                    }
+                    strokeOpacity={s.role === "reference" ? 0.4 : 1}
+                    strokeDasharray={s.role === "guide" ? "3 4" : undefined}
+                  />
+                )}
                 {s.role === "computed" &&
                   plot.x.map(
                     (x, i) =>
-                      i % Math.max(1, Math.floor(plot.x.length / 22)) === 0 && (
+                      (i %
+                        Math.max(
+                          1,
+                          difference
+                            ? Math.floor(plot.x.length / 22)
+                            : Math.ceil(plot.x.length / 28),
+                        ) ===
+                        0 ||
+                        (!difference && i === plot.x.length - 1)) && (
                         <circle
                           key={i}
                           cx={px(x)}
                           cy={py(s.values[i])}
-                          r="3"
-                          fill="white"
-                          stroke={color(index)}
-                          strokeWidth="1.6"
+                          r={difference ? 3 : 4}
+                          fill={difference ? "white" : color(index)}
+                          stroke={difference ? color(index) : "white"}
+                          strokeWidth={difference ? 1.6 : 2}
                         />
                       ),
                   )}
@@ -266,17 +320,19 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
             stroke="#aebac2"
             strokeDasharray="3 4"
           />
-          {series.map((s, i) => (
-            <circle
-              key={s.label}
-              cx={px(plot.x[point])}
-              cy={py(s.values[point])}
-              r="4"
-              fill={color(i)}
-              stroke="white"
-              strokeWidth="1.5"
-            />
-          ))}
+          {series
+            .filter((s) => difference || s.role === "computed")
+            .map((s) => (
+              <circle
+                key={s.label}
+                cx={px(plot.x[point])}
+                cy={py(s.values[point])}
+                r="4"
+                fill={color(series.indexOf(s))}
+                stroke="white"
+                strokeWidth="1.5"
+              />
+            ))}
         </svg>
       </div>
       <div className="plot-legend">
@@ -295,7 +351,10 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
               )
             }
           >
-            <span style={{ background: colors[i % colors.length] }} />
+            <span
+              className={`plot-swatch ${s.role}`}
+              style={{ color: colors[i % colors.length] }}
+            />
             {s.label}
           </button>
         ))}
