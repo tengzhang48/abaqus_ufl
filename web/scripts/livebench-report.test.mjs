@@ -18,9 +18,11 @@ function validReport() {
   };
 }
 
-test("a complete run has six bundles plus the FE mesh checks", () => {
+test("a complete run includes both boundary-value simulations and verification checks", () => {
   const result = validateReport(validReport(), manifest);
-  assert.equal(result.cases.length, 7);
+  assert.equal(result.cases.length, 9);
+  assert.ok(result.cases.some((c) => c.id === "heated_plate_bvp"));
+  assert.ok(result.cases.some((c) => c.id === "thermal_bending_bvp"));
   assert.equal(result.cases.at(-1).target, "FE");
 });
 
@@ -63,7 +65,7 @@ test("plot samples retain their data and old reports remain readable", () => {
   const report = validReport();
   report.cases[0].checks[1].plots = [curve()];
   assert.deepEqual(validateReport(report, manifest).cases[0].checks[1].plots[0].x, [0, 0.1]);
-  assert.equal(validateReport(validReport(), manifest).cases.length, 7);
+  assert.equal(validateReport(validReport(), manifest).cases.length, 9);
 });
 
 test("invalid plots and a false agreement claim cannot appear as verified data", () => {
@@ -89,4 +91,46 @@ test("mesh fields require valid nodal values and Quad4 connectivity", () => {
   assert.equal(validateReport(report, manifest).cases.at(-1).checks[0].plots[0].nodes.length, 4);
   mesh.elements[0][3] = 4;
   assert.throws(() => validateReport(report, manifest));
+});
+
+function historyMesh() {
+  return {
+    kind: "mesh", id: "temperature", title: "Plate", description: "Accepted nodal history",
+    nodes: [[0,0],[1,0],[1,1],[0,1]], elements: [[0,1,2,3]], values: [0,0,1,1],
+    frames: [{time: 0, values: [0,0,0,0]}, {time: 0.5, values: [0,0,1,1]}],
+    boundaries: [{label: "Top bath", field: "temperature", kind: "prescribed", nodes: [2,3]}],
+    setup: {domain: "Square", equations: ["Heat equation"], initial_condition: "T=0", boundary_conditions: ["Top T=1"],
+      properties: [{name: "k", value: 0.5}], time_step: 0.5, steps: 1, nodes: 4, elements: 1,
+      free_temperature_dofs: 0, free_displacement_dofs: 0},
+  };
+}
+
+test("recorded transient fields preserve time, boundary identities and the final static fallback", () => {
+  const report = validReport();
+  report.cases.at(-1).checks[0].plots = [historyMesh()];
+  const mesh = validateReport(report, manifest).cases.at(-1).checks[0].plots[0];
+  assert.equal(mesh.frames[1].time, 0.5);
+  assert.deepEqual(mesh.frames.at(-1).values, mesh.values);
+});
+
+test("invalid time histories and false simulation setup cannot be published", () => {
+  for (const mutate of [
+    (m) => { m.frames[1].time = 0; },
+    (m) => { m.frames[0].time = -1; },
+    (m) => { m.frames[0].values[0] = NaN; },
+    (m) => { m.frames[1].values[0] = 1; },
+    (m) => { m.frames[0].values.pop(); },
+    (m) => { m.boundaries[0].nodes = [2,4]; },
+    (m) => { m.boundaries[0].nodes = [2,2]; },
+    (m) => { m.setup.time_step = 0.25; },
+    (m) => { m.setup.steps = 2; },
+    (m) => { m.setup.free_temperature_dofs = 5; },
+    (m) => { m.setup.properties[0].value = Infinity; },
+    (m) => { m.frames[0].displacements = [[0,0],[0,0],[0,0],[0,0]]; },
+  ]) {
+    const report = validReport();
+    const mesh = historyMesh(); mutate(mesh);
+    report.cases.at(-1).checks[0].plots = [mesh];
+    assert.throws(() => validateReport(report, manifest));
+  }
 });

@@ -1,15 +1,29 @@
+export type SimulationSetup = {
+  domain: string; equations: string[]; initial_condition: string; boundary_conditions: string[];
+  properties: { name: string; value: number }[];
+  time_step: number; steps: number; nodes: number; elements: number;
+  free_temperature_dofs: number; free_displacement_dofs: number;
+};
+
 export type CurvePlot = {
   kind: "curve"; id: string; title: string; description: string;
   x_label: string; y_label: string; x: number[]; x_scale: "linear" | "log"; y_scale: "linear" | "log";
   series: { label: string; role: "computed" | "reference" | "guide"; values: number[] }[];
   comparison?: { max_abs_error: number; rtol: number; atol: number };
   figure?: string; difference_figure?: string;
+  setup?: SimulationSetup;
+};
+
+export type MeshFrame = { time: number; values: number[]; displacements?: number[][] };
+export type BoundaryRegion = {
+  label: string; field: "temperature" | "displacement"; kind: "prescribed" | "natural"; nodes: number[];
 };
 
 export type MeshPlot = {
   kind: "mesh"; id: string; title: string; description: string;
   nodes: number[][]; elements: number[][]; values: number[]; displacements?: number[][];
   figure?: string;
+  value_label?: string; frames?: MeshFrame[]; boundaries?: BoundaryRegion[]; setup?: SimulationSetup;
 };
 
 export type BenchmarkPlot = CurvePlot | MeshPlot;
@@ -141,6 +155,46 @@ export function validatePlot(value: unknown): BenchmarkPlot {
           || new Set(element).size !== 4 || element.some((i) => !Number.isInteger(i) || i < 0 || i >= plot.nodes.length))) fail();
     if (plot.displacements !== undefined && (!Array.isArray(plot.displacements)
         || plot.displacements.length !== plot.nodes.length || plot.displacements.some((u) => !array(u, 2)))) fail();
+    if (plot.value_label !== undefined && typeof plot.value_label !== "string") fail();
+    if (plot.frames !== undefined) {
+      if (!Array.isArray(plot.frames) || plot.frames.length < 2) fail();
+      for (const [index, frame] of plot.frames.entries()) {
+        if (!frame || typeof frame.time !== "number" || !Number.isFinite(frame.time) || frame.time < 0
+            || (index > 0 && frame.time <= plot.frames[index - 1].time)
+            || !array(frame.values, plot.nodes.length)
+            || Boolean(frame.displacements) !== Boolean(plot.displacements)) fail();
+        if (frame.displacements !== undefined && (!Array.isArray(frame.displacements)
+            || frame.displacements.length !== plot.nodes.length || frame.displacements.some((u) => !array(u, 2)))) fail();
+      }
+      const final = plot.frames[plot.frames.length - 1];
+      if (final.values.some((v, i) => v !== plot.values[i])
+          || final.displacements?.some((u, i) => u.some((v, j) => v !== plot.displacements![i][j]))) fail();
+    }
+    if (plot.boundaries !== undefined) {
+      if (!Array.isArray(plot.boundaries)) fail();
+      for (const boundary of plot.boundaries) {
+        if (!boundary || typeof boundary.label !== "string" || !["temperature", "displacement"].includes(boundary.field)
+            || !["prescribed", "natural"].includes(boundary.kind) || !Array.isArray(boundary.nodes)
+            || boundary.nodes.length < 2 || new Set(boundary.nodes).size !== boundary.nodes.length
+            || boundary.nodes.some((i) => !Number.isInteger(i) || i < 0 || i >= plot.nodes.length)) fail();
+      }
+    }
   } else fail();
+  if (plot.setup !== undefined) {
+    const s = plot.setup;
+    if (!s || typeof s.domain !== "string" || typeof s.initial_condition !== "string"
+        || ![s.equations, s.boundary_conditions].every((v) => Array.isArray(v) && v.length > 0 && v.every((t) => typeof t === "string"))
+        || !Array.isArray(s.properties) || !s.properties.length
+        || s.properties.some((p) => !p || typeof p.name !== "string" || typeof p.value !== "number" || !Number.isFinite(p.value))
+        || typeof s.time_step !== "number" || !Number.isFinite(s.time_step) || s.time_step <= 0
+        || ![s.steps, s.nodes, s.elements].every((n) => Number.isInteger(n) && n > 0)) fail();
+    if (![s.free_temperature_dofs, s.free_displacement_dofs].every((n) => Number.isInteger(n) && n >= 0)
+        || s.free_temperature_dofs > s.nodes || s.free_displacement_dofs > 2 * s.nodes) fail();
+    if (plot.kind === "mesh") {
+      if (s.nodes !== plot.nodes.length || s.elements !== plot.elements.length) fail();
+      if (plot.frames && (plot.frames.length !== s.steps + 1 || plot.frames[0].time !== 0
+          || plot.frames.some((f, i) => Math.abs(f.time - i * s.time_step) > 1e-12 * Math.max(1, f.time)))) fail();
+    }
+  }
   return plot;
 }

@@ -1423,10 +1423,10 @@ footer nav a:hover {
 .bench-view-select label { color: var(--muted); }
 .bench-view-select select { min-width: 0; max-width: 100%; border: 1px solid #d8e1df; border-radius: 6px; background: #f8faf9; color: var(--ink); padding: 8px 28px 8px 10px; }
 .result-plot { border: 1px solid #dbe4e1; border-radius: 8px; padding: 14px 16px 0; overflow: hidden; }
-.plot-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; min-height: 30px; margin-bottom: 12px; }
+.plot-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; align-items: center; min-height: 30px; margin-bottom: 12px; }
 .plot-toolbar button { border: 0; background: transparent; padding: 5px 9px; color: var(--muted); font-size: .7rem; cursor: pointer; border-radius: 4px; }
 .plot-toolbar button[aria-pressed="true"] { color: #145b55; background: #e4f0eb; font-weight: 650; }
-.plot-modes, .plot-downloads { display: flex; gap: 4px; }
+.plot-modes, .plot-downloads { display: flex; flex-wrap: wrap; gap: 4px; }
 .plot-downloads button:hover, .plot-csv:hover { color: var(--teal); background: #f0f5f2; }
 .plot-downloads a { display: flex; align-items: center; color: var(--muted); font-size: .7rem; padding: 5px 6px; text-decoration: none; }
 .plot-canvas svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
@@ -1445,6 +1445,23 @@ footer nav a:hover {
 .plot-agreement span { color: #78847e; }
 .field-scale { display: flex; align-items: center; justify-content: center; gap: 12px; font: .7rem Consolas, monospace; margin: 7px 0 22px; color: var(--muted); }
 .field-scale i { display: block; width: 170px; height: 8px; border-radius: 3px; background: linear-gradient(90deg, #440154, #3b528b, #21918c, #5ec962, #fde725); }
+.simulation-setup { border: 1px solid #dce6e2; border-radius: 8px; background: #f7faf8; padding: 15px 18px; margin: 18px 0; font-size: .75rem; }
+.simulation-setup p { margin: 0 0 10px; color: var(--muted); line-height: 1.6; }
+.simulation-facts { display: flex; flex-wrap: wrap; gap: 12px 28px; margin: 0 0 14px; }
+.simulation-facts div { display: flex; gap: 8px; }
+.simulation-facts dt { color: var(--muted); }
+.simulation-facts dd { margin: 0; font-weight: 600; }
+.simulation-setup ul { padding-left: 18px; margin: 7px 0 13px; line-height: 1.7; }
+.simulation-setup summary { cursor: pointer; color: #286659; }
+.simulation-setup details[open] summary { margin-bottom: 10px; }
+.field-timeline { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid #dce6e2; border-radius: 6px; background: #f4f8f6; margin-bottom: 14px; font-size: .72rem; }
+.field-timeline button { border: 1px solid #c9d9d2; border-radius: 5px; background: white; color: #145b55; padding: 7px 12px; cursor: pointer; min-width: 58px; }
+.field-timeline input { flex: 1; min-width: 40px; accent-color: #157d79; }
+.field-timeline label, .field-timeline span { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.boundary-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 15px; font-size: .68rem; color: var(--muted); }
+.boundary-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.boundary-legend i { width: 15px; height: 3px; flex-shrink: 0; }
+.field-value-label { text-align: center; color: var(--muted); font-size: .65rem; margin: -12px 0 18px; }
 .bench-plot-description { margin: 16px 0 22px; font-size: .76rem; line-height: 1.8; color: #657482; }
 .bench-reference { padding: 16px 18px; border-radius: 6px; background: #f4f7f8; margin-bottom: 20px; }
 .bench-reference > span { display: block; color: #62768a; font-size: .62rem; text-transform: uppercase; letter-spacing: .07em; font-weight: 700; margin-bottom: 7px; }

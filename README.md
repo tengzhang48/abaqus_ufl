@@ -94,8 +94,8 @@ SymPy.
 
 ## Livebench
 
-Run all six public examples and the serial FE mesh benchmark without an
-Abaqus installation or license:
+Run two transient boundary-value simulations, the six public example bundles,
+and the serial FE verification case without an Abaqus installation or license:
 
 ```bash
 pip install -e ".[dev]"
@@ -108,12 +108,22 @@ for the two UELs, and deterministic regeneration, compilation, and direct
 f2py calls for every example. It saves full-precision numerical errors, check
 status, elapsed time, source revision, environment, and logs in
 `benchmark-results/`. Missing tools and failed checks produce a failing exit
-code; they are never counted as passes. The seventh case checks affine
-mechanics and transient diffusion on small meshes using the optional
+code; they are never counted as passes. The boundary-value cases solve:
+
+- a 2D plate with a spatially varying heating bath on one edge and cold
+  temperatures on the other three edges; and
+- a plane-strain strip clamped at one end, with hot/cold baths driving thermal
+  diffusion and quasi-static finite-strain bending.
+
+Both advance through 20 accepted time increments. The plate solves 529 free
+temperature DOFs; the strip solves 343 temperature and 864 displacement DOFs.
+Independent Fourier solutions, spatial/time refinement, heat balance, thermal
+dissipation, and a scoped beam approximation check the results. A separate
+case retains the affine patch and diffusion-mode checks using the optional
 [`abaqus_ufl.fe` runtime](abaqus_ufl/fe/README.md).
 
 The [project website](https://tengzhang48.github.io/abaqus_ufl/#livebench)
-shows response curves, reference comparisons, mesh fields, and convergence
+shows time playback, boundary conditions, response curves, reference comparisons, mesh fields, and convergence
 from the latest published run. Inspect numerical differences and download
 full-precision CSV data or standalone scientific figures. GitHub Actions reruns the livebench on
 pushes and pull requests; repository collaborators can also select **Run
@@ -121,8 +131,10 @@ workflow** in [Livebench and website](https://github.com/tengzhang48/abaqus_ufl/
 Other users can run locally or run the workflow in their own fork. See
 [the livebench guide](docs/LIVEBENCH.md) for individual cases and report details.
 
-These runs check the generated subroutine at material-point or element level.
-The paper-scale Abaqus analyses retain their separate evidence records.
+The new simulations call the actual generated UEL throughout global FE
+assembly and solve the free mesh DOFs. The material/element bundles retain
+their separate checks. The paper-scale Abaqus analyses retain their own
+evidence records. See [the BVP definitions and oracles](docs/BOUNDARY_VALUE_SIMULATIONS.md).
 
 ## Optional serial FE runtime
 

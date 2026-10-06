@@ -74,9 +74,9 @@ def test_invalid_timeout_is_rejected(timeout):
     assert error.value.code == 2
 
 
-def test_manifest_tracks_the_existing_bundles_and_one_mesh_gate():
+def test_manifest_tracks_the_existing_bundles_and_boundary_value_problems():
     MANIFEST = runpy.run_path(str(runner.ROOT / "tests/test_examples_pipeline.py"))["MANIFEST"]
-    assert set(runner.CASES) == set(MANIFEST) | {"serial_fe"}
+    assert set(runner.CASES) == set(MANIFEST) | {"serial_fe", "heated_plate_bvp", "thermal_bending_bvp"}
     for case_id, specification in runner.CASES.items():
         for script in specification["scripts"]:
             assert (runner.ROOT / specification["directory"] / script).is_file()

@@ -10,6 +10,16 @@ const explanations: Record<
   string,
   { title: string; setup: string; reference: string }
 > = {
+  thermal_bending_bvp: {
+    title: "Thermal bending of a clamped strip",
+    setup: "Watch a strip bend as heat diffuses between hot and cold baths. One end is clamped; the remaining surfaces are traction-free. Explore 20 solved time steps, temperature, and the free-tip history.",
+    reference: "An independent Fourier series checks transient temperature. A slender-beam approximation checks deflection within its stated tolerance; mesh refinement, heat dissipation, and clamp reaction balances provide separate checks.",
+  },
+  heated_plate_bvp: {
+    title: "Transient heating of a 2D plate",
+    setup: "A varying temperature bath heats the top of an initially cold plate while the other edges stay cold. Follow the solved 2D field over 20 time steps, inspect stored heat, and compare mesh and time refinement.",
+    reference: "Independent continuous-time and backward-Euler Fourier solutions distinguish time error from spatial error. Refinement checks second-order space and first-order time accuracy, with heat balance at every accepted step.",
+  },
   serial_fe: {
     title: "Heat diffusion on a mesh",
     setup:
@@ -66,7 +76,7 @@ export default function Livebench() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
-  const [caseId, setCaseId] = useState("serial_fe");
+  const [caseId, setCaseId] = useState("thermal_bending_bvp");
   const [plotId, setPlotId] = useState("");
 
   useEffect(() => {
@@ -102,9 +112,11 @@ export default function Livebench() {
     report?.cases.filter((item) => item.status === "passed").length ?? 0;
   const checks = report?.cases.flatMap((item) => item.checks) ?? [];
   const ordered = report
-    ? [...report.cases].sort(
-        (a, b) => Number(b.id === "serial_fe") - Number(a.id === "serial_fe"),
-      )
+    ? [...report.cases].sort((a, b) => {
+        const order = ["thermal_bending_bvp", "heated_plate_bvp", "serial_fe"];
+        const rank = (id: string) => order.includes(id) ? order.indexOf(id) : order.length;
+        return rank(a.id) - rank(b.id);
+      })
     : [];
 
   return (
@@ -116,9 +128,9 @@ export default function Livebench() {
             <h2>Livebench</h2>
           </div>
           <p>
-            Explore material responses and finite-element solutions from
-            generated Fortran. Compare them with independent references, inspect
-            samples, and download the numerical data.
+            Explore boundary-value simulations with prescribed loads and
+            supports, transient fields, and deformation. Compare solved results
+            with independent references and inspect the material and element checks.
           </p>
         </div>
         {loading && (
@@ -167,7 +179,7 @@ export default function Livebench() {
             </div>
             {report.cases.length !== Object.keys(manifest).length && (
               <p className="bench-unavailable">
-                This run covers a selected subset of the seven cases.
+                This recorded run covers {report.cases.length} of the {Object.keys(manifest).length} current cases.
               </p>
             )}
             <div className="bench-explorer">
@@ -185,7 +197,7 @@ export default function Livebench() {
                       }}
                     >
                       <span className="case-kind">
-                        {item.target === "FE" ? "Mesh solve" : item.target}
+                        {item.id.endsWith("_bvp") ? "Boundary-value simulation" : item.target === "FE" ? "Mesh check" : item.target}
                       </span>
                       <strong>{explanations[item.id].title}</strong>
                       <span
@@ -224,7 +236,7 @@ export default function Livebench() {
                   <div>
                     <p className="eyebrow">
                       {selected.target === "FE"
-                        ? "Serial finite-element solve"
+                        ? selected.id.endsWith("_bvp") ? "Transient boundary-value simulation" : "Serial finite-element check"
                         : `${selected.target} · generated Fortran`}
                     </p>
                     <h3>{info.title}</h3>
@@ -234,6 +246,24 @@ export default function Livebench() {
                   </span>
                 </div>
                 <p className="bench-problem-summary">{info.setup}</p>
+                {plot?.setup && (
+                  <div className="simulation-setup">
+                    <p>{plot.setup.domain}</p>
+                    <dl className="simulation-facts">
+                      <div><dt>Mesh</dt><dd>{plot.setup.elements} elements · {plot.setup.nodes} nodes</dd></div>
+                      <div><dt>Time</dt><dd>{plot.setup.steps} increments · Δt = {plot.setup.time_step}</dd></div>
+                      <div><dt>Solved DOFs</dt><dd>{plot.setup.free_temperature_dofs} temperature · {plot.setup.free_displacement_dofs} displacement</dd></div>
+                    </dl>
+                    <strong>Boundary conditions</strong>
+                    <ul>{plot.setup.boundary_conditions.map((condition) => <li key={condition}>{condition}</li>)}</ul>
+                    <details>
+                      <summary>Equations, initial state & material</summary>
+                      {plot.setup.equations.map((equation) => <p key={equation}>{equation}</p>)}
+                      <p>{plot.setup.initial_condition}</p>
+                      <p>{plot.setup.properties.map((p) => `${p.name} = ${p.value}`).join(" · ")}</p>
+                    </details>
+                  </div>
+                )}
                 {plot ? (
                   <>
                     <div className="bench-view-select">

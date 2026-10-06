@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { BenchmarkPlot, CurvePlot, MeshPlot } from "./livebench-report";
 
 const colors = ["#157d79", "#b5783f", "#a4b5bf", "#8c729e"];
@@ -357,14 +357,38 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
   const [node, setNode] = useState(Math.floor(plot.nodes.length / 2));
   const [deformed, setDeformed] = useState(Boolean(plot.displacements));
   const [lines, setLines] = useState(true);
+  const [boundaries, setBoundaries] = useState(true);
+  const [frameIndex, setFrameIndex] = useState((plot.frames?.length ?? 1) - 1);
+  const [playing, setPlaying] = useState(false);
+  const frame = plot.frames?.[frameIndex];
+  const values = frame?.values ?? plot.values;
+  const displacements = frame?.displacements ?? plot.displacements;
+  useEffect(() => {
+    if (!playing || !plot.frames) return;
+    const timer = window.setInterval(() => {
+      setFrameIndex((index) => (index + 1) % plot.frames!.length);
+    }, 350);
+    return () => window.clearInterval(timer);
+  }, [playing, plot.frames]);
   const height = width < 500 ? 300 : 370;
   const shown = plot.nodes.map((p, i) =>
-    p.map((v, j) => v + (deformed ? 10 * plot.displacements![i][j] : 0)),
+    p.map((v, j) => v + (deformed ? 10 * displacements![i][j] : 0)),
   );
-  const xmin = Math.min(...shown.map((p) => p[0])),
-    xmax = Math.max(...shown.map((p) => p[0]));
-  const ymin = Math.min(...shown.map((p) => p[1])),
-    ymax = Math.max(...shown.map((p) => p[1]));
+  // Fixed geometry and color scales across the recorded history keep changes
+  // in deformation and temperature visible during playback.
+  const [xmin, xmax, ymin, ymax] = useMemo(() => {
+    const box = [Infinity, -Infinity, Infinity, -Infinity];
+    const history = deformed
+      ? (plot.frames?.map((f) => f.displacements) ?? [plot.displacements])
+      : [undefined];
+    for (const displacement of history) for (const [i, p] of plot.nodes.entries()) {
+      const x = p[0] + (displacement ? 10 * displacement[i][0] : 0);
+      const y = p[1] + (displacement ? 10 * displacement[i][1] : 0);
+      box[0] = Math.min(box[0], x); box[1] = Math.max(box[1], x);
+      box[2] = Math.min(box[2], y); box[3] = Math.max(box[3], y);
+    }
+    return box;
+  }, [deformed, plot]);
   const scale = Math.min(
     (width - 60) / (xmax - xmin),
     (height - 90) / (ymax - ymin),
@@ -375,8 +399,13 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
     ox + scale * (p[0] - xmin),
     oy + scale * (ymax - p[1]),
   ];
-  const low = Math.min(...plot.values),
-    high = Math.max(...plot.values);
+  const [low, high] = useMemo(() => {
+    let minimum = Infinity, maximum = -Infinity;
+    for (const v of plot.frames?.map((f) => f.values) ?? [plot.values]) for (const value of v) {
+      minimum = Math.min(minimum, value); maximum = Math.max(maximum, value);
+    }
+    return [minimum, maximum];
+  }, [plot]);
   const palette = [
     [68, 1, 84],
     [59, 82, 139],
@@ -390,6 +419,18 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
       f = t - i;
     return `rgb(${palette[i].map((c, j) => Math.round(c + f * (palette[i + 1][j] - c))).join(",")})`;
   };
+  const boundaryColor = (index: number) => ["#915ca5", "#c96c37", "#3674a5", "#458473"][index % 4];
+  function csv(history: boolean) {
+    const selectedFrames = history ? plot.frames! : [{ time: frame?.time ?? 0, values, displacements }];
+    const hasTime = Boolean(plot.frames);
+    const quote = (text: string) => `"${text.replaceAll('"', '""')}"`;
+    const header = [...(hasTime ? ["time"] : []), "node", "X", "Y", plot.value_label ?? "value",
+                    ...(displacements ? ["u1", "u2"] : [])].map(quote).join(",");
+    const rows = selectedFrames.flatMap((f) => plot.nodes.map((p, i) =>
+      [...(hasTime ? [f.time] : []), i, ...p, f.values[i], ...(f.displacements?.[i] ?? [])].join(",")));
+    download(`${caseId}-${plot.id}${history ? "-history" : hasTime ? `-frame-${frameIndex}` : ""}.csv`,
+             [header, ...rows].join("\n") + "\n", "text/csv;charset=utf-8");
+  }
   return (
     <div className="result-plot">
       <div className="plot-toolbar">
@@ -410,46 +451,43 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
               Deformation ×10
             </button>
           )}
+          {plot.boundaries?.length ? (
+            <button type="button" aria-pressed={boundaries} onClick={() => setBoundaries((v) => !v)}>
+              Boundary conditions
+            </button>
+          ) : null}
         </div>
         <div className="plot-downloads">
-          <button
-            type="button"
-            onClick={() =>
-              download(
-                `${caseId}-${plot.id}.csv`,
-                `node,X,Y,value${plot.displacements ? ",u1,u2" : ""}\n` +
-                  plot.nodes
-                    .map((p, i) =>
-                      [
-                        i,
-                        ...p,
-                        plot.values[i],
-                        ...(plot.displacements?.[i] ?? []),
-                      ].join(","),
-                    )
-                    .join("\n") +
-                  "\n",
-                "text/csv;charset=utf-8",
-              )
-            }
-          >
-            CSV ↓
-          </button>
+          <button type="button" onClick={() => csv(false)}>{plot.frames ? "Frame CSV ↓" : "CSV ↓"}</button>
+          {plot.frames && <button type="button" onClick={() => csv(true)}>History CSV ↓</button>}
           {plot.figure && (
             <a
               href={`${import.meta.env.BASE_URL}livebench/${plot.figure}`}
               download
             >
-              Figure SVG ↓
+              {plot.frames ? "Final frame SVG ↓" : "Figure SVG ↓"}
             </a>
           )}
         </div>
       </div>
+      {plot.frames && (
+        <div className="field-timeline">
+          <button type="button" onClick={() => {
+            if (!playing && frameIndex === plot.frames!.length - 1) setFrameIndex(0);
+            setPlaying((v) => !v);
+          }}>{playing ? "Pause" : "Play"}</button>
+          <label htmlFor={`time-${plot.id}`}>Time {format(frame!.time)}</label>
+          <input id={`time-${plot.id}`} type="range" min="0" max={plot.frames.length - 1}
+            value={frameIndex} onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)); }}
+            aria-valuetext={`Time ${format(frame!.time)}, step ${frameIndex} of ${plot.frames.length - 1}`} />
+          <span>{frameIndex} / {plot.frames.length - 1}</span>
+        </div>
+      )}
       <div className="plot-canvas" ref={ref}>
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label={plot.title}
+          aria-label={plot.title + (frame ? `, time ${format(frame.time)}` : "")}
         >
           <title>{plot.title}</title>
           <desc>{plot.description}</desc>
@@ -458,7 +496,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
             // Bilinear interpolation of the actual nodal values, displayed on
             // a small subdivision of each Q1 cell; the solve is not rerun here.
             const cells = [];
-            const subdivisions = 6;
+            const subdivisions = plot.elements.length > 200 ? 2 : plot.elements.length > 100 ? 3 : 6;
             function interpolate(x: number, y: number) {
               const weights = [
                 (1 - x) * (1 - y),
@@ -471,7 +509,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
                   weights.reduce((s, w, i) => s + w * nodes[i][d], 0),
                 ),
                 value: weights.reduce(
-                  (s, w, i) => s + w * plot.values[element[i]],
+                  (s, w, i) => s + w * values[element[i]],
                   0,
                 ),
               };
@@ -518,13 +556,19 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
               </g>
             );
           })}
+          {boundaries && plot.boundaries?.map((boundary, index) => (
+            <polyline key={`${boundary.field}-${index}`} points={boundary.nodes.map((i) => position(shown[i]).join(",")).join(" ")}
+              fill="none" stroke={boundaryColor(index)} strokeWidth="3" strokeDasharray={boundary.kind === "natural" ? "5 3" : undefined}>
+              <title>{boundary.label}</title>
+            </polyline>
+          ))}
           {shown.map((p, i) => (
             <circle
               key={i}
               cx={position(p)[0]}
               cy={position(p)[1]}
               r={i === node ? 5 : 2.5}
-              fill={i === node ? "white" : color(plot.values[i])}
+              fill={i === node ? "white" : color(values[i])}
               stroke={i === node ? "#17283b" : "#ffffff88"}
               onPointerEnter={() => setNode(i)}
               onClick={() => setNode(i)}
@@ -532,21 +576,31 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
           ))}
           <text
             x={width / 2}
-            y={height - 12}
+            y={height - (deformed && width < 500 ? 28 : 12)}
             textAnchor="middle"
             fontSize="12"
             fill="#5d6976"
           >
-            {plot.nodes.length} nodes · {plot.elements.length} Quad4 elements
-            {deformed ? " · deformation ×10" : ""}
+            <tspan>{plot.nodes.length} nodes · {plot.elements.length} Quad4 elements</tspan>
+            {deformed && (
+              <tspan x={width < 500 ? width / 2 : undefined} dy={width < 500 ? 16 : 0}>
+                {width < 500 ? "deformation ×10" : " · deformation ×10"}
+              </tspan>
+            )}
           </text>
         </svg>
       </div>
+      {boundaries && plot.boundaries?.length ? (
+        <div className="boundary-legend">{plot.boundaries.map((boundary, index) => (
+          <span key={`${boundary.field}-${index}`}><i style={{background: boundaryColor(index)}} />{boundary.label}</span>
+        ))}</div>
+      ) : null}
       <div className="field-scale">
         <span>{format(low)}</span>
         <i />
         <span>{format(high)}</span>
       </div>
+      {plot.value_label && <p className="field-value-label">{plot.value_label} · scale fixed across all time steps</p>}
       <div className="plot-inspector">
         <label htmlFor={`node-${plot.id}`}>
           Inspect node {node + 1} / {plot.nodes.length}
@@ -569,9 +623,13 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
             <dd>{format(plot.nodes[node][1])}</dd>
           </div>
           <div>
-            <dt>Nodal value</dt>
-            <dd>{format(plot.values[node])}</dd>
+            <dt>{plot.value_label ?? "Nodal value"}</dt>
+            <dd>{format(values[node])}</dd>
           </div>
+          {displacements && <>
+            <div><dt>u₁</dt><dd>{format(displacements[node][0])}</dd></div>
+            <div><dt>u₂</dt><dd>{format(displacements[node][1])}</dd></div>
+          </>}
         </dl>
       </div>
     </div>

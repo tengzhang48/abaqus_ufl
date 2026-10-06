@@ -5,13 +5,20 @@ website. The deployed site is a static React/TypeScript build; it does not run
 Abaqus or execute generated subroutines in a visitor's browser.
 
 The livebench reads `public/livebench/report.json` and presents recorded
-stress/strain histories, relaxation, thermal-element comparisons, and FE
-profiles, mesh fields, and convergence. Visitors select a physical problem
+two genuine transient boundary-value simulations, stress/strain histories,
+relaxation, thermal-element comparisons, and FE profiles, mesh fields, and
+convergence. The initial view is a thermally bending strip with a clamped end
+and otherwise traction-free surfaces; a heated plate provides an independent
+2D transport BVP. Visitors inspect the boundary conditions and free field DOF
+counts, play recorded accepted time steps, select a physical problem
 and view, overlay reference curves, inspect samples, and download CSV/SVG
 data. Scientific plots use the actual f2py results; browser controls do not
 recompute them. Metrics and logs are in each case's details.
 Standalone SVGs are rendered by Matplotlib from the recorded arrays and
-shipped with the report; CSV downloads use the same full-precision data.
+shipped with the report; mesh SVG downloads explicitly identify the final
+frame. Frame CSV and full-history CSV downloads use the same full-precision
+time/nodal data. Playback uses fixed geometry and color scales, and boundary
+overlays preserve the prescribed edge node identities.
 
 The Python runner and browser share `../tools/livebench_cases.json`.
 The parser rejects missing checks, duplicate cases, nonfinite metrics or
@@ -69,7 +76,10 @@ npm run dev
 
 Local runs can include uncommitted changes, which are labeled in the interface.
 The Actions publication gate additionally requires a clean checkout and all
-seven cases. Generated reports and logs are ignored by Git; the workflow
+all nine cases. The publication gate additionally requires the BVP setup
+and accepted time-history arrays. The parser rejects nonfinite, mismatched or
+nonmonotonic frames and inconsistent final-frame/mesh/setup data. Generated
+reports and logs are ignored by Git; the workflow
 delivers them as build artifacts rather than committing changing output.
 
 The production base path is `/abaqus_ufl/`; set `VITE_BASE_PATH=/` for a

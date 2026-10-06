@@ -1,7 +1,8 @@
 # Livebench
 
-The livebench runs the six public UMAT/UEL verification bundles and a serial
-FE mesh benchmark through Python and the actual generated Fortran subroutines
+The livebench runs two transient boundary-value simulations, six public
+UMAT/UEL verification bundles, and a serial FE verification case through
+Python and the actual generated Fortran subroutines
 using f2py. It requires no Abaqus installation, license, or commercial solver
 service.
 
@@ -13,6 +14,7 @@ From a repository checkout with Python 3.8+, gfortran, Meson, and Ninja:
 pip install -e ".[dev]"
 python tools/run_livebench.py
 python tools/run_livebench.py --case neo_hookean_umat --output benchmark-results/neo
+python tools/run_livebench.py --case heated_plate_bvp --case thermal_bending_bvp
 ```
 
 Repeat `--case` to select several cases. `--timeout` sets a positive time
@@ -30,17 +32,35 @@ checks regenerate into temporary directories, compare with the committed
 Fortran, compile, call through f2py, and check output and tangent/state
 contracts. They do not overwrite the committed generated sources.
 
-The seventh case runs `tools/check_fe_runtime.py` through the optional
+The serial verification case runs `tools/check_fe_runtime.py` through the optional
 `abaqus_ufl.fe` runtime. It compiles the Quad4 UEL once and reuses the module
 for an affine mechanics patch and three refined transient diffusion meshes.
 Both tests have independent quantitative closed-form oracles. The case
 manifest is `tools/livebench_cases.json`, shared by the runner and website.
 
+The two BVP cases use the same generated Quad4 with genuine boundary
+conditions and solve every free field DOF at each of 20 time increments:
+
+- `check_heated_plate.py`: a 24 × 24 plate, a spatially varying hot top
+  boundary, and three cold edges; 529 free thermal DOFs. Independent Fourier
+  solutions separate space and time error. Mesh studies use 6², 12² and 24²
+  elements; time studies use four step sizes on a fixed 12² mesh.
+- `check_thermal_bending.py`: a 48 × 8 plane-strain strip clamped at its left
+  end, with zero traction elsewhere and opposite thermal baths; 343 free
+  thermal and 864 free displacement DOFs. It checks the thermal Fourier
+  solution, thermal dissipation, clamp force/moment balance, refinement, and
+  a small-strain slender-beam approximation with explicit tolerances.
+
+See [the equations, oracles, and acceptance gates](BOUNDARY_VALUE_SIMULATIONS.md).
+CI includes deliberately broken compiled controls for lost nodal history,
+delayed thermal boundary values, prescribed strip displacements, and disabled
+thermal expansion; each must fail its relevant gate.
+
 CI runs the complete test suite on Python 3.10 and 3.12. The livebench job
 also runs the bundles on Python 3.12 to produce the website's numerical
 report. Compiled coverage remains independent of the website workflow.
 
-The livebench records 16 plots and fields during these checks:
+The livebench records 28 plots and fields during these checks:
 
 | Case | Numerical comparisons |
 | --- | --- |
@@ -51,6 +71,8 @@ The livebench records 16 plots and fields during these checks:
 | Quad4 | Thermal nodal loading and integrated heat storage versus closed forms |
 | Quad8 | Deformed thermal-load ratio versus the exact C⁻¹ pull-back factor 1/λ² |
 | Serial FE | Three temperature profiles, the temperature field, spatial convergence, and an affine displacement patch |
+| Heated plate BVP | Full temperature history, center response, final profile, heat content, and space/time convergence |
+| Thermal bending BVP | Full displacement/temperature histories, tip deflection, through-thickness temperature, centerline, and accepted equilibrium residuals |
 
 Optional `record` callbacks capture the existing state histories and mesh
 solutions. Additional material/element sweeps reuse the module already
@@ -90,6 +112,15 @@ result. A setup or website-build failure leaves the previous published
 report in place; the displayed timestamp and commit identify that older
 run. Pull requests and forks do not deploy the upstream website.
 
+The boundary-value simulations lead the website's problem picker. Each shows
+its domain, prescribed/natural boundary conditions, initial state, properties,
+mesh, step size, and actual free DOF counts from the solve. Time controls play
+or inspect recorded accepted frames. Geometry and color scales remain fixed
+during playback; displayed deformation is magnified by ten. Boundary overlays
+identify the prescribed edges. Frame CSV and complete-history CSV downloads
+retain time and authoritative nodal fields; standalone field SVGs explicitly
+show the final frame.
+
 Choose a physical problem, then select its response, field, or convergence
 view. Curves overlay the computed samples and the independent reference;
 the difference view exposes discrepancies that are hidden by overlapping
@@ -122,5 +153,7 @@ Publication metadata is recorded in `publication.json`.
 
 Reference-model agreement and compiled element execution have separate
 roles. A passing livebench is not a new Abaqus solve, complete reproduction
-of the four paper figures, or physical validation. See the individual
+of the four paper figures, or physical validation. The BVPs are license-free
+global FE simulations; the bending model uses one-way heat-to-mechanics
+coupling and a quasi-static plane-strain mechanical solve. See the individual
 example records and `paper_examples/README.md` for those evidence levels.

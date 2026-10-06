@@ -5,5 +5,7 @@
   "small_strain_viscoelastic_umat": {"title": "Viscoelastic relaxation", "target": "UMAT", "directory": "examples/small_strain_viscoelastic_umat", "scripts": ["check_reference.py", "check_compiled.py"], "plots": ["relaxation"]},
   "scalar_diffusion_uel": {"title": "Thermo-mechanical Quad4", "target": "UEL", "directory": "examples/scalar_diffusion_uel", "scripts": ["check_reference.py", "check_assembled.py", "check_compiled.py"], "plots": ["thermal-load", "storage"]},
   "thermo_mechanics_quad8": {"title": "Thermo-mechanical Quad8", "target": "UEL", "directory": "examples/thermo_mechanics_quad8", "scripts": ["check_reference.py", "check_assembled.py", "check_compiled.py"], "plots": ["pull-back"]},
-  "serial_fe": {"title": "Serial FE mesh solves", "target": "FE", "directory": "tools", "scripts": ["check_fe_runtime.py"], "plots": ["temperature-16", "temperature-8", "temperature-4", "temperature-field", "convergence", "patch"]}
+  "serial_fe": {"title": "Serial FE mesh solves", "target": "FE", "directory": "tools", "scripts": ["check_fe_runtime.py"], "plots": ["temperature-16", "temperature-8", "temperature-4", "temperature-field", "convergence", "patch"]},
+  "heated_plate_bvp": {"title": "Transient heated plate", "target": "FE", "directory": "tools", "scripts": ["check_heated_plate.py"], "plots": ["temperature", "center-history", "temperature-profile", "heat-content", "spatial-convergence", "temporal-convergence"]},
+  "thermal_bending_bvp": {"title": "Thermal bending strip", "target": "FE", "directory": "tools", "scripts": ["check_thermal_bending.py"], "plots": ["deformation", "temperature", "tip-history", "temperature-profile", "centerline", "equilibrium"]}
 }
