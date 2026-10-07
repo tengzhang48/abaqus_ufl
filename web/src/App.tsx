@@ -55,9 +55,9 @@ export default function App() {
                 Open research software · v{siteData.repository.version}
               </p>
               <h1>
-                Coupled physics.
+                Coupled physics
                 <br />
-                Built for Abaqus.
+                Built for Abaqus
               </h1>
               <p className="hero-lede">
                 A formulation framework for constitutive models and coupled-field
@@ -119,7 +119,7 @@ export default function App() {
             <div className="section-heading split-heading">
               <div>
                 <p className="eyebrow">From formulation to verification</p>
-                <h2>Keep the physics in view.</h2>
+                <h2>Keep the physics in view</h2>
               </div>
               <p>
                 The livebench connects each mathematical step to the source and
@@ -156,9 +156,9 @@ export default function App() {
             <div>
               <p className="eyebrow">Two Abaqus interfaces</p>
               <h2>
-                Material laws.
+                Material laws
                 <br />
-                Coupled elements.
+                Coupled elements
               </h2>
               <p>
                 The API covers selected finite- and small-strain material laws
@@ -197,7 +197,7 @@ export default function App() {
             <div className="section-heading split-heading">
               <div>
                 <p className="eyebrow light">Published research</p>
-                <h2>From declarations to deforming structures.</h2>
+                <h2>From declarations to deforming structures</h2>
               </div>
               <p>
                 Selected historical Abaqus results from{" "}
@@ -264,7 +264,7 @@ export default function App() {
             <div className="section-heading split-heading">
               <div>
                 <p className="eyebrow">Inspect the evidence</p>
-                <h2>Checks you can follow and repeat.</h2>
+                <h2>Checks you can follow and repeat</h2>
               </div>
               <p>
                 Model checks, compiled subroutine calls, and Abaqus runs have
@@ -312,7 +312,7 @@ export default function App() {
           <div className="shell start-grid">
             <div>
               <p className="eyebrow light">Start with a working model</p>
-              <h2>Build and verify a material model.</h2>
+              <h2>Build and verify a material model</h2>
               <p>
                 Follow the Neo-Hookean model from its constitutive law to
                 independent reference checks and a compiled UMAT. Python,

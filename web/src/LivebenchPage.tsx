@@ -632,7 +632,7 @@ function Catalog({ report }: { report: BenchmarkReport | null }) {
   return (
     <>
       <p className="eyebrow">Livebench · worked models</p>
-      <h1>Follow a model from equations to results.</h1>
+      <h1>Follow a model from equations to results</h1>
       <p className="walkthrough-lede">
         Choose a problem, then trace its equations, weak form, Python
         declaration and generated subroutine. The last step shows the computed

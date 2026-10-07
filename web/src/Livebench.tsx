@@ -9,7 +9,7 @@ export default function Livebench() {
         <div className="section-heading split-heading">
           <div>
             <p className="eyebrow">The livebench</p>
-            <h2>See the equations become a simulation.</h2>
+            <h2>See the equations become a simulation</h2>
           </div>
           <p>
             Choose a model. Follow its equations, weak form, Python declaration,
