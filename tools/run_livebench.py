@@ -33,6 +33,8 @@ CHECK_LABELS = {
     "check_fe_runtime.py": "Mesh solves / f2py",
     "check_heated_plate.py": "Transient boundary-value solve / f2py",
     "check_thermal_bending.py": "Thermal bending boundary-value solve / f2py",
+    "check_ogden_bvp.py": "Ogden finite-shear boundary-value solve / f2py",
+    "check_plasticity_bvp.py": "J2 cyclic boundary-value solve / f2py",
 }
 
 # Call the existing check function rather than scraping rounded numbers from

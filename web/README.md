@@ -7,8 +7,12 @@ Abaqus or execute generated subroutines in a visitor's browser.
 The homepage contains a compact introduction linking to the dedicated
 `/abaqus_ufl/livebench/` page. Choose a model to follow **Equations → Weak
 form → Python → Generated Fortran → Simulation**, one stage at a time.
-The two worked boundary-value models are a heated plate and a clamped thermal
-bending strip. Source excerpts are imported from the public Python and
+The four worked boundary-value models are a heated plate, a clamped thermal
+bending strip, a finite-shear Ogden block, and a J2 loading/unloading block.
+The homepage places four clickable model images directly below a concise
+package introduction, with direct documentation and getting-started actions.
+Detailed research evidence stays in linked records and expandable summaries.
+Source excerpts are imported from the public Python and
 Fortran files rather than maintained as separate example implementations.
 Seven supporting material, element and mesh checks have separate result pages.
 
@@ -81,7 +85,7 @@ npm run dev
 
 Local runs can include uncommitted changes, which are labeled in the interface.
 The Actions publication gate additionally requires a clean checkout and
-all nine cases. The publication gate additionally requires the BVP setup
+all eleven cases. The publication gate additionally requires the BVP setup
 and accepted time-history arrays. The parser rejects nonfinite, mismatched or
 nonmonotonic frames and inconsistent final-frame/mesh/setup data. Generated
 reports and logs are ignored by Git; the workflow

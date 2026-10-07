@@ -5,6 +5,38 @@ import textwrap
 import numpy as np
 
 
+def _mesh_field(ax, plot, triangulation):
+    nodes = np.asarray(plot["nodes"], dtype=float)
+    if "displacements" in plot:
+        nodes = nodes + plot.get("deformation_scale", 10.0) * np.asarray(plot["displacements"])
+    triangles = [triangle for a, b, c, d in plot["elements"] for triangle in ((a, b, c), (a, c, d))]
+    mesh = triangulation(nodes[:, 0], nodes[:, 1], triangles)
+    field = ax.tripcolor(mesh, plot["values"], shading="gouraud", cmap="viridis")
+    for element in plot["elements"]:
+        loop = nodes[element + [element[0]]]
+        ax.plot(loop[:, 0], loop[:, 1], color="white", linewidth=0.35, alpha=0.55)
+    ax.set_aspect("equal")
+    return field
+
+
+def _write_preview(plot, directory, output, plt, triangulation):
+    """A small, static entrance image of the actual final recorded field."""
+    fig, ax = plt.subplots(figsize=(5.4, 3.3), facecolor="#eef3f1")
+    try:
+        ax.set_facecolor("#eef3f1")
+        fig.subplots_adjust(left=0.045, right=0.955, top=0.93, bottom=0.07)
+        _mesh_field(ax, plot, triangulation)
+        ax.margins(0.08)
+        ax.set_axis_off()
+        path = directory / (plot["id"] + "-preview.png")
+        fig.savefig(path, dpi=100, facecolor=fig.get_facecolor(), metadata={
+            "Title": plot["title"], "Description": "Final recorded field. " + plot["description"],
+            "Software": "abaqus_ufl livebench / Matplotlib"})
+        plot["preview"] = path.relative_to(output).as_posix()
+    finally:
+        plt.close(fig)
+
+
 def write_figures(plots, output, case_id, case_title, source):
     if not plots:
         return
@@ -21,6 +53,8 @@ def write_figures(plots, output, case_id, case_title, source):
     with plt.rc_context({"svg.fonttype": "none", "svg.hashsalt": "abaqus_ufl_livebench", "font.size": 9, "axes.spines.top": False,
                          "axes.spines.right": False, "axes.labelcolor": "#344455", "text.color": "#344455"}):
         for plot in plots:
+            if plot["kind"] == "mesh":
+                _write_preview(plot, directory, output, plt, Triangulation)
             modes = [False, True] if plot.get("comparison") else [False]
             for difference in modes:
                 fig, ax = plt.subplots(figsize=(8, 5.4))
@@ -52,17 +86,8 @@ def write_figures(plots, output, case_id, case_title, source):
                         ax.set_xscale(plot["x_scale"])
                         ax.grid(alpha=0.2)
                     elif plot["kind"] == "mesh":
-                        nodes = np.asarray(plot["nodes"], dtype=float)
-                        if "displacements" in plot:
-                            nodes = nodes + 10 * np.asarray(plot["displacements"])
-                        triangles = [triangle for a, b, c, d in plot["elements"] for triangle in ((a, b, c), (a, c, d))]
-                        mesh = Triangulation(nodes[:, 0], nodes[:, 1], triangles)
-                        field = ax.tripcolor(mesh, plot["values"], shading="gouraud", cmap="viridis")
-                        for element in plot["elements"]:
-                            loop = nodes[element + [element[0]]]
-                            ax.plot(loop[:, 0], loop[:, 1], color="white", linewidth=0.4, alpha=0.7)
-                        fig.colorbar(field, ax=ax, label="Nodal value", fraction=0.045, pad=0.04)
-                        ax.set_aspect("equal")
+                        field = _mesh_field(ax, plot, Triangulation)
+                        fig.colorbar(field, ax=ax, label=plot.get("value_label", "Nodal value"), fraction=0.045, pad=0.04)
                         ax.set_xlabel("Displayed x" if "displacements" in plot else "Reference X")
                         ax.set_ylabel("Displayed y" if "displacements" in plot else "Reference Y")
                     else:

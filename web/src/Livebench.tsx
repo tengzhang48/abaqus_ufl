@@ -1,57 +1,50 @@
+import BenchmarkPreview from "./BenchmarkPreview";
+import { modelCards } from "./livebench-cards";
 import { livebenchUrl } from "./SiteHeader";
 
 export default function Livebench() {
   return (
-    <section className="section livebench-section" id="livebench">
+    <section className="section livebench-section home-models" id="livebench">
       <div className="shell">
         <div className="section-heading split-heading">
           <div>
-            <p className="eyebrow">Explore a worked model</p>
-            <h2>From equations to simulation</h2>
+            <p className="eyebrow">The livebench</p>
+            <h2>See the equations become a simulation.</h2>
           </div>
           <p>
-            See how a physical model becomes a weak form, a Python declaration,
-            and a generated Abaqus user element. Each example opens its own
-            walkthrough.
+            Choose a model. Follow its equations, weak form, Python declaration,
+            generated Fortran, and checked mesh results on a dedicated page.
           </p>
         </div>
-        <ol
-          className="livebench-preview-flow"
-          aria-label="Livebench learning path"
-        >
-          <li>
-            <span>01</span> Equations & boundaries
-          </li>
-          <li>
-            <span>02</span> Weak form & Python
-          </li>
-          <li>
-            <span>03</span> Generated code & results
-          </li>
-        </ol>
-        <div className="livebench-preview-cases">
-          <a href={`${livebenchUrl}?case=heated_plate_bvp`}>
-            <span className="case-kind">Heat transfer · Quad4 UEL</span>
-            <h3>A plate heated from one edge</h3>
-            <p>
-              Follow the heat equation through its weak form to a transient 2D
-              temperature field.
-            </p>
-            <span className="text-link">Start the walkthrough →</span>
-          </a>
-          <a href={`${livebenchUrl}?case=thermal_bending_bvp`}>
-            <span className="case-kind">Thermomechanics · Quad4 UEL</span>
-            <h3>A strip that bends as it heats</h3>
-            <p>
-              Connect heat diffusion, thermal stress, and a clamped boundary to
-              the solved deformation.
-            </p>
-            <span className="text-link">Start the walkthrough →</span>
-          </a>
+        <div className="model-gallery">
+          {modelCards.map((model) => (
+            <a
+              className="model-card"
+              key={model.id}
+              href={`${livebenchUrl}?case=${model.id}`}
+            >
+              <BenchmarkPreview
+                caseId={model.id}
+                plot={model.plot}
+                alt={model.alt}
+              />
+              <div className="model-card-copy">
+                <p className="eyebrow">{model.kind}</p>
+                <h3>{model.title}</h3>
+                <p>{model.summary}</p>
+                <span className="model-caption">{model.caption}</span>
+                <span className="text-link">
+                  Follow this model <span aria-hidden="true">→</span>
+                </span>
+              </div>
+            </a>
+          ))}
         </div>
-        <a className="button livebench-open" href={livebenchUrl}>
-          Open the livebench →
-        </a>
+        <p className="gallery-note">
+          Images show recorded numerical results. Each walkthrough includes
+          boundary conditions, references, and reproducible checks.{" "}
+          <a href={livebenchUrl}>View the livebench index →</a>
+        </p>
       </div>
     </section>
   );

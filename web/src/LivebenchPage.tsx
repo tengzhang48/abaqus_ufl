@@ -3,11 +3,13 @@ import type { AnchorHTMLAttributes } from "react";
 import manifest from "../../tools/livebench_cases.json";
 import Plot from "./BenchmarkPlot";
 import SiteHeader, { livebenchUrl } from "./SiteHeader";
+import BenchmarkPreview from "./BenchmarkPreview";
+import { modelCards } from "./livebench-cards";
 import { validateReport } from "./livebench-report";
 import type { BenchmarkReport, SimulationSetup } from "./livebench-report";
 import {
   repository,
-  sourceExcerpts,
+  modelCode,
   steps,
   supportCases,
   walkthroughs,
@@ -55,18 +57,70 @@ function PageLink({
 
 function ProblemSketch({ id }: { id: string }) {
   const plate = id === "heated_plate_bvp";
+  const shear = id === "ogden_bvp" || id === "plasticity_bvp";
   return (
     <svg
       className="problem-sketch"
       viewBox="0 0 360 200"
       role="img"
       aria-label={
-        plate
-          ? "Unit square with a heated top edge and three cold edges"
-          : "Undeformed strip with a clamped left end, hot top and cold bottom"
+        shear
+          ? "Square shear block with fixed bottom, driven top and traction-free sides"
+          : plate
+            ? "Unit square with a heated top edge and three cold edges"
+            : "Undeformed strip with a clamped left end, hot top and cold bottom"
       }
     >
-      {plate ? (
+      {shear ? (
+        <>
+          <rect
+            x="110"
+            y="38"
+            width="140"
+            height="130"
+            fill="#f2f6f4"
+            stroke="#a4bcb2"
+          />
+          <line
+            x1="110"
+            y1="168"
+            x2="250"
+            y2="168"
+            stroke="#4b655b"
+            strokeWidth="4"
+          />
+          {[110, 130, 150, 170, 190, 210, 230, 250].map((x) => (
+            <line
+              key={x}
+              x1={x - 8}
+              y1="178"
+              x2={x}
+              y2="168"
+              stroke="#4b655b"
+            />
+          ))}
+          <line
+            x1="110"
+            y1="38"
+            x2="250"
+            y2="38"
+            stroke="#bd593a"
+            strokeWidth="4"
+          />
+          <path
+            d="M 150 22 H 222 l -8 -5 m 8 5 l -8 5"
+            fill="none"
+            stroke="#bd593a"
+            strokeWidth="2"
+          />
+          <text x="180" y="110" textAnchor="middle">
+            Traction-free sides
+          </text>
+          <text x="180" y="198" textAnchor="middle">
+            Bottom fixed · top driven
+          </text>
+        </>
+      ) : plate ? (
         <>
           <rect
             x="110"
@@ -174,7 +228,7 @@ function SetupFacts({ setup }: { setup?: SimulationSetup }) {
         </dd>
       </div>
       <div>
-        <dt>Time</dt>
+        <dt>{setup.free_temperature_dofs ? "Time" : "Load steps"}</dt>
         <dd>
           {setup.steps} increments · Δt = {setup.time_step}
         </dd>
@@ -219,10 +273,13 @@ function CaseResults({
       </h2>
       {walkthroughs[id] && (
         <p>
-          The generated UEL is compiled and executed for every element
-          evaluation. A local verification driver applies the boundary
-          conditions and solves each accepted increment. The controls below
-          explore the recorded solution.
+          The generated{" "}
+          {id === "plasticity_bvp"
+            ? "UMAT is compiled and called at every integration point"
+            : "UEL is compiled and executed for every element evaluation"}
+          . A local verification driver applies the boundary conditions and
+          solves each accepted increment. The controls below explore the
+          recorded solution.
         </p>
       )}
       {loading && (
@@ -388,6 +445,7 @@ function WalkthroughStep({
   step: string;
   sourceLink: (path: string) => string;
 }) {
+  const code = modelCode[id];
   if (step === "equations")
     return (
       <>
@@ -419,7 +477,9 @@ function WalkthroughStep({
         <Equations items={model.weakForms} />
         <article className="equation-card">
           <h3>Choose the element fields</h3>
-          <p className="equation-expression">Tₕ = Σₐ NₐTₐ, uₕ = Σₐ Nₐuₐ</p>
+          <p className="equation-expression">
+            {model.constitutive ? "uₕ = Σₐ Nₐuₐ" : "Tₕ = Σₐ NₐTₐ, uₕ = Σₐ Nₐuₐ"}
+          </p>
           <p>
             Bilinear Quad4 shape functions interpolate the nodal fields. The
             same basis supplies their test functions. Assemble the residuals and
@@ -427,17 +487,44 @@ function WalkthroughStep({
           </p>
         </article>
         <div className="walkthrough-note">
-          <h3>How the declaration represents the thermal weak form</h3>
-          <p>
-            <code>transport_equation</code> returns <code>(storage, flux)</code>
-            . The generator assembles <code>storage × θ − flux · Grad_X θ</code>
-            . Returning <code>flux = −k × grad_T</code> produces the positive
-            diffusion term shown above.
-          </p>
+          <h3>
+            {model.constitutive
+              ? "Connect the material law to element equilibrium"
+              : "How the declaration represents the thermal weak form"}
+          </h3>
+          {model.constitutive === "ogden" ? (
+            <p>
+              The displacement-only declaration's <code>momentum_equation</code>{" "}
+              returns first Piola stress. The generator integrates its
+              contraction with the reference test-function gradient and
+              differentiates the element residual.
+            </p>
+          ) : model.constitutive === "plasticity" ? (
+            <p>
+              The UMAT defines a local constitutive update. The verification
+              host separately integrates <code>Bᵀσ</code> and{" "}
+              <code>BᵀDDSDDE B</code>. Accepted integration-point history stays
+              fixed throughout every Newton and line-search trial.
+            </p>
+          ) : (
+            <p>
+              <code>transport_equation</code> returns{" "}
+              <code>(storage, flux)</code>. The generator assembles{" "}
+              <code>storage × θ − flux · Grad_X θ</code>. Returning{" "}
+              <code>flux = −k × grad_T</code> produces the positive diffusion
+              term shown above.
+            </p>
+          )}
         </div>
         <a
           className="text-link"
-          href={sourceLink("examples/scalar_diffusion_uel/README.md")}
+          href={sourceLink(
+            model.constitutive === "ogden"
+              ? "examples/ogden_umat/README.md"
+              : model.constitutive === "plasticity"
+                ? "examples/small_strain_j2_umat/README.md"
+                : "examples/scalar_diffusion_uel/README.md",
+          )}
         >
           Read the model's conventions ↗
         </a>
@@ -447,24 +534,23 @@ function WalkthroughStep({
     return (
       <>
         <h2>Declare the model in Python</h2>
-        <p>
-          The field declarations set the interpolation and test functions. The
-          equation methods return the stress, storage and flux used in the
-          residuals.
-        </p>
+        <p>{code.pythonIntro}</p>
         <p className="source-caption">
-          <a href={sourceLink("examples/scalar_diffusion_uel/build.py")}>
-            examples/scalar_diffusion_uel/build.py ↗
+          <a href={sourceLink(code.declarationPath)}>
+            {code.declarationPath} ↗
           </a>{" "}
           · excerpt from the shipped source
         </p>
         <pre className="walkthrough-code">
-          <code>{sourceExcerpts.weakForm}</code>
+          <code>{code.declaration}</code>
         </pre>
         <details className="walkthrough-source">
-          <summary>Read the material law</summary>
+          <summary>{code.detailTitle}</summary>
+          <p className="source-caption">
+            <a href={sourceLink(code.materialPath)}>{code.materialPath} ↗</a>
+          </p>
           <pre className="walkthrough-code">
-            <code>{sourceExcerpts.material}</code>
+            <code>{code.material}</code>
           </pre>
         </details>
         <h3>Apply the boundary values</h3>
@@ -473,10 +559,10 @@ function WalkthroughStep({
           increment. The remaining nodal fields are solved.
         </p>
         <p className="source-caption">
-          <a href={sourceLink(model.sourcePath)}>{model.sourcePath} ↗</a>
+          <a href={sourceLink(code.boundaryPath)}>{code.boundaryPath} ↗</a>
         </p>
         <pre className="walkthrough-code">
-          <code>{sourceExcerpts.boundaries[id]}</code>
+          <code>{code.boundaries}</code>
         </pre>
         {id === "thermal_bending_bvp" && (
           <p className="walkthrough-note">
@@ -489,25 +575,20 @@ function WalkthroughStep({
     );
   return (
     <>
-      <h2>Generate and execute the Abaqus UEL</h2>
-      <p>
-        The declaration generates a standard Quad4 user element. Each of its
-        four nodes has u₁, u₂ and T, giving 12 element DOFs. The generator
-        assembles the residual and differentiates its tangent blocks by complex
-        step.
-      </p>
+      <h2>{code.generationTitle}</h2>
+      <p>{code.generationSummary}</p>
       <ol className="generation-path">
         <li>
           <strong>Generate</strong>
           <span>
-            Python laws and field declarations become the element residual and
-            tangent.
+            Python declarations become the constitutive update or element
+            residual and tangent.
           </span>
         </li>
         <li>
           <strong>Compile</strong>
           <span>
-            f2py builds the generated Fortran together with the runtime wrapper.
+            f2py builds the generated Fortran together with its runtime wrapper.
           </span>
         </li>
         <li>
@@ -519,32 +600,22 @@ function WalkthroughStep({
         </li>
       </ol>
       <p className="source-caption">
-        <a href={sourceLink("abaqus_ufl/fe/compiled_element.py")}>
-          build_compiled_uel ↗
-        </a>{" "}
-        · actual generation and compilation path
+        <a href={sourceLink(code.generationPath)}>{code.generationPath} ↗</a> ·
+        actual generation and compilation path
       </p>
       <pre className="walkthrough-code">
-        <code>{sourceExcerpts.generation}</code>
+        <code>{code.generation}</code>
       </pre>
       <details className="walkthrough-source">
-        <summary>Inspect the generated UEL interface</summary>
+        <summary>{code.interfaceTitle}</summary>
         <pre className="walkthrough-code">
-          <code>{sourceExcerpts.interface}</code>
+          <code>{code.interface}</code>
         </pre>
-        <a
-          href={sourceLink(
-            "examples/scalar_diffusion_uel/scalar_diffusion_uel.for",
-          )}
-        >
+        <a href={sourceLink(code.fortranPath)}>
           Open the complete generated Fortran ↗
         </a>
       </details>
-      <p className="walkthrough-note">
-        The UEL returns <code>RHS = −R</code> and <code>AMATRX = ∂R/∂U</code>.
-        The local driver preserves accepted temperature history throughout each
-        Newton solve. Mesh, loads and steps belong to the analysis setup.
-      </p>
+      <p className="walkthrough-note">{code.runtimeNote}</p>
       <a
         className="text-link"
         href={sourceLink("docs/BOUNDARY_VALUE_SIMULATIONS.md")}
@@ -564,13 +635,17 @@ function Catalog({ report }: { report: BenchmarkReport | null }) {
       <h1>Follow a model from equations to results.</h1>
       <p className="walkthrough-lede">
         Choose a problem, then trace its equations, weak form, Python
-        declaration and generated user element. The last step shows the computed
+        declaration and generated subroutine. The last step shows the computed
         solution and the checks behind it.
       </p>
       <div className="walkthrough-catalog">
         {Object.entries(walkthroughs).map(([id, model]) => (
           <PageLink className="walkthrough-card" href={caseUrl(id)} key={id}>
-            <ProblemSketch id={id} />
+            <BenchmarkPreview
+              caseId={id}
+              plot={modelCards.find((card) => card.id === id)!.plot}
+              alt={modelCards.find((card) => card.id === id)!.alt}
+            />
             <div>
               <span className="case-kind">{model.kind}</span>
               <h2>{model.title}</h2>
@@ -607,9 +682,10 @@ function Catalog({ report }: { report: BenchmarkReport | null }) {
         </div>
       </details>
       <p className="walkthrough-note">
-        The simulation results are recorded runs of compiled generated elements,
-        with independent analytical comparisons. The separately documented paper
-        examples contain the available Abaqus analysis evidence.
+        The simulation results are recorded mesh runs using compiled generated
+        subroutines, with independent quantitative checks. The separately
+        documented paper examples contain the available Abaqus analysis
+        evidence.
       </p>
     </>
   );
@@ -673,7 +749,7 @@ export default function LivebenchPage() {
       <main id="main" className="livebench-section walkthrough-page">
         <div className="shell">
           <nav className="walkthrough-breadcrumb" aria-label="Breadcrumb">
-            <a href={import.meta.env.BASE_URL}>Project</a>
+            <a href={import.meta.env.BASE_URL}>Home</a>
             <span aria-hidden="true">/</span>
             <PageLink href={livebenchUrl}>Livebench</PageLink>
             {id && (

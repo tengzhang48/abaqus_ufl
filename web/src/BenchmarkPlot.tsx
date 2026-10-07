@@ -364,6 +364,8 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
   const frame = plot.frames?.[frameIndex];
   const values = frame?.values ?? plot.values;
   const displacements = frame?.displacements ?? plot.displacements;
+  const deformationScale = plot.deformation_scale ?? 10;
+  const frameLabel = caseId === "ogden_bvp" ? "Load parameter s" : caseId === "plasticity_bvp" ? "Cycle pseudo-time" : "Time";
   useEffect(() => {
     if (!playing || !plot.frames) return;
     const timer = window.setInterval(() => {
@@ -372,7 +374,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
     return () => window.clearInterval(timer);
   }, [playing, plot.frames]);
   const shown = plot.nodes.map((p, i) =>
-    p.map((v, j) => v + (deformed ? 10 * displacements![i][j] : 0)),
+    p.map((v, j) => v + (deformed ? deformationScale * displacements![i][j] : 0)),
   );
   // Fixed geometry and color scales across the recorded history keep changes
   // in deformation and temperature visible during playback.
@@ -382,8 +384,8 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
       ? (plot.frames?.map((f) => f.displacements) ?? [plot.displacements])
       : [undefined];
     for (const displacement of history) for (const [i, p] of plot.nodes.entries()) {
-      const x = p[0] + (displacement ? 10 * displacement[i][0] : 0);
-      const y = p[1] + (displacement ? 10 * displacement[i][1] : 0);
+      const x = p[0] + (displacement ? deformationScale * displacement[i][0] : 0);
+      const y = p[1] + (displacement ? deformationScale * displacement[i][1] : 0);
       box[0] = Math.min(box[0], x); box[1] = Math.max(box[1], x);
       box[2] = Math.min(box[2], y); box[3] = Math.max(box[3], y);
     }
@@ -450,7 +452,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
               aria-pressed={deformed}
               onClick={() => setDeformed((v) => !v)}
             >
-              Deformation ×10
+              Deformation ×{deformationScale}
             </button>
           )}
           {plot.boundaries?.length ? (
@@ -478,10 +480,10 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
             if (!playing && frameIndex === plot.frames!.length - 1) setFrameIndex(0);
             setPlaying((v) => !v);
           }}>{playing ? "Pause" : "Play"}</button>
-          <label htmlFor={`time-${plot.id}`}>Time {format(frame!.time)}</label>
+          <label htmlFor={`time-${plot.id}`}>{frameLabel} {format(frame!.time)}</label>
           <input id={`time-${plot.id}`} type="range" min="0" max={plot.frames.length - 1}
             value={frameIndex} onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)); }}
-            aria-valuetext={`Time ${format(frame!.time)}, step ${frameIndex} of ${plot.frames.length - 1}`} />
+            aria-valuetext={`${frameLabel} ${format(frame!.time)}, step ${frameIndex} of ${plot.frames.length - 1}`} />
           <span>{frameIndex} / {plot.frames.length - 1}</span>
         </div>
       )}
@@ -489,7 +491,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
         <svg
           viewBox={`0 0 ${width} ${height}`}
           role="img"
-          aria-label={plot.title + (frame ? `, time ${format(frame.time)}` : "")}
+          aria-label={plot.title + (frame ? `, ${frameLabel.toLowerCase()} ${format(frame.time)}` : "")}
         >
           <title>{plot.title}</title>
           <desc>{plot.description}</desc>
@@ -583,7 +585,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
             <tspan>{plot.nodes.length} nodes · {plot.elements.length} Quad4 elements</tspan>
             {deformed && (
               <tspan x={width < 500 ? width / 2 : undefined} dy={width < 500 ? 16 : 0}>
-                {width < 500 ? "deformation ×10" : " · deformation ×10"}
+                {`${width < 500 ? "" : " · "}deformation ×${deformationScale}`}
               </tspan>
             )}
           </text>

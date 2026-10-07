@@ -1,6 +1,6 @@
 # Livebench
 
-The livebench runs two transient boundary-value simulations, six public
+The livebench runs four boundary-value simulations, six public
 UMAT/UEL verification bundles, and a serial FE verification case through
 Python and the actual generated Fortran subroutines
 using f2py. It requires no Abaqus installation, license, or commercial solver
@@ -15,6 +15,7 @@ pip install -e ".[dev]"
 python tools/run_livebench.py
 python tools/run_livebench.py --case neo_hookean_umat --output benchmark-results/neo
 python tools/run_livebench.py --case heated_plate_bvp --case thermal_bending_bvp
+python tools/run_livebench.py --case ogden_bvp --case plasticity_bvp
 ```
 
 Repeat `--case` to select several cases. `--timeout` sets a positive time
@@ -38,7 +39,7 @@ for an affine mechanics patch and three refined transient diffusion meshes.
 Both tests have independent quantitative closed-form oracles. The case
 manifest is `tools/livebench_cases.json`, shared by the runner and website.
 
-The two BVP cases use the same generated Quad4 with genuine boundary
+The two thermal BVP cases use the same generated Quad4 with genuine boundary
 conditions and solve every free field DOF at each of 20 time increments:
 
 - `check_heated_plate.py`: a 24 × 24 plate, a spatially varying hot top
@@ -50,6 +51,15 @@ conditions and solve every free field DOF at each of 20 time increments:
   thermal and 864 free displacement DOFs. It checks the thermal Fourier
   solution, thermal dissipation, clamp force/moment balance, refinement, and
   a small-strain slender-beam approximation with explicit tolerances.
+- `check_ogden_bvp.py`: a 16 × 16 finite-strain shear block with 510 free
+  displacement DOFs. A displacement-only UEL reuses the shipped Ogden law;
+  independent principal-stretch stress/energy, global virtual work, the α=2
+  limit and reaction refinement check 12 accepted increments.
+- `check_plasticity_bvp.py`: a 12 × 12 small-strain load/unload block with
+  286 free displacement DOFs and 576 Gauss points. A case-local Quad4 host
+  calls the generated 3D J2 UMAT. Independent return mapping, endpoint work,
+  irreversible state, unloading/reverse yielding and refinement check 20
+  accepted increments; trial state cannot overwrite accepted history.
 
 See [the equations, oracles, and acceptance gates](BOUNDARY_VALUE_SIMULATIONS.md).
 CI includes deliberately broken compiled controls for lost nodal history,
@@ -60,7 +70,7 @@ CI runs the complete test suite on Python 3.10 and 3.12. The livebench job
 also runs the bundles on Python 3.12 to produce the website's numerical
 report. Compiled coverage remains independent of the website workflow.
 
-The livebench records 28 plots and fields during these checks:
+The livebench records 39 plots and fields during these checks:
 
 | Case | Numerical comparisons |
 | --- | --- |
@@ -73,6 +83,8 @@ The livebench records 28 plots and fields during these checks:
 | Serial FE | Three temperature profiles, the temperature field, spatial convergence, and an affine displacement patch |
 | Heated plate BVP | Full temperature history, center response, final profile, heat content, and space/time convergence |
 | Thermal bending BVP | Full displacement/temperature histories, tip deflection, through-thickness temperature, centerline, and accepted equilibrium residuals |
+| Ogden BVP | Non-affine finite-shear deformation, independent material shear law, grip reaction, refinement, and independent free equilibrium |
+| J2 BVP | Loading/unloading displacement, projected plastic strain with raw GP provenance, reaction hysteresis, accepted plastic history, equilibrium, and reaction refinement |
 
 Optional `record` callbacks capture the existing state histories and mesh
 solutions. Additional material/element sweeps reuse the module already
@@ -89,7 +101,8 @@ The runner saves:
   versions, and GitHub Actions run URL when available;
 - `logs/`: the complete output and traceback of each check.
 - `figures/`: standalone Matplotlib SVG figures for every view and each
-  response-curve discrepancy, including the setup and source revision.
+  response-curve discrepancy, including the setup and source revision;
+  mesh views also have compact final-field PNG previews for their entrance cards.
 
 Metric values come from the check functions' return values, not rounded
 console output. Checks that return no metrics still retain their assertions
@@ -112,7 +125,10 @@ result. A setup or website-build failure leaves the previous published
 report in place; the displayed timestamp and commit identify that older
 run. Pull requests and forks do not deploy the upstream website.
 
-The homepage links to a dedicated livebench index. Each boundary-value model
+The homepage leads with the package purpose and four clickable cards showing
+actual recorded mesh fields. Documentation and getting started are direct
+navigation choices; research and verification records are compact links with
+available evidence details. Each boundary-value model
 opens its own walkthrough: **Equations → Weak form → Python → Generated
 Fortran → Simulation**. The first stages explain the fields, reference-domain
 balance equations, test functions and boundary conditions. The Python and
@@ -122,7 +138,8 @@ path. Supporting material and element checks open separate result pages.
 The simulation stage shows the mesh, step size, actual free DOF counts and
 independent comparisons from the recorded solve. Time controls play
 or inspect recorded accepted frames. Geometry and color scales remain fixed
-during playback; displayed deformation is magnified by ten. Boundary overlays
+during playback; thermal deformation is magnified by ten, while Ogden and J2
+use actual deformation (×1). Boundary overlays
 identify the prescribed edges. Frame CSV and complete-history CSV downloads
 retain time and authoritative nodal fields; standalone field SVGs explicitly
 show the final frame.
@@ -134,6 +151,11 @@ lines. FEM views show field contours and optional element edges without
 default node dots. Opening **Inspect nodal values** reveals a node slider and
 a small cross at the selected node. Pointer and keyboard controls inspect
 curve samples; the node slider supports keyboard inspection.
+The J2 plastic-strain mesh is explicitly a nodal projection of raw Gauss-point
+state. Its report preserves every point's accepted state, coordinates and
+weights, and the parser verifies projection consistency and point coverage.
+Cyclic curves explicitly preserve chronological sample order rather than
+sorting the returning displacement branch.
 CSV downloads retain the original numerical precision. Downloadable SVG
 figures are generated with Matplotlib from the same recorded arrays.
 The source, metrics, logs, and run environment remain available

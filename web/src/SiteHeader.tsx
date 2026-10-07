@@ -14,12 +14,11 @@ export default function SiteHeader({
   livebench?: boolean;
 }) {
   const links = [
-    ["How it works", `${home}#how-it-works`],
-    ["Scope", `${home}#scope`],
-    ["Examples", `${home}#examples`],
     ["Livebench", livebenchUrl],
-    ["Paper examples", `${home}#paper-evidence`],
-    ["Status", `${home}#status`],
+    ["How it works", `${home}#how-it-works`],
+    ["Documentation", `${siteData.repository.url}/blob/main/docs/API_USAGE.md`],
+    ["Research", `${home}#paper-evidence`],
+    ["Get started", `${home}#start`],
   ];
   return (
     <header className="site-header">

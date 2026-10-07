@@ -18,11 +18,13 @@ function validReport() {
   };
 }
 
-test("a complete run includes both boundary-value simulations and verification checks", () => {
+test("a complete run includes four boundary-value simulations and verification checks", () => {
   const result = validateReport(validReport(), manifest);
-  assert.equal(result.cases.length, 9);
+  assert.equal(result.cases.length, 11);
   assert.ok(result.cases.some((c) => c.id === "heated_plate_bvp"));
   assert.ok(result.cases.some((c) => c.id === "thermal_bending_bvp"));
+  assert.ok(result.cases.some((c) => c.id === "ogden_bvp"));
+  assert.ok(result.cases.some((c) => c.id === "plasticity_bvp"));
   assert.equal(result.cases.at(-1).target, "FE");
 });
 
@@ -65,7 +67,7 @@ test("plot samples retain their data and old reports remain readable", () => {
   const report = validReport();
   report.cases[0].checks[1].plots = [curve()];
   assert.deepEqual(validateReport(report, manifest).cases[0].checks[1].plots[0].x, [0, 0.1]);
-  assert.equal(validateReport(validReport(), manifest).cases.length, 9);
+  assert.equal(validateReport(validReport(), manifest).cases.length, 11);
 });
 
 test("invalid plots and a false agreement claim cannot appear as verified data", () => {
@@ -131,6 +133,57 @@ test("invalid time histories and false simulation setup cannot be published", ()
     const report = validReport();
     const mesh = historyMesh(); mutate(mesh);
     report.cases.at(-1).checks[0].plots = [mesh];
+    assert.throws(() => validateReport(report, manifest));
+  }
+});
+
+test("cyclic responses explicitly preserve recorded order; default curves remain increasing", () => {
+  const report = validReport(), p = curve();
+  p.x = [0, 0.1, 0];
+  p.series.forEach(s => { s.values = [0, 1, -0.2]; });
+  p.x_order = "recorded";
+  report.cases.at(-1).checks[0].plots = [p];
+  assert.deepEqual(validateReport(report, manifest).cases.at(-1).checks[0].plots[0].x, p.x);
+  delete p.x_order;
+  assert.throws(() => validateReport(report, manifest));
+});
+
+function projectedHistory() {
+  const mesh = historyMesh(), a = 1 / Math.sqrt(3);
+  mesh.values = [0.1, 0.1, 0.1, 0.1];
+  mesh.frames[1].values = [...mesh.values];
+  mesh.deformation_scale = 1;
+  mesh.preview = "figures/plasticity_bvp/temperature-preview.png";
+  mesh.gauss_point_provenance = {
+    source: "Accepted STATEV(1)", quantity: "Equivalent plastic strain", units: "dimensionless",
+    projection: "Reference-area-weighted incident element means", element_index_base: 0, gauss_point_index_base: 0,
+    natural_coordinate_order: [[-a,-a],[-a,a],[a,-a],[a,a]],
+    reference_coordinates: [[[(1-a)/2,(1-a)/2],[(1-a)/2,(1+a)/2],[(1+a)/2,(1-a)/2],[(1+a)/2,(1+a)/2]]],
+    weights: [[0.25,0.25,0.25,0.25]], expected_points_per_frame: 4, observed_points_per_frame: 4,
+    frames: [{time: 0, values: [[0,0,0,0]]}, {time: 0.5, values: [[0.1,0.1,0.1,0.1]]}],
+  };
+  return mesh;
+}
+
+test("projected plastic strain retains finite, identified raw Gauss-point history", () => {
+  const report = validReport();
+  report.cases.at(-1).checks[0].plots = [projectedHistory()];
+  assert.equal(validateReport(report, manifest).cases.at(-1).checks[0].plots[0].gauss_point_provenance.observed_points_per_frame, 4);
+  for (const mutate of [
+    m => { m.gauss_point_provenance.frames[1].values[0].pop(); },
+    m => { m.gauss_point_provenance.reference_coordinates[0][0][0] = 0; },
+    m => { m.gauss_point_provenance.frames[1].values[0][0] = NaN; },
+    m => { m.gauss_point_provenance.frames[1].values[0][0] = -0.1; },
+    m => { m.gauss_point_provenance.weights[0][0] = 0; },
+    m => { m.gauss_point_provenance.observed_points_per_frame = 3; },
+    m => { m.gauss_point_provenance.frames[1].time = 0.4; },
+    m => { m.frames[1].values[0] = 0.2; m.values[0] = 0.2; },
+    m => { m.preview = "https://example.com/unrelated.png"; },
+    m => { m.deformation_scale = NaN; },
+    m => { m.deformation_scale = -1; },
+  ]) {
+    report.cases.at(-1).checks[0].plots = [projectedHistory()];
+    mutate(report.cases.at(-1).checks[0].plots[0]);
     assert.throws(() => validateReport(report, manifest));
   }
 });

@@ -8,6 +8,7 @@ export type SimulationSetup = {
 export type CurvePlot = {
   kind: "curve"; id: string; title: string; description: string;
   x_label: string; y_label: string; x: number[]; x_scale: "linear" | "log"; y_scale: "linear" | "log";
+  x_order?: "increasing" | "recorded";
   series: { label: string; role: "computed" | "reference" | "guide"; values: number[] }[];
   comparison?: { max_abs_error: number; rtol: number; atol: number };
   figure?: string; difference_figure?: string;
@@ -22,8 +23,15 @@ export type BoundaryRegion = {
 export type MeshPlot = {
   kind: "mesh"; id: string; title: string; description: string;
   nodes: number[][]; elements: number[][]; values: number[]; displacements?: number[][];
-  figure?: string;
+  figure?: string; preview?: string; deformation_scale?: number;
   value_label?: string; frames?: MeshFrame[]; boundaries?: BoundaryRegion[]; setup?: SimulationSetup;
+  gauss_point_provenance?: {
+    source: string; quantity: string; units: string; projection: string;
+    element_index_base: number; gauss_point_index_base: number;
+    natural_coordinate_order: number[][]; reference_coordinates: number[][][];
+    weights: number[][]; frames: {time: number; values: number[][]}[];
+    expected_points_per_frame: number; observed_points_per_frame: number;
+  };
 };
 
 export type BenchmarkPlot = CurvePlot | MeshPlot;
@@ -105,6 +113,8 @@ export function validateReport(value: unknown, manifest: Manifest): BenchmarkRep
         for (const plot of check.plots) {
           validatePlot(plot);
           if (plot.figure !== undefined && plot.figure !== `figures/${item.id}/${plot.id}.svg`) fail();
+          if (plot.kind === "mesh" && plot.preview !== undefined
+              && plot.preview !== `figures/${item.id}/${plot.id}-preview.png`) fail();
           if (plot.kind === "curve" && plot.difference_figure !== undefined
               && plot.difference_figure !== `figures/${item.id}/${plot.id}-difference.svg`) fail();
           if (ids.has(plot.id)) fail();
@@ -131,7 +141,8 @@ export function validatePlot(value: unknown): BenchmarkPlot {
   if (plot.kind === "curve") {
     if (!array(plot.x) || plot.x.length < 2 || typeof plot.x_label !== "string" || typeof plot.y_label !== "string"
         || !["linear", "log"].includes(plot.x_scale) || !["linear", "log"].includes(plot.y_scale)
-        || plot.x.some((x, i) => (i > 0 && x <= plot.x[i - 1]) || (plot.x_scale === "log" && x <= 0))
+        || (plot.x_order !== undefined && !["increasing", "recorded"].includes(plot.x_order))
+        || plot.x.some((x, i) => (plot.x_order !== "recorded" && i > 0 && x <= plot.x[i - 1]) || (plot.x_scale === "log" && x <= 0))
         || !Array.isArray(plot.series) || plot.series.length === 0) fail();
     for (const series of plot.series) {
       if (typeof series.label !== "string" || !["computed", "reference", "guide"].includes(series.role)
@@ -155,6 +166,8 @@ export function validatePlot(value: unknown): BenchmarkPlot {
           || new Set(element).size !== 4 || element.some((i) => !Number.isInteger(i) || i < 0 || i >= plot.nodes.length))) fail();
     if (plot.displacements !== undefined && (!Array.isArray(plot.displacements)
         || plot.displacements.length !== plot.nodes.length || plot.displacements.some((u) => !array(u, 2)))) fail();
+    if (plot.deformation_scale !== undefined && (typeof plot.deformation_scale !== "number"
+        || !Number.isFinite(plot.deformation_scale) || plot.deformation_scale <= 0)) fail();
     if (plot.value_label !== undefined && typeof plot.value_label !== "string") fail();
     if (plot.frames !== undefined) {
       if (!Array.isArray(plot.frames) || plot.frames.length < 2) fail();
@@ -177,6 +190,41 @@ export function validatePlot(value: unknown): BenchmarkPlot {
             || !["prescribed", "natural"].includes(boundary.kind) || !Array.isArray(boundary.nodes)
             || boundary.nodes.length < 2 || new Set(boundary.nodes).size !== boundary.nodes.length
             || boundary.nodes.some((i) => !Number.isInteger(i) || i < 0 || i >= plot.nodes.length)) fail();
+      }
+    }
+    if (plot.gauss_point_provenance !== undefined) {
+      const g = plot.gauss_point_provenance, ne = plot.elements.length;
+      if (![g.source, g.quantity, g.units, g.projection].every(v => typeof v === "string")
+          || g.element_index_base !== 0 || g.gauss_point_index_base !== 0
+          || g.expected_points_per_frame !== 4 * ne || g.observed_points_per_frame !== 4 * ne
+          || !Array.isArray(g.natural_coordinate_order) || g.natural_coordinate_order.length !== 4
+          || g.natural_coordinate_order.some(p => !array(p, 2))
+          || new Set(g.natural_coordinate_order.map(p => p.join(","))).size !== 4
+          || !Array.isArray(g.weights) || g.weights.length !== ne
+          || g.weights.some(w => !array(w, 4) || w.some(v => v <= 0))
+          || !Array.isArray(g.reference_coordinates) || g.reference_coordinates.length !== ne
+          || !plot.frames || !Array.isArray(g.frames) || g.frames.length !== plot.frames.length) fail();
+      for (const [ei, coordinates] of g.reference_coordinates.entries()) {
+        if (!Array.isArray(coordinates) || coordinates.length !== 4 || coordinates.some(p => !array(p, 2))) fail();
+        for (const [point, [xi, eta]] of g.natural_coordinate_order.entries()) {
+          const shape = [(1-xi)*(1-eta), (1+xi)*(1-eta), (1+xi)*(1+eta), (1-xi)*(1+eta)].map(v => v/4);
+          for (const j of [0, 1]) {
+            const expected = plot.elements[ei].reduce((sum, node, a) => sum + shape[a] * plot.nodes[node][j], 0);
+            if (Math.abs(expected - coordinates[point][j]) > 1e-12 * Math.max(1, Math.abs(expected))) fail();
+          }
+        }
+      }
+      for (const [fi, frame] of g.frames.entries()) {
+        if (frame.time !== plot.frames![fi].time || !Array.isArray(frame.values) || frame.values.length !== ne
+            || frame.values.some(v => !array(v, 4) || v.some(ep => ep < 0))) fail();
+        const numerator = new Array(plot.nodes.length).fill(0), denominator = new Array(plot.nodes.length).fill(0);
+        for (const [ei, element] of plot.elements.entries()) {
+          const area = g.weights[ei].reduce((a, b) => a+b, 0);
+          const integral = frame.values[ei].reduce((sum, value, gp) => sum + value * g.weights[ei][gp], 0);
+          for (const node of element) { numerator[node] += integral; denominator[node] += area; }
+        }
+        if (numerator.some((value, node) => denominator[node] <= 0
+            || Math.abs(value / denominator[node] - plot.frames![fi].values[node]) > 1e-12)) fail();
       }
     }
   } else fail();
