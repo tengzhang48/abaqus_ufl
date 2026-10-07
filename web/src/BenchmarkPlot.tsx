@@ -9,6 +9,63 @@ const format = (n: number) =>
       ? n.toExponential(2)
       : Number(n.toPrecision(4)).toString();
 
+function niceTicks(min: number, max: number, target: number): number[] {
+  if (min === max) return [min];
+  const base = 10 ** Math.floor(Math.log10((max - min) / target));
+  let best: number[] = [];
+  for (const mag of [base / 10, base, base * 10]) {
+    for (const multiplier of [1, 2, 2.5, 5]) {
+      const step = multiplier * mag;
+      const ticks: number[] = [];
+      for (
+        let value = Math.ceil(min / step - 1e-9) * step;
+        value <= max + step * 1e-9;
+        value += step
+      ) {
+        ticks.push(Number(value.toPrecision(12)));
+      }
+      if (
+        ticks.length >= 2 &&
+        (best.length < 2 ||
+          Math.abs(ticks.length - target) < Math.abs(best.length - target))
+      ) {
+        best = ticks;
+      }
+    }
+  }
+  return best;
+}
+
+// Ticks in data units; on a log axis, min and max are log10 bounds.
+function axisTicks(min: number, max: number, log: boolean, target: number) {
+  if (!log) return niceTicks(min, max, target);
+  const decades = Array.from(
+    { length: Math.max(0, Math.floor(max) - Math.ceil(min) + 1) },
+    (_, i) => 10 ** (Math.ceil(min) + i),
+  );
+  return decades.length >= 2 ? decades : niceTicks(10 ** min, 10 ** max, target);
+}
+
+const formatTick = (value: number) =>
+  value !== 0 && (Math.abs(value) < 0.001 || Math.abs(value) >= 10000)
+    ? value.toExponential()
+    : String(value);
+
+// Open on the largest recorded field, so load-unload histories do not
+// start on their returned, nearly uniform final frame.
+function peakFrame(plot: MeshPlot) {
+  let best = 0,
+    peak = -Infinity;
+  plot.frames?.forEach((frame, index) => {
+    const size = Math.max(...frame.values.map(Math.abs));
+    if (size >= peak) {
+      peak = size;
+      best = index;
+    }
+  });
+  return best;
+}
+
 function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(720);
@@ -74,10 +131,8 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
   const py = (y: number) =>
     bottom - ((ty(y) - ymin) / (ymax - ymin)) * (bottom - top);
   const tickCount = width < 500 ? 3 : 5;
-  const ticks = Array.from(
-    { length: tickCount },
-    (_, i) => i / (tickCount - 1),
-  );
+  const xTicks = axisTicks(xmin, xmax, xLog, tickCount);
+  const yTicks = axisTicks(ymin, ymax, yLog, tickCount);
   const color = (index: number) =>
     difference
       ? colors[0]
@@ -165,11 +220,10 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
         >
           <title>{plot.title}</title>
           <desc>{plot.description}</desc>
-          {ticks.map((t) => {
-            const y = bottom - t * (bottom - top),
-              value = ymin + t * (ymax - ymin);
+          {yTicks.map((value) => {
+            const y = py(value);
             return (
-              <g key={`y${t}`}>
+              <g key={`y${value}`}>
                 <line x1={left} x2={right} y1={y} y2={y} stroke="#e5eaeb" />
                 <text
                   x={left - 10}
@@ -178,16 +232,15 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
                   fontSize="11"
                   fill="#5d6976"
                 >
-                  {format(yLog ? 10 ** value : value)}
+                  {formatTick(value)}
                 </text>
               </g>
             );
           })}
-          {ticks.map((t) => {
-            const x = left + t * (right - left),
-              value = xmin + t * (xmax - xmin);
+          {xTicks.map((value) => {
+            const x = px(value);
             return (
-              <g key={`x${t}`}>
+              <g key={`x${value}`}>
                 <line x1={x} x2={x} y1={top} y2={bottom} stroke="#f0f2f2" />
                 <text
                   x={x}
@@ -196,7 +249,7 @@ function Curve({ plot, caseId }: { plot: CurvePlot; caseId: string }) {
                   fontSize="11"
                   fill="#5d6976"
                 >
-                  {format(xLog ? 10 ** value : value)}
+                  {formatTick(value)}
                 </text>
               </g>
             );
@@ -359,7 +412,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
   const [lines, setLines] = useState(true);
   const [boundaries, setBoundaries] = useState(true);
   const [inspecting, setInspecting] = useState(false);
-  const [frameIndex, setFrameIndex] = useState((plot.frames?.length ?? 1) - 1);
+  const [frameIndex, setFrameIndex] = useState(() => peakFrame(plot));
   const [playing, setPlaying] = useState(false);
   const frame = plot.frames?.[frameIndex];
   const values = frame?.values ?? plot.values;

@@ -1,11 +1,10 @@
 import heatSource from "../../examples/scalar_diffusion_uel/build.py?raw";
 import plateSource from "../../tools/check_heated_plate.py?raw";
 import bendingSource from "../../tools/check_thermal_bending.py?raw";
-import compiledSource from "../../abaqus_ufl/fe/compiled_element.py?raw";
 import fortranSource from "../../examples/scalar_diffusion_uel/scalar_diffusion_uel.for?raw";
 import ogdenMaterialSource from "../../examples/ogden_umat/build.py?raw";
 import ogdenSource from "../../tools/check_ogden_bvp.py?raw";
-import ogdenFortran from "../../examples/ogden_umat/ogden_umat.for?raw";
+import ogdenFortran from "../../examples/ogden_umat/ogden_plane_strain_uel.for?raw";
 import plasticityMaterialSource from "../../examples/small_strain_j2_umat/build.py?raw";
 import plasticityHostSource from "../../tools/plasticity_bvp_common.py?raw";
 import plasticityFortran from "../../examples/small_strain_j2_umat/small_strain_j2.for?raw";
@@ -56,16 +55,16 @@ export type Walkthrough = {
 
 const heatEquation: Equation = {
   title: "Conservation of heat",
-  expression: "ρcₚ ∂T/∂t + Div_X q = 0,     q = −k Grad_X T",
+  expression: "ρcₚ ∂T/∂t + Div q = 0,     q = −k Grad T",
   explanation:
-    "Temperature changes because heat flows down its gradient. The public model uses reference coordinates X and has no volumetric heat source.",
+    "Temperature changes because heat flows down its gradient. Div and Grad act on the reference coordinates X; there is no volumetric heat source.",
 };
 const heatResidual: Equation = {
   title: "Discrete thermal residual",
   expression:
-    "Rₜ(θ) = ∫Ω₀ [θ ρcₚ(Tⁿ − Tⁿ⁻¹)/Δt + k Grad_X θ · Grad_X Tⁿ] dΩ₀ = 0",
+    "Rₜ(θ) = ∫Ω₀ [θ ρcₚ(Tⁿ − Tⁿ⁻¹)/Δt + k Grad θ · Grad Tⁿ] dΩ₀ = 0",
   explanation:
-    "Multiply the heat balance by θ and integrate the flux divergence by parts over the reference domain Ω₀. Insert q = −k Grad_X T and use backward Euler for storage. The boundary term vanishes where θ = 0 on prescribed-temperature edges, or where q · N = 0 on insulated edges.",
+    "Multiply the heat balance by θ and integrate the flux divergence by parts over the reference domain Ω₀. Insert q = −k Grad T and use backward Euler for storage. The boundary term vanishes where θ = 0 on prescribed-temperature edges, or where q · N = 0 on insulated edges.",
 };
 
 export const walkthroughs: Record<string, Walkthrough> = {
@@ -102,7 +101,7 @@ export const walkthroughs: Record<string, Walkthrough> = {
     domain:
       "Plane-strain strip, 0 ≤ X ≤ 8 and 0 ≤ Y ≤ 1. Consistent model units.",
     fields:
-      "u(X,t): displacement. T(X,t): temperature rise. F = I + Grad_X u and J = det F.",
+      "u(X,t): displacement. T(X,t): temperature rise. F = I + Grad u and J = det F.",
     boundaries: [
       "Initially u = 0 and T = 0.",
       "Left end: u₁ = u₂ = 0. Remaining mechanical edges: zero traction.",
@@ -113,9 +112,9 @@ export const walkthroughs: Record<string, Walkthrough> = {
     equations: [
       {
         title: "Mechanical equilibrium",
-        expression: "Div_X P = 0",
+        expression: "Div P = 0",
         explanation:
-          "Mechanical equilibrium is quasi-static: each temperature increment has a converged displacement field. Div_X acts in the reference coordinates.",
+          "Mechanical equilibrium is quasi-static: each temperature increment has a converged displacement field. Div and Grad act on the reference coordinates X.",
       },
       {
         title: "Stress law",
@@ -128,7 +127,7 @@ export const walkthroughs: Record<string, Walkthrough> = {
     weakForms: [
       {
         title: "Mechanical residual",
-        expression: "Rᵤ(v) = ∫Ω₀ Grad_X v : P(F,T) dΩ₀ = 0",
+        expression: "Rᵤ(v) = ∫Ω₀ Grad v : P(F,T) dΩ₀ = 0",
         explanation:
           "Multiply equilibrium by v and integrate by parts over the reference domain Ω₀. The traction term vanishes on the free edges; v vanishes at the clamp.",
       },
@@ -151,7 +150,7 @@ export const walkthroughs: Record<string, Walkthrough> = {
     domain:
       "Unit-square reference domain Ω₀, plane strain and unit out-of-plane thickness. Consistent model units.",
     fields:
-      "u(X,s): displacement at quasi-static load parameter s. F = I + Grad_X u, F₃₃ = 1, and J = det F. The full three-dimensional stretch spectrum enters the material law.",
+      "u(X,s): displacement at quasi-static load parameter s. F = I + Grad u, F₃₃ = 1, and J = det F; Grad acts on the reference coordinates X. The full three-dimensional stretch spectrum enters the material law.",
     boundaries: [
       "Initially u = 0.",
       "Bottom: u₁ = u₂ = 0. Top: u₁ = 0.6s and u₂ = 0, for 0 ≤ s ≤ 1.",
@@ -169,7 +168,7 @@ export const walkthroughs: Record<string, Walkthrough> = {
       },
       {
         title: "Stress and equilibrium",
-        expression: "P = ∂W/∂F,     Div_X P = 0",
+        expression: "P = ∂W/∂F,     Div P = 0",
         explanation:
           "Differentiate energy to obtain first Piola stress. Each load increment satisfies equilibrium in the reference domain. This model is stateless: unloading would retrace its elastic response.",
       },
@@ -177,7 +176,7 @@ export const walkthroughs: Record<string, Walkthrough> = {
     weakForms: [
       {
         title: "Mechanical residual",
-        expression: "Rᵤ(v) = ∫Ω₀ Grad_X v : P(I + Grad_X u) dΩ₀ = 0",
+        expression: "Rᵤ(v) = ∫Ω₀ Grad v : P(I + Grad u) dΩ₀ = 0",
         explanation:
           "Multiply reference equilibrium by v and integrate by parts. The boundary term vanishes because the sides are traction-free and v = 0 at both prescribed grips.",
       },
@@ -238,9 +237,9 @@ export const walkthroughs: Record<string, Walkthrough> = {
       },
       {
         title: "Consistent element tangent",
-        expression: "Kₑ = Σg Bᵍᵀ Dᵍ_alg Bᵍ wᵍ det Jₑ",
+        expression: "Kₑ = Σᵍ wᵍ det Jᵍ Bᵍᵀ Dᵍ Bᵍ",
         explanation:
-          "B maps nodal displacements to the active engineering-strain components. The compiled UMAT supplies its full 6 × 6 DDSDDE; the plane-strain host selects indices xx, yy and xy without a plane-stress condensation.",
+          "Sum over the four Gauss points g with weights wᵍ. Dᵍ is the algorithmic tangent DDSDDE returned by the UMAT, and B maps nodal displacements to the active engineering-strain components. The UMAT supplies its full 6 × 6 DDSDDE; the plane-strain host selects indices xx, yy and xy without a plane-stress condensation.",
       },
     ],
     testFunctions:
@@ -308,62 +307,76 @@ export const supportCases: Record<
   },
 };
 
-function section(source: string, start: string, end: string) {
-  const first = source.indexOf(start),
-    last = source.indexOf(end, first + start.length);
-  if (first < 0 || last < 0)
+// Python excerpts drop their common indent. Fortran keeps its fixed-form
+// columns, so continuation markers stay in column 6.
+function section(source: string, start: string, end: string, dedent = true) {
+  const marker = source.indexOf(start),
+    last = source.indexOf(end, marker + start.length);
+  if (marker < 0 || last < 0)
     throw new Error("A walkthrough source excerpt is missing.");
-  return source.slice(first, last).trim();
+  const lines = source
+    .slice(source.lastIndexOf("\n", marker) + 1, last)
+    .trimEnd()
+    .split("\n");
+  const indent = dedent
+    ? Math.min(
+        ...lines
+          .filter((line) => line.trim())
+          .map((line) => line.length - line.trimStart().length),
+      )
+    : 0;
+  return lines.map((line) => line.slice(indent)).join("\n");
 }
 
+const gaussPointBlock = (source: string) =>
+  section(
+    source,
+    "C       Real material evaluation (for RHS)",
+    "C       AMATRX assembly",
+    false,
+  );
+
 // Display excerpts from the shipped source, rather than maintaining example code twice.
-export const sourceExcerpts = {
-  material: section(
-    heatSource,
-    "class HeatDiffusionMaterial",
-    "class HeatDiffusionProblem",
-  ),
-  weakForm: section(
-    heatSource,
-    "class HeatDiffusionProblem",
-    "def verification_state",
-  ),
-  generation: section(
-    compiledSource,
-    "    source = build /",
-    "    result = subprocess.run",
-  ),
-  interface: fortranSource.split("\n").slice(0, 22).join("\n"),
-  boundaries: {
-    heated_plate_bvp: section(
-      plateSource,
-      "def conditions",
-      "def assert_plate_accuracy",
+export type CodeBlock = { title: string; path: string; code: string };
+
+const uelInterface = (source: string) =>
+  section(
+    source,
+    "      SUBROUTINE UEL(",
+    "C     --- Local parameters ---",
+    false,
+  );
+
+const heatPython: CodeBlock[] = [
+  {
+    title: "Material law",
+    path: "examples/scalar_diffusion_uel/build.py",
+    code: section(
+      heatSource,
+      "class HeatDiffusionMaterial",
+      "class HeatDiffusionProblem",
     ),
-    thermal_bending_bvp: section(
-      bendingSource,
-      "def conditions",
-      "def tip_values",
-    ),
-  } as Record<string, string>,
-};
+  },
+  {
+    title: "Weak-form declaration",
+    path: "examples/scalar_diffusion_uel/build.py",
+    code: section(heatSource, "class HeatDiffusionProblem", "def verification_state"),
+  },
+];
 
 const thermalCode = {
   pythonIntro:
-    "The field declarations set interpolation and test functions. Equation methods return the stress, storage, and flux used in the residuals.",
-  declarationPath: "examples/scalar_diffusion_uel/build.py",
-  declaration: sourceExcerpts.weakForm,
-  material: sourceExcerpts.material,
-  materialPath: "examples/scalar_diffusion_uel/build.py",
-  detailTitle: "Read the material law",
-  generationPath: "abaqus_ufl/fe/compiled_element.py",
-  generation: sourceExcerpts.generation,
-  generationTitle: "Generate and execute the Abaqus UEL",
+    "The material returns stress, heat storage and heat flux. The weak-form declaration names the fields and their interpolation; the generator builds both residuals and their tangents from these methods.",
+  python: heatPython,
+  generationTitle: "Generate the Abaqus UEL",
   generationSummary:
-    "The declaration generates a standard Quad4 user element. Each of its four nodes has u₁, u₂ and T, giving 12 element DOFs. The generator assembles the residual and differentiates its tangent blocks by complex step.",
-  interface: sourceExcerpts.interface,
-  interfaceTitle: "Inspect the generated UEL interface",
+    "The declaration generates a standard Quad4 user element. Each of its four nodes carries u₁, u₂ and T, giving 12 element DOFs. At every Gauss point the element evaluates the material law, assembles both residuals, and differentiates them by complex step for the tangent blocks. The simulation compiles this shipped file and checks that it matches byte for byte; material values arrive as element properties.",
   fortranPath: "examples/scalar_diffusion_uel/scalar_diffusion_uel.for",
+  fortranExcerpt: gaussPointBlock(fortranSource),
+  fortranCaption: "Gauss-point residual assembly",
+  compilePath: "abaqus_ufl/fe/compiled_element.py",
+  interface: uelInterface(fortranSource),
+  interfaceTitle: "Inspect the generated UEL interface",
   runtimeNote:
     "The UEL returns RHS = −R and AMATRX = ∂R/∂U. The local driver preserves accepted temperature history throughout each Newton solve. Mesh, loads, and steps belong to the analysis setup.",
 };
@@ -372,96 +385,119 @@ export const modelCode: Record<
   string,
   {
     pythonIntro: string;
-    declarationPath: string;
-    declaration: string;
-    material: string;
-    materialPath: string;
-    detailTitle: string;
-    generationPath: string;
-    generation: string;
+    python: CodeBlock[];
+    pythonMore?: CodeBlock;
+    pythonNote?: string;
+    boundaries: CodeBlock;
     generationTitle: string;
     generationSummary: string;
+    fortranPath: string;
+    fortranExcerpt: string;
+    fortranCaption: string;
+    compilePath: string;
     interface: string;
     interfaceTitle: string;
-    fortranPath: string;
     runtimeNote: string;
-    boundaries: string;
-    boundaryPath: string;
   }
 > = {
   heated_plate_bvp: {
     ...thermalCode,
-    boundaries: sourceExcerpts.boundaries.heated_plate_bvp,
-    boundaryPath: "tools/check_heated_plate.py",
+    boundaries: {
+      title: "Boundary values in the simulation script",
+      path: "tools/check_heated_plate.py",
+      code: section(plateSource, "def conditions", "def assert_plate_accuracy"),
+    },
   },
   thermal_bending_bvp: {
     ...thermalCode,
-    boundaries: sourceExcerpts.boundaries.thermal_bending_bvp,
-    boundaryPath: "tools/check_thermal_bending.py",
+    pythonNote:
+      "This case constructs HeatDiffusionProblem(K=2.0). The material excerpt shows the shared declaration's defaults; the simulation overrides K.",
+    boundaries: {
+      title: "Boundary values in the simulation script",
+      path: "tools/check_thermal_bending.py",
+      code: section(bendingSource, "def conditions", "def tip_values"),
+    },
   },
   ogden_bvp: {
     pythonIntro:
-      "Reuse the shipped Ogden material in a displacement-only weak-form declaration. Its momentum method supplies first Piola stress; the generator performs element integration and tangent construction.",
-    declarationPath: "tools/check_ogden_bvp.py",
-    declaration: section(
-      ogdenSource,
-      "class OgdenShearProblem",
-      "def conditions",
-    ),
-    materialPath: "examples/ogden_umat/build.py",
-    material: section(
-      ogdenMaterialSource,
-      "class OgdenOneTerm",
-      "def generate",
-    ),
-    detailTitle: "Read the strain-energy-derived material law",
-    boundaryPath: "tools/check_ogden_bvp.py",
-    boundaries: section(ogdenSource, "def conditions", "def solve_history"),
-    generationPath: "abaqus_ufl/fe/compiled_element.py",
-    generation: sourceExcerpts.generation,
-    generationTitle: "Generate a verification UEL from the Ogden law",
+      "The material returns first Piola stress from the Ogden strain energy, through the principal stretches of C. The weak-form declaration reuses that law for a displacement-only plane-strain element; the generator performs element integration and tangent construction.",
+    python: [
+      {
+        title: "Material law",
+        path: "examples/ogden_umat/build.py",
+        code: section(
+          ogdenMaterialSource,
+          "class OgdenOneTerm",
+          "class OgdenPlaneStrainProblem",
+        ),
+      },
+      {
+        title: "Weak-form declaration",
+        path: "examples/ogden_umat/build.py",
+        code: section(
+          ogdenMaterialSource,
+          "class OgdenPlaneStrainProblem",
+          "def generate(",
+        ),
+      },
+    ],
+    pythonNote:
+      "The shipped material default is K = 100. This simulation constructs OgdenPlaneStrainProblem(mu=1, alpha=3.5, K=10).",
+    boundaries: {
+      title: "Boundary values in the simulation script",
+      path: "tools/check_ogden_bvp.py",
+      code: section(ogdenSource, "def conditions", "def solve_history"),
+    },
+    generationTitle: "Generate the Abaqus UEL",
     generationSummary:
-      "The displacement-only declaration generates a standard Quad4 UEL with eight element DOFs. Every element evaluation executes that generated residual and complex-step tangent. The same public constitutive law also ships as a UMAT; its source is linked below. The mesh simulation uses the UEL, with μ = 1, α = 3.5 and K = 10.",
-    interface: ogdenFortran.split("\n").slice(0, 36).join("\n"),
-    interfaceTitle: "Inspect the shipped Ogden UMAT source header",
-    fortranPath: "examples/ogden_umat/ogden_umat.for",
+      "The plane-strain declaration generates a standard Quad4 UEL with eight element DOFs. Each Gauss point evaluates the spectral Ogden stress and its complex-step tangent, then assembles the residual and stiffness. The simulation compiles this shipped file and checks that it matches byte for byte; μ, α and K arrive as element properties.",
+    fortranPath: "examples/ogden_umat/ogden_plane_strain_uel.for",
+    fortranExcerpt: gaussPointBlock(ogdenFortran),
+    fortranCaption: "Gauss-point residual assembly",
+    compilePath: "abaqus_ufl/fe/compiled_element.py",
+    interface: uelInterface(ogdenFortran),
+    interfaceTitle: "Inspect the generated UEL interface",
     runtimeNote:
-      "The verification UEL returns RHS = −R and AMATRX = ∂R/∂U. Its only nodal field is displacement, with no material state. build_compiled_uel generates element.for in its temporary build directory; reproducing this case compiles that actual source. The shipped UMAT below retains its default K = 100, while the BVP overrides K = 10 at runtime.",
+      "The UEL returns RHS = −R and AMATRX = ∂R/∂U. Its only nodal field is displacement, with no material state. The same law also ships as a three-dimensional UMAT, examples/ogden_umat/ogden_umat.for.",
   },
   plasticity_bvp: {
     pythonIntro:
-      "The small-strain material declaration defines an incremental stress update and STATEV. Element equilibrium is assembled by the case-local Quad4 host shown below; it is separate from the constitutive generator.",
-    declarationPath: "examples/small_strain_j2_umat/build.py",
-    declaration: section(
-      plasticityMaterialSource,
-      "class SmallStrainJ2",
-      "def generate",
-    ),
-    materialPath: "tools/plasticity_bvp_common.py",
-    material: section(
-      plasticityHostSource,
-      "    def evaluate_element",
-      "def oracle_assembly",
-    ),
-    detailTitle: "Read the element assembly and accepted-state commit",
-    boundaryPath: "tools/plasticity_bvp_common.py",
-    boundaries: section(
-      plasticityHostSource,
-      "def top_displacement",
-      "def assert_trial_purity",
-    ),
-    generationPath: "tools/plasticity_bvp_common.py",
-    generation: section(
-      plasticityHostSource,
-      "def build_compiled_j2",
-      "def call_umat",
-    ),
+      "The material declares an incremental stress update with one state variable. The generator writes it as a UMAT and differentiates the update for DDSDDE. A case-local Quad4 host assembles element equilibrium; it is separate from the generator.",
+    python: [
+      {
+        title: "Material law",
+        path: "examples/small_strain_j2_umat/build.py",
+        code: section(plasticityMaterialSource, "class SmallStrainJ2", "def generate"),
+      },
+    ],
+    pythonMore: {
+      title: "Read the element assembly and accepted-state commit",
+      path: "tools/plasticity_bvp_common.py",
+      code: section(
+        plasticityHostSource,
+        "    def evaluate_element",
+        "def oracle_assembly",
+      ),
+    },
+    boundaries: {
+      title: "Boundary values in the simulation script",
+      path: "tools/plasticity_bvp_common.py",
+      code: section(plasticityHostSource, "def top_displacement", "def assert_trial_purity"),
+    },
     generationTitle: "Generate the UMAT, then assemble mesh equilibrium",
     generationSummary:
-      "generate_small_strain_umat writes the local constitutive update and its tangent. The check requires byte parity with the shipped source, then compiles it through f2py. At each of four Gauss points per Quad4, the host calls the full 3D interface (NDI = 3, NSHR = 3, NTENS = 6) while imposing zero out-of-plane strain. The host integrates Bᵀσ and BᵀDDSDDE B for its eight nodal DOFs.",
+      "generate_small_strain_umat writes the stress update below. DDSDDE comes from complex-step differentiation of that same update, one perturbed call per strain component. The check requires byte parity with the shipped source before compiling it. At each of four Gauss points per Quad4, the host calls the full 3D interface (NDI = 3, NSHR = 3, NTENS = 6) while imposing zero out-of-plane strain, and integrates Bᵀσ and BᵀDDSDDE B for its eight nodal DOFs.",
+    fortranPath: "examples/small_strain_j2_umat/small_strain_j2.for",
+    fortranExcerpt: section(
+      plasticityFortran,
+      "      cutback_flag = DCMPLX(0.0d0, 0.0d0)",
+      "      DO ii = 1, 3",
+      false,
+    ),
+    fortranCaption: "Elastic predictor and radial return",
+    compilePath: "tools/plasticity_bvp_common.py",
     interface: plasticityFortran.split("\n").slice(0, 39).join("\n"),
     interfaceTitle: "Inspect the generated 3D UMAT interface",
-    fortranPath: "examples/small_strain_j2_umat/small_strain_j2.for",
     runtimeNote:
       "The UMAT supplies tension-positive Abaqus stresses and an engineering-shear DDSDDE. Every trial starts from copies of accepted stress, strain, and STATEV. Only a converged global equilibrium can commit all Gauss-point states. A rejected trial or cutback leaves accepted history untouched. This state ownership belongs to this verification host.",
   },

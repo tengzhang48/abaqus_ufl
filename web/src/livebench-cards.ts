@@ -1,7 +1,7 @@
 export const modelCards = [
   {
     id: "heated_plate_bvp",
-    title: "Heat entering a plate",
+    title: "A plate heated from one edge",
     kind: "Heat transfer",
     summary: "Follow heat conservation into a transient temperature field.",
     plot: "temperature",
@@ -25,7 +25,7 @@ export const modelCards = [
       "Turn a strain-energy function into a finite-strain mesh simulation.",
     plot: "deformation",
     alt: "Computed finite-strain deformation of an Ogden block under shear",
-    caption: "Displacement magnitude · deformation ×1",
+    caption: "Displacement magnitude · true scale",
   },
   {
     id: "plasticity_bvp",

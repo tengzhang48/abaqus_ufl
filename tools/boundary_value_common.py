@@ -25,6 +25,13 @@ def heat_problem(**properties):
     return module.HeatDiffusionProblem(**properties)
 
 
+def require_shipped_source(compiled, relative_path):
+    """Require the compiled element source to be the shipped generated file."""
+    built = Path(compiled._abaqus_ufl_build_directory.name) / "element.for"
+    if built.read_bytes() != (ROOT / relative_path).read_bytes():
+        raise AssertionError("{} is stale; regenerate it with its build.py".format(relative_path))
+
+
 def ramp(time, rate=4.0):
     return -math.expm1(-rate * time)
 

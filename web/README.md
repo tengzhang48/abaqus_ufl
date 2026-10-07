@@ -44,12 +44,31 @@ against `../CITATION.cff` during the build.
 - `scripts/check-evidence.mjs` checks that linked example records and figure
   inputs exist and that headline validation facts remain supported by
   `docs/ABAQUS_VALIDATION_2026-07-30.md`.
-- Selected tracked figure assets with documented provenance are imported from the
-  `paper_examples/` tree at build time. Each rendered figure links back to its
-  exact source path in GitHub. The corrosion figure is intentionally not
-  bundled while its derived-mesh notice and redistribution status remain open.
+- The homepage loads 960 px WebP copies of three tracked `paper_examples/`
+  figures from `src/assets/figures/`. Each rendered figure links back to its
+  original PNG in GitHub. The corrosion figure is intentionally not bundled
+  while its derived-mesh notice and redistribution status remain open.
 - Manuscript-package limitations remain beside the related visual, including
   the external gel mesh seed and the open corrosion-mesh provenance item.
+
+The WebP copies were made once with Pillow, which is not a build dependency.
+To regenerate them from the repository root:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from PIL import Image
+
+output = Path("web/src/assets/figures")
+for source in ["paper_examples/stabilized_tet4/figure/Tet4_u_mag.png",
+               "paper_examples/morphing_hex8/figure/pasta_t360.png",
+               "paper_examples/gel_bilayer/figure/gel_bilayer_6h.png"]:
+    with Image.open(source) as image:
+        image.thumbnail((960, 960), Image.Resampling.LANCZOS)
+        image.save(output / (Path(source).stem + ".webp"),
+                   "WEBP", quality=82, method=6)
+PY
+```
 
 The website deliberately distinguishes generated-source checks, direct
 compiled calls, completed Abaqus solves, datachecks, retained historical

@@ -4,9 +4,9 @@ import publication from "../../docs/publication.json";
 import Livebench from "./Livebench";
 import BenchmarkPreview from "./BenchmarkPreview";
 import SiteHeader, { livebenchUrl } from "./SiteHeader";
-import tetDisplacement from "../../paper_examples/stabilized_tet4/figure/Tet4_u_mag.png";
-import pastaFinal from "../../paper_examples/morphing_hex8/figure/pasta_t360.png";
-import gelFinal from "../../paper_examples/gel_bilayer/figure/gel_bilayer_6h.png";
+import tetDisplacement from "./assets/figures/Tet4_u_mag.webp";
+import pastaFinal from "./assets/figures/pasta_t360.webp";
+import gelFinal from "./assets/figures/gel_bilayer_6h.webp";
 
 const repository = siteData.repository.url;
 const repoFile = (path: string) => `${repository}/blob/main/${path}`;

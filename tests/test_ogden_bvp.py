@@ -7,7 +7,7 @@ import pytest
 
 from abaqus_ufl.fe import CompiledAbaqusElement, build_compiled_uel
 from tools.check_ogden_bvp import (
-    OgdenShearProblem, PROPERTIES, SHEAR, audit_alpha_two_limit,
+    OgdenPlaneStrainProblem, PROPERTIES, SHEAR, audit_alpha_two_limit,
     audit_element_tangent, audit_history, conditions, shear_patch, solve_history,
 )
 from tools.ogden_bvp_reference import alpha_two_piola, piola_and_energy
@@ -15,7 +15,7 @@ from tools.ogden_bvp_reference import alpha_two_piola, piola_and_energy
 
 @pytest.fixture(scope="module")
 def compiled_problem():
-    problem = OgdenShearProblem(**PROPERTIES)
+    problem = OgdenPlaneStrainProblem(**PROPERTIES)
     return problem, build_compiled_uel(problem)
 
 

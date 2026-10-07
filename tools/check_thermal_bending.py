@@ -11,7 +11,8 @@ if str(ROOT) not in sys.path:
 
 from tools.boundary_value_common import (
     beam_tip_reference, boundary_region, heat_problem, history_mesh, ramp,
-    simulation_setup, solve_history, strip_reference, validate_history,
+    require_shipped_source, simulation_setup, solve_history, strip_reference,
+    validate_history,
 )
 from tools.livebench_data import comparison_curve
 
@@ -55,6 +56,7 @@ def check(*, record=None):
     from abaqus_ufl.fe import build_compiled_uel
     problem = heat_problem(K=2.0)
     compiled = build_compiled_uel(problem)
+    require_shipped_source(compiled, "examples/scalar_diffusion_uel/scalar_diffusion_uel.for")
     times = np.linspace(0, 1, 21)
     coarse = solve_history(problem, compiled, 24, 4, times, conditions, length=LENGTH, height=HEIGHT)
     main = solve_history(problem, compiled, 48, 8, times, conditions, length=LENGTH, height=HEIGHT)

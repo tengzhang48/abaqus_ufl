@@ -141,8 +141,11 @@ are also rejected.
 The unit-square plane-strain block has fixed bottom displacement, top
 `u=(0.6s,0)` for quasi-static loading parameter `0≤s≤1`, and traction-free
 sides. The public [`OgdenOneTerm`](../examples/ogden_umat/build.py) law is
-reused in a displacement-only [`OgdenShearProblem`](../tools/check_ogden_bvp.py)
-verification UEL. Its energy and equilibrium are
+reused in a displacement-only
+[`OgdenPlaneStrainProblem`](../examples/ogden_umat/build.py) verification UEL.
+The check requires the compiled source to match the shipped
+[`ogden_plane_strain_uel.for`](../examples/ogden_umat/ogden_plane_strain_uel.for)
+byte for byte. Its energy and equilibrium are
 
 `W=(2μ/α²)(Σᵢ λ̄ᵢᵅ−3)+(K/2)(ln J)²`,
 `λ̄ᵢ=J⁻¹ᐟ³λᵢ`, `P=∂W/∂F`, `Div_X P=0`.

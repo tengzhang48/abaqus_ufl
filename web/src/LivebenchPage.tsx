@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import type { AnchorHTMLAttributes } from "react";
 import manifest from "../../tools/livebench_cases.json";
 import Plot from "./BenchmarkPlot";
@@ -218,7 +218,11 @@ function Equations({ items }: { items: Equation[] }) {
   );
 }
 
-function SetupFacts({ setup }: { setup?: SimulationSetup }) {
+function SetupFacts({ id, setup }: { id: string; setup?: SimulationSetup }) {
+  const dofs = [
+    [setup?.free_temperature_dofs, "temperature"],
+    [setup?.free_displacement_dofs, "displacement"],
+  ].filter(([count]) => count);
   return setup ? (
     <dl className="simulation-facts">
       <div>
@@ -230,14 +234,14 @@ function SetupFacts({ setup }: { setup?: SimulationSetup }) {
       <div>
         <dt>{setup.free_temperature_dofs ? "Time" : "Load steps"}</dt>
         <dd>
-          {setup.steps} increments · Δt = {setup.time_step}
+          {setup.steps} increments · {id === "ogden_bvp" ? "Δs" : "Δt"} ={" "}
+          {Number(setup.time_step.toPrecision(4))}
         </dd>
       </div>
       <div>
         <dt>Solved DOFs</dt>
         <dd>
-          {setup.free_temperature_dofs} temperature ·{" "}
-          {setup.free_displacement_dofs} displacement
+          {dofs.map(([count, field]) => `${count} ${field}`).join(" · ")}
         </dd>
       </div>
     </dl>
@@ -324,7 +328,7 @@ function CaseResults({
               Refresh results
             </button>
           </div>
-          <SetupFacts setup={plot?.setup} />
+          <SetupFacts id={id} setup={plot?.setup} />
           {plot ? (
             <>
               <div className="bench-view-select">
@@ -510,7 +514,7 @@ function WalkthroughStep({
             <p>
               <code>transport_equation</code> returns{" "}
               <code>(storage, flux)</code>. The generator assembles{" "}
-              <code>storage × θ − flux · Grad_X θ</code>. Returning{" "}
+              <code>storage × θ − flux · Grad θ</code>. Returning{" "}
               <code>flux = −k × grad_T</code> produces the positive diffusion
               term shown above.
             </p>
@@ -535,60 +539,76 @@ function WalkthroughStep({
       <>
         <h2>Declare the model in Python</h2>
         <p>{code.pythonIntro}</p>
-        <p className="source-caption">
-          <a href={sourceLink(code.declarationPath)}>
-            {code.declarationPath} ↗
-          </a>{" "}
-          · excerpt from the shipped source
-        </p>
-        <pre className="walkthrough-code">
-          <code>{code.declaration}</code>
-        </pre>
+        {code.python.map((block) => (
+          <Fragment key={block.title}>
+            <h3>{block.title}</h3>
+            <p className="source-caption">
+              <a href={sourceLink(block.path)}>{block.path} ↗</a> · excerpt
+              from the shipped source
+            </p>
+            <pre className="walkthrough-code">
+              <code>{block.code}</code>
+            </pre>
+          </Fragment>
+        ))}
+        {code.pythonNote && (
+          <p className="walkthrough-note">{code.pythonNote}</p>
+        )}
+        {code.pythonMore && (
+          <details className="walkthrough-source">
+            <summary>{code.pythonMore.title}</summary>
+            <p className="source-caption">
+              <a href={sourceLink(code.pythonMore.path)}>
+                {code.pythonMore.path} ↗
+              </a>
+            </p>
+            <pre className="walkthrough-code">
+              <code>{code.pythonMore.code}</code>
+            </pre>
+          </details>
+        )}
         <details className="walkthrough-source">
-          <summary>{code.detailTitle}</summary>
+          <summary>{code.boundaries.title}</summary>
+          <p>
+            The simulation script prescribes boundary DOFs at the end of each
+            increment. The remaining nodal fields are solved.
+          </p>
           <p className="source-caption">
-            <a href={sourceLink(code.materialPath)}>{code.materialPath} ↗</a>
+            <a href={sourceLink(code.boundaries.path)}>
+              {code.boundaries.path} ↗
+            </a>
           </p>
           <pre className="walkthrough-code">
-            <code>{code.material}</code>
+            <code>{code.boundaries.code}</code>
           </pre>
         </details>
-        <h3>Apply the boundary values</h3>
-        <p>
-          The simulation script prescribes boundary DOFs at the end of each
-          increment. The remaining nodal fields are solved.
-        </p>
-        <p className="source-caption">
-          <a href={sourceLink(code.boundaryPath)}>{code.boundaryPath} ↗</a>
-        </p>
-        <pre className="walkthrough-code">
-          <code>{code.boundaries}</code>
-        </pre>
-        {id === "thermal_bending_bvp" && (
-          <p className="walkthrough-note">
-            This case constructs <code>HeatDiffusionProblem(K=2.0)</code>{" "}
-            through <code>heat_problem(K=2.0)</code>. The material excerpt shows
-            the shared declaration's defaults; the simulation overrides K.
-          </p>
-        )}
       </>
     );
   return (
     <>
       <h2>{code.generationTitle}</h2>
       <p>{code.generationSummary}</p>
+      <p className="source-caption">
+        <a href={sourceLink(code.fortranPath)}>{code.fortranPath} ↗</a> ·{" "}
+        {code.fortranCaption}, excerpt from the generated file
+      </p>
+      <pre className="walkthrough-code">
+        <code>{code.fortranExcerpt}</code>
+      </pre>
       <ol className="generation-path">
         <li>
           <strong>Generate</strong>
           <span>
-            Python declarations become the constitutive update or element
-            residual and tangent.
+            The Python declaration becomes the material law, residual and
+            complex-step tangent in Fortran.
           </span>
         </li>
         <li>
           <strong>Compile</strong>
           <span>
-            f2py builds the generated Fortran together with its runtime wrapper.
+            For these runs, f2py compiles the file with a small driver (
+            <a href={sourceLink(code.compilePath)}>{code.compilePath} ↗</a>).
+            The same file is a standard Abaqus user subroutine.
           </span>
         </li>
         <li>
@@ -599,13 +619,6 @@ function WalkthroughStep({
           </span>
         </li>
       </ol>
-      <p className="source-caption">
-        <a href={sourceLink(code.generationPath)}>{code.generationPath} ↗</a> ·
-        actual generation and compilation path
-      </p>
-      <pre className="walkthrough-code">
-        <code>{code.generation}</code>
-      </pre>
       <details className="walkthrough-source">
         <summary>{code.interfaceTitle}</summary>
         <pre className="walkthrough-code">

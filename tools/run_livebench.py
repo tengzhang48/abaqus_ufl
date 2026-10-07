@@ -207,7 +207,7 @@ def run_benchmarks(case_ids, output, timeout=300.0):
     report["status"] = "passed" if all(c["status"] == "passed" for c in report["cases"]) else "failed"
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
                                      dir=str(output), delete=False) as stream:
-        json.dump(report, stream, indent=2, allow_nan=False)
+        json.dump(report, stream, separators=(",", ":"), allow_nan=False)
         stream.write("\n")
         temporary_path = Path(stream.name)
     temporary_path.replace(output / "report.json")

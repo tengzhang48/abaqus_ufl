@@ -28,27 +28,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import abaqus_ufl as au
-from examples.ogden_umat.build import OgdenOneTerm
-from tools.boundary_value_common import boundary_region
+from examples.ogden_umat.build import OgdenPlaneStrainProblem
+from tools.boundary_value_common import boundary_region, require_shipped_source
 from tools.livebench_data import comparison_curve, mesh_field
 from tools.ogden_bvp_reference import alpha_two_element, element_reference, mesh_reference, shear_traction
 
 SHEAR = 0.6
 PROPERTIES = dict(mu=1.0, alpha=3.5, K=10.0)
-
-
-class OgdenShearProblem(au.WeakForm):
-    """Only displacement is solved; P comes from the released Ogden model."""
-
-    material = OgdenOneTerm
-    ndim = 2
-
-    def define_fields(self):
-        self.u = au.VectorField("u", degree=1)
-
-    def momentum_equation(self, v, F):
-        return self.material.stress_PK1(F)
 
 
 def conditions(nodes, parameter):
@@ -216,7 +202,7 @@ def audit_alpha_two_limit(compiled, result):
     """Execute α=2 in the compiled spectral law at all final deformed elements."""
     from abaqus_ufl.fe import CompiledAbaqusElement
 
-    problem = OgdenShearProblem(mu=PROPERTIES["mu"], alpha=2.0, K=PROPERTIES["K"])
+    problem = OgdenPlaneStrainProblem(mu=PROPERTIES["mu"], alpha=2.0, K=PROPERTIES["K"])
     element = CompiledAbaqusElement(compiled, problem)
     error = 0.0
     for index, connectivity in enumerate(result["elements"]):
@@ -233,10 +219,11 @@ def audit_alpha_two_limit(compiled, result):
 def check(*, record=None):
     from abaqus_ufl.fe import build_compiled_uel
 
-    problem = OgdenShearProblem(**PROPERTIES)
+    problem = OgdenPlaneStrainProblem(**PROPERTIES)
     if not problem.verify():
         raise AssertionError("Ogden declaration tangent verification failed")
     compiled = build_compiled_uel(problem)
+    require_shipped_source(compiled, "examples/ogden_umat/ogden_plane_strain_uel.for")
     tangent_error = audit_element_tangent(compiled, problem)
     gamma, observed_patch, exact_patch = shear_patch(compiled, problem)
     parameters = np.linspace(0, 1, 13)

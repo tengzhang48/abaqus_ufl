@@ -9,5 +9,5 @@
   "heated_plate_bvp": {"title": "Transient heated plate", "target": "FE", "directory": "tools", "scripts": ["check_heated_plate.py"], "plots": ["temperature", "center-history", "temperature-profile", "heat-content", "spatial-convergence", "temporal-convergence"]},
   "thermal_bending_bvp": {"title": "Thermal bending strip", "target": "FE", "directory": "tools", "scripts": ["check_thermal_bending.py"], "plots": ["deformation", "temperature", "tip-history", "temperature-profile", "centerline", "equilibrium"]},
   "ogden_bvp": {"title": "Ogden finite-shear block", "target": "FE", "directory": "tools", "scripts": ["check_ogden_bvp.py"], "plots": ["deformation", "stretch", "load-history", "refinement", "equilibrium"]},
-  "plasticity_bvp": {"title": "J2 loading and unloading block", "target": "FE", "directory": "tools", "scripts": ["check_plasticity_bvp.py"], "plots": ["deformation", "plastic-strain", "load-history", "state-history", "equilibrium", "refinement"]}
+  "plasticity_bvp": {"title": "J2 loading and unloading block", "target": "FE", "directory": "tools", "scripts": ["check_plasticity_bvp.py"], "plots": ["plastic-strain", "deformation", "load-history", "state-history", "equilibrium", "refinement"]}
 }

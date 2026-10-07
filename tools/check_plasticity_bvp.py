@@ -50,8 +50,8 @@ def check(*, record=None):
         free_residual.append(history[-1]["relative_residual"])
         oracle_residual.append(float(np.max(abs(computed - reference)) / max(1., np.max(abs(computed)))))
     plots = [
-        mesh_record("deformation", "Displacement during shear loading and unloading", main),
         mesh_record("plastic-strain", "Irreversible plastic zones through the cycle", main, plastic=True),
+        mesh_record("deformation", "Displacement during shear loading and unloading", main),
         comparison_curve("load-history", "Reaction-force hysteresis", "Prescribed top displacement u₁", "Top shear reaction (model units)",
             [top_displacement(time) for time in times], top_reactions(main), top_reactions(main, reference=True),
             "The displacement-controlled cycle loads from 0 to 0.02 and returns to zero. "

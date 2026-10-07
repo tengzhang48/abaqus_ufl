@@ -546,6 +546,10 @@ def project_plastic_strain(result):
     return projected
 
 
+# The 0.02 grip motion is invisible at true scale on a unit block.
+DEFORMATION_SCALE = 10
+
+
 def mesh_record(identifier, title, result, *, plastic=False):
     """Authoritative nodal U; projected ep includes full raw GP provenance."""
     from tools.livebench_data import mesh_field
@@ -558,10 +562,10 @@ def mesh_record(identifier, title, result, *, plastic=False):
                    "The projection performs no extrapolation. " if plastic else
                    "Colors show authoritative nodal displacement magnitude. ")
     description += ("The bottom is clamped and the top loads to u₁ = 0.02 then returns to zero, with u₂ = 0. "
-                    "Both sides are traction-free. Displacements are displayed at ×1.")
+                    "Both sides are traction-free. Displacements are displayed at ×{:g}.".format(DEFORMATION_SCALE))
     plot = mesh_field(identifier, title, result["nodes"], result["elements"], values[-1], description,
                       displacements=displacement[-1])
-    plot["deformation_scale"] = 1
+    plot["deformation_scale"] = DEFORMATION_SCALE
     plot["value_label"] = "Projected equivalent plastic strain (visualization)" if plastic else "Displacement magnitude (model units)"
     plot["frames"] = [{"time": float(time), "values": value.tolist(), "displacements": u.tolist()}
                       for time, value, u in zip(result["times"], values, displacement)]
