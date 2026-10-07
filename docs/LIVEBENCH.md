@@ -112,19 +112,28 @@ result. A setup or website-build failure leaves the previous published
 report in place; the displayed timestamp and commit identify that older
 run. Pull requests and forks do not deploy the upstream website.
 
-The boundary-value simulations lead the website's problem picker. Each shows
-its domain, prescribed/natural boundary conditions, initial state, properties,
-mesh, step size, and actual free DOF counts from the solve. Time controls play
+The homepage links to a dedicated livebench index. Each boundary-value model
+opens its own walkthrough: **Equations → Weak form → Python → Generated
+Fortran → Simulation**. The first stages explain the fields, reference-domain
+balance equations, test functions and boundary conditions. The Python and
+Fortran stages show excerpts from the actual shipped declarations and build
+path. Supporting material and element checks open separate result pages.
+
+The simulation stage shows the mesh, step size, actual free DOF counts and
+independent comparisons from the recorded solve. Time controls play
 or inspect recorded accepted frames. Geometry and color scales remain fixed
 during playback; displayed deformation is magnified by ten. Boundary overlays
 identify the prescribed edges. Frame CSV and complete-history CSV downloads
 retain time and authoritative nodal fields; standalone field SVGs explicitly
 show the final frame.
 
-Choose a physical problem, then select its response, field, or convergence
-view. Curves overlay the computed samples and the independent reference;
+At the simulation stage, select a response, field, or convergence view.
+Curves overlay the computed samples and the independent reference;
 the difference view exposes discrepancies that are hidden by overlapping
-lines. Pointer and keyboard controls inspect individual samples or nodes.
+lines. FEM views show field contours and optional element edges without
+default node dots. Opening **Inspect nodal values** reveals a node slider and
+a small cross at the selected node. Pointer and keyboard controls inspect
+curve samples; the node slider supports keyboard inspection.
 CSV downloads retain the original numerical precision. Downloadable SVG
 figures are generated with Matplotlib from the same recorded arrays.
 The source, metrics, logs, and run environment remain available
@@ -135,7 +144,8 @@ reports remain readable and explicitly state that response data were not
 recorded. The publication gate requires all current plot IDs for successful
 cases. Invalid arrays, nonfinite data, inconsistent agreement claims, or
 invalid mesh connectivity are rejected. Without an available report the
-page shows an unavailable state. Browsers inspect recorded results; they
+simulation stage shows an unavailable state; the equation and source stages
+remain readable. Browsers inspect recorded results; they
 do not run Fortran. To preview local data, run:
 
 ```bash

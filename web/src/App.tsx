@@ -1,8 +1,8 @@
 import siteData from "../site-data.json";
-import type { MouseEvent } from "react";
 import { useEffect } from "react";
 import publication from "../../docs/publication.json";
 import Livebench from "./Livebench";
+import SiteHeader, { livebenchUrl } from "./SiteHeader";
 
 import tetDisplacement from "../../paper_examples/stabilized_tet4/figure/Tet4_u_mag.png";
 import tetTheta from "../../paper_examples/stabilized_tet4/figure/Tet4_NT11.png";
@@ -66,10 +66,6 @@ function Arrow() {
   return <span aria-hidden="true">↗</span>;
 }
 
-function closeMobileMenu(event: MouseEvent<HTMLAnchorElement>) {
-  event.currentTarget.closest("details")?.removeAttribute("open");
-}
-
 function App() {
   useEffect(() => {
     const anchor = window.location.hash.slice(1);
@@ -79,33 +75,7 @@ function App() {
   }, []);
   return (
     <>
-      <header className="site-header">
-        <a className="brand" href="#top" aria-label="abaqus ufl home">
-          <span className="brand-mark" aria-hidden="true">a/u</span>
-          <span>abaqus_<strong>ufl</strong></span>
-        </a>
-        <nav className="desktop-nav" aria-label="Project website">
-          <a href="#how-it-works">How it works</a>
-          <a href="#scope">Scope</a>
-          <a href="#examples">Examples</a>
-          <a href="#livebench">Livebench</a>
-          <a href="#paper-evidence">Paper examples</a>
-          <a href="#status">Status</a>
-        </nav>
-        <a className="header-link" href={repository}>GitHub <Arrow /></a>
-        <details className="mobile-menu">
-          <summary aria-label="Open navigation"><span aria-hidden="true">Menu</span></summary>
-          <nav aria-label="Mobile project website">
-            <a href="#how-it-works" onClick={closeMobileMenu}>How it works</a>
-            <a href="#scope" onClick={closeMobileMenu}>Scope</a>
-            <a href="#examples" onClick={closeMobileMenu}>Examples</a>
-            <a href="#livebench" onClick={closeMobileMenu}>Livebench</a>
-            <a href="#paper-evidence" onClick={closeMobileMenu}>Paper examples</a>
-            <a href="#status" onClick={closeMobileMenu}>Status</a>
-            <a href={repository} onClick={closeMobileMenu}>GitHub</a>
-          </nav>
-        </details>
-      </header>
+      <SiteHeader />
 
       <main id="main">
         <section className="hero" id="top">
@@ -117,7 +87,7 @@ function App() {
                 <code>abaqus_ufl</code> generates self-contained fixed-form Fortran UMATs and UELs from supported Python models. The Python model and generated source show the fields, constitutive response, tangent construction, and Abaqus interface.
               </p>
               <div className="hero-actions">
-                <a className="button primary" href="#livebench">Open the livebench <Arrow /></a>
+                <a className="button primary" href={livebenchUrl}>Open the livebench <Arrow /></a>
                 <a className="button ghost" href={publication.url}>Read the published paper <Arrow /></a>
               </div>
               <p className="publication-link">Published in <em>{publication.journal}</em> {publication.volume} ({publication.year}), {publication.articleNumber} · <a href={publication.url}>DOI <Arrow /></a></p>

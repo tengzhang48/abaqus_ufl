@@ -358,6 +358,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
   const [deformed, setDeformed] = useState(Boolean(plot.displacements));
   const [lines, setLines] = useState(true);
   const [boundaries, setBoundaries] = useState(true);
+  const [inspecting, setInspecting] = useState(false);
   const [frameIndex, setFrameIndex] = useState((plot.frames?.length ?? 1) - 1);
   const [playing, setPlaying] = useState(false);
   const frame = plot.frames?.[frameIndex];
@@ -370,7 +371,6 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
     }, 350);
     return () => window.clearInterval(timer);
   }, [playing, plot.frames]);
-  const height = width < 500 ? 300 : 370;
   const shown = plot.nodes.map((p, i) =>
     p.map((v, j) => v + (deformed ? 10 * displacements![i][j] : 0)),
   );
@@ -389,6 +389,8 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
     }
     return box;
   }, [deformed, plot]);
+  const height = Math.min(width < 500 ? 300 : 370,
+    Math.max(width < 500 ? 150 : 220, 90 + (width - 60) * (ymax - ymin) / (xmax - xmin)));
   const scale = Math.min(
     (width - 60) / (xmax - xmin),
     (height - 90) / (ymax - ymin),
@@ -562,18 +564,15 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
               <title>{boundary.label}</title>
             </polyline>
           ))}
-          {shown.map((p, i) => (
-            <circle
-              key={i}
-              cx={position(p)[0]}
-              cy={position(p)[1]}
-              r={i === node ? 5 : 2.5}
-              fill={i === node ? "white" : color(values[i])}
-              stroke={i === node ? "#17283b" : "#ffffff88"}
-              onPointerEnter={() => setNode(i)}
-              onClick={() => setNode(i)}
+          {inspecting && (
+            <path
+              d={`M ${position(shown[node])[0] - 3} ${position(shown[node])[1]} h 6 M ${position(shown[node])[0]} ${position(shown[node])[1] - 3} v 6`}
+              stroke="#17283b"
+              strokeWidth="1.2"
+              fill="none"
+              aria-label={`Inspected node ${node + 1}`}
             />
-          ))}
+          )}
           <text
             x={width / 2}
             y={height - (deformed && width < 500 ? 28 : 12)}
@@ -601,7 +600,8 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
         <span>{format(high)}</span>
       </div>
       {plot.value_label && <p className="field-value-label">{plot.value_label} · scale fixed across all time steps</p>}
-      <div className="plot-inspector">
+      <details className="plot-inspector" onToggle={(event) => setInspecting(event.currentTarget.open)}>
+        <summary>Inspect nodal values</summary>
         <label htmlFor={`node-${plot.id}`}>
           Inspect node {node + 1} / {plot.nodes.length}
         </label>
@@ -631,7 +631,7 @@ function Mesh({ plot, caseId }: { plot: MeshPlot; caseId: string }) {
             <div><dt>u₂</dt><dd>{format(displacements[node][1])}</dd></div>
           </>}
         </dl>
-      </div>
+      </details>
     </div>
   );
 }

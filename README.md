@@ -13,7 +13,7 @@ simple](https://doi.org/10.1016/j.eml.2026.102530), *Extreme Mechanics Letters*
 **89** (2026), 102530.
 
 [![Livebench](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml/badge.svg)](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml)
-[Live benchmark results](https://tengzhang48.github.io/abaqus_ufl/#livebench)
+[Livebench walkthroughs](https://tengzhang48.github.io/abaqus_ufl/livebench/)
 
 The practical aim is not simply to write Fortran faster. It is to separate the
 parts of a user subroutine that are otherwise difficult to audit: field and
@@ -122,8 +122,10 @@ dissipation, and a scoped beam approximation check the results. A separate
 case retains the affine patch and diffusion-mode checks using the optional
 [`abaqus_ufl.fe` runtime](abaqus_ufl/fe/README.md).
 
-The [project website](https://tengzhang48.github.io/abaqus_ufl/#livebench)
-shows time playback, boundary conditions, response curves, reference comparisons, mesh fields, and convergence
+The [livebench](https://tengzhang48.github.io/abaqus_ufl/livebench/) walks each
+boundary-value model through its equations, weak form, Python declaration,
+generated Fortran, and simulation on a dedicated page. The final stage shows
+time playback, response curves, references, mesh fields, and convergence
 from the latest published run. Inspect numerical differences and download
 full-precision CSV data or standalone scientific figures. GitHub Actions reruns the livebench on
 pushes and pull requests; repository collaborators can also select **Run

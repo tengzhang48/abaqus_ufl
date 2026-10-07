@@ -1484,7 +1484,95 @@ footer nav a:hover {
 .bench-metrics dt { color: var(--muted); }
 .bench-metrics dd { margin: 0; font-family: Consolas, monospace; }
 .bench-scope { max-width: 900px; margin-top: 24px; color: var(--muted); font-size: .85rem; }
+.livebench-preview-flow { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 18px 40px; margin: 0 0 28px; color: #48645a; font-size: .86rem; }
+.livebench-preview-flow span { color: #157870; font-family: Consolas, monospace; margin-right: 8px; }
+.livebench-preview-cases { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.livebench-preview-cases > a { display: block; padding: 24px 28px; border: 1px solid #cddcd6; border-radius: 10px; background: #f9fbfa; color: var(--ink); text-decoration: none; }
+.livebench-preview-cases > a:hover { border-color: var(--teal); }
+.livebench-preview-cases h3 { font-size: 1.2rem; margin: 8px 0 12px; }
+.livebench-preview-cases p { color: var(--muted); font-size: .9rem; }
+.livebench-open { margin-top: 26px; background: #157870; color: white; }
+.walkthrough-page { min-height: 78vh; padding: 36px 0 64px; }
+.walkthrough-page h1 { max-width: 900px; font-size: clamp(1.9rem, 3.6vw, 2.8rem); line-height: 1.15; margin-bottom: 18px; }
+.walkthrough-page h2 { font-size: 1.65rem; margin-bottom: 18px; }
+.walkthrough-page h3 { font-size: 1rem; }
+.walkthrough-lede { color: var(--muted); font-size: 1rem; max-width: 850px; margin-bottom: 32px; line-height: 1.75; }
+.walkthrough-breadcrumb { display: flex; flex-wrap: wrap; gap: 8px 12px; color: var(--muted); font-size: .75rem; margin-bottom: 34px; }
+.walkthrough-breadcrumb a { color: #386c61; }
+.walkthrough-catalog { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.walkthrough-card { color: var(--ink); text-decoration: none; border: 1px solid #ccdbd4; border-radius: 12px; overflow: hidden; background: white; transition: border-color .15s; }
+.walkthrough-card:hover { border-color: var(--teal); }
+.problem-sketch { display: block; width: 100%; height: auto; background: #f6f9f7; }
+.problem-sketch text { font-size: 12px; fill: #506d61; font-family: inherit; }
+.walkthrough-card > div { padding: 24px 28px; }
+.walkthrough-card h2 { font-size: 1.4rem; margin: 10px 0; }
+.walkthrough-card p { color: var(--muted); font-size: .9rem; line-height: 1.75; }
+.catalog-status { display: block; font-size: .7rem; margin-top: 14px; }
+.support-checks { margin-top: 36px; border-top: 1px solid #cddcd4; padding-top: 22px; }
+.support-checks summary { cursor: pointer; font-weight: 650; font-size: 1.05rem; color: #305d4f; }
+.support-checks summary span { color: var(--muted); margin-left: 18px; font-weight: 400; font-size: .8rem; }
+.support-checks > p { color: var(--muted); margin: 20px 0; }
+.support-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.support-grid a { color: var(--ink); text-decoration: none; border: 1px solid #d3dfd8; border-radius: 8px; background: white; padding: 20px; }
+.support-grid a:hover { border-color: var(--teal); }
+.support-grid p { color: var(--muted); font-size: .8rem; margin: 12px 0; }
+.walkthrough-layout { display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 28px; align-items: start; }
+.walkthrough-steps { display: grid; gap: 8px; position: sticky; top: 105px; }
+.walkthrough-steps a { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 15px 13px; background: #f7faf8; border: 1px solid #d2ded8; border-radius: 7px; color: #47645a; text-decoration: none; }
+.walkthrough-steps a:hover { border-color: #83b9a8; }
+.walkthrough-steps a[aria-current="step"] { color: #16695d; border-color: #78af9c; background: #e3efe8; box-shadow: inset 3px 0 #237966; }
+.walkthrough-step-number { font: 600 1.1rem Consolas, monospace; color: #7b9186; }
+.walkthrough-steps a[aria-current="step"] .walkthrough-step-number { color: #237966; }
+.walkthrough-steps strong { display: block; font-size: .84rem; margin-bottom: 4px; }
+.walkthrough-steps small { color: #74887f; font-size: .68rem; line-height: 1.4; display: block; }
+.walkthrough-body { min-width: 0; padding: 28px 30px; background: white; border: 1px solid #d0ded6; border-radius: 10px; font-size: .9rem; }
+.walkthrough-body > p { line-height: 1.8; color: #587063; }
+.walkthrough-equations { display: grid; gap: 16px; margin: 24px 0; }
+.equation-card { padding: 18px 22px; border: 1px solid #dbe6df; border-radius: 8px; background: #f9fbfa; margin-bottom: 16px; min-width: 0; }
+.equation-card h3 { color: #426454; margin-bottom: 14px; }
+.equation-card p { margin-bottom: 0; color: #62786c; font-size: .82rem; line-height: 1.8; }
+.equation-card .equation-expression { font: 1.15rem/1.8 "Cambria Math", Cambria, Georgia, serif; color: #203c30; margin: 0 0 16px; overflow-wrap: anywhere; }
+.model-setup { display: grid; grid-template-columns: 1fr minmax(200px, 260px); gap: 22px; align-items: center; margin: 26px 0; }
+.model-setup p, .model-setup li { color: #587063; font-size: .83rem; line-height: 1.8; }
+.model-setup ul { padding-left: 20px; }
+.walkthrough-note { padding: 18px 20px; background: #f3f7f5; border-left: 3px solid #94b7a7; border-radius: 0 7px 7px 0; margin: 26px 0; color: #5a7165; font-size: .82rem; line-height: 1.8; }
+.walkthrough-note p { margin-bottom: 0; }
+.walkthrough-code { padding: 20px; margin: 16px 0 22px; border-radius: 8px; background: #142820; color: #deece4; font: .76rem/1.7 Consolas, monospace; overflow-x: auto; max-width: 100%; }
+.source-caption { color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; margin: 20px 0 10px; }
+.source-caption a { color: #386c61; }
+.walkthrough-source { margin: 22px 0 30px; }
+.walkthrough-source summary, .plot-inspector summary { cursor: pointer; color: #4b7060; font-size: .8rem; padding-bottom: 14px; }
+.generation-path { padding-left: 24px; display: grid; gap: 16px; margin: 26px 0; }
+.generation-path li { padding-left: 5px; }
+.generation-path strong { display: block; color: #335e4b; margin-bottom: 5px; }
+.generation-path span { color: #62786c; font-size: .85rem; line-height: 1.75; }
+.walkthrough-next { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; margin-top: 32px; border-top: 1px solid #dce5df; padding-top: 22px; }
+.walkthrough-next a { color: #246f58; font-size: .84rem; font-weight: 600; text-decoration: none; }
+.walkthrough-next a:hover { text-decoration: underline; }
+.walkthrough-run { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 15px 0; margin-bottom: 14px; font-size: .75rem; color: #62786c; }
+.walkthrough-run button { margin-left: auto; border: 0; background: none; color: #427361; font-size: .75rem; cursor: pointer; text-decoration: underline; }
+.walkthrough-body .simulation-facts { padding: 15px; background: #f3f7f4; border-radius: 6px; margin-bottom: 22px; font-size: .72rem; }
+.support-results { max-width: 960px; }
+.walkthrough-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 18px; background: #142820; padding: 25px max(24px, calc((100vw - 1240px) / 2)); font-size: .8rem; }
+.walkthrough-footer a { color: #cee0d5; }
 @media (max-width: 820px) {
+  .livebench-preview-cases, .walkthrough-catalog, .walkthrough-layout { grid-template-columns: 1fr; }
+  .walkthrough-steps { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .walkthrough-steps a { padding: 12px 10px; grid-template-columns: 23px 1fr; gap: 6px; }
+  .walkthrough-steps small { display: none; }
+  .walkthrough-steps strong { font-size: .7rem; margin: 0; }
+  .walkthrough-step-number { font-size: .85rem; }
+  .walkthrough-body { padding: 24px 18px; }
+  .walkthrough-breadcrumb { margin-bottom: 28px; }
+  .walkthrough-page { padding: 28px 0 48px; }
+  .walkthrough-lede { font-size: .9rem; }
+  .support-grid { grid-template-columns: 1fr 1fr; }
+  .model-setup { grid-template-columns: 1fr; }
+  .model-setup .problem-sketch { max-width: 360px; margin: 0 auto; }
+  .equation-card { padding: 16px; }
+  .equation-card .equation-expression { font-size: 1rem; }
+  .walkthrough-card > div { padding: 22px; }
+  .support-checks summary span { display: block; margin: 8px 0 0; }
   .bench-intro { display: block; }
   .bench-intro > p { margin-top: 20px; font-size: .95rem; }
   .bench-explorer { grid-template-columns: 1fr; }

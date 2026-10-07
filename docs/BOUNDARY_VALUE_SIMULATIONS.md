@@ -143,7 +143,11 @@ colors the Q1 interpolation of those nodal arrays; it does not rerun the
 solver or create additional physical results. Deformation display uses ×10,
 with fixed geometry and color scales across the history.
 
-The website exposes every accepted time frame, prescribed-edge overlays,
+Each BVP has a dedicated walkthrough connecting equations, weak form, the
+actual Python declaration and generated Fortran to its recorded simulation.
+FEM views show the field and element edges without default node markers;
+opening nodal inspection adds a small cross at the selected node.
+The final stage exposes every accepted time frame, prescribed-edge overlays,
 setup, material properties, refinement, reactions/balance diagnostics, and
 full-precision frame/history CSV downloads. Standalone Matplotlib field SVGs
 show the final frame. The report parser and publication gate reject invalid

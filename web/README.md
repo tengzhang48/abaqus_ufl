@@ -4,16 +4,21 @@ This directory is the maintainable source for the `abaqus_ufl` GitHub Pages
 website. The deployed site is a static React/TypeScript build; it does not run
 Abaqus or execute generated subroutines in a visitor's browser.
 
-The livebench reads `public/livebench/report.json` and presents recorded
-two genuine transient boundary-value simulations, stress/strain histories,
-relaxation, thermal-element comparisons, and FE profiles, mesh fields, and
-convergence. The initial view is a thermally bending strip with a clamped end
-and otherwise traction-free surfaces; a heated plate provides an independent
-2D transport BVP. Visitors inspect the boundary conditions and free field DOF
-counts, play recorded accepted time steps, select a physical problem
-and view, overlay reference curves, inspect samples, and download CSV/SVG
-data. Scientific plots use the actual f2py results; browser controls do not
-recompute them. Metrics and logs are in each case's details.
+The homepage contains a compact introduction linking to the dedicated
+`/abaqus_ufl/livebench/` page. Choose a model to follow **Equations → Weak
+form → Python → Generated Fortran → Simulation**, one stage at a time.
+The two worked boundary-value models are a heated plate and a clamped thermal
+bending strip. Source excerpts are imported from the public Python and
+Fortran files rather than maintained as separate example implementations.
+Seven supporting material, element and mesh checks have separate result pages.
+
+The simulation stage reads `public/livebench/report.json`. Visitors play
+recorded accepted steps, overlay references, inspect convergence, and download
+CSV/SVG data. FEM views show the field and optional element edges, with no
+default node dots. Opening **Inspect nodal values** reveals the nodal data
+and a small cross at the selected node. Scientific plots use the actual f2py
+results; browser controls do not recompute them. Metrics and logs are in
+each case's details.
 Standalone SVGs are rendered by Matplotlib from the recorded arrays and
 shipped with the report; mesh SVG downloads explicitly identify the final
 frame. Frame CSV and full-history CSV downloads use the same full-precision
@@ -75,7 +80,7 @@ npm run dev
 ```
 
 Local runs can include uncommitted changes, which are labeled in the interface.
-The Actions publication gate additionally requires a clean checkout and all
+The Actions publication gate additionally requires a clean checkout and
 all nine cases. The publication gate additionally requires the BVP setup
 and accepted time-history arrays. The parser rejects nonfinite, mismatched or
 nonmonotonic frames and inconsistent final-frame/mesh/setup data. Generated
@@ -84,6 +89,12 @@ delivers them as build artifacts rather than committing changing output.
 
 The production base path is `/abaqus_ufl/`; set `VITE_BASE_PATH=/` for a
 root-mounted local production build if needed.
+
+Vite builds two HTML entries: `index.html` and `livebench/index.html`.
+Case and stage links use query parameters, for example
+`/abaqus_ufl/livebench/?case=heated_plate_bvp&step=weak-form`. Direct visits,
+refresh, new tabs, and browser back/forward work on static GitHub Pages without
+a server rewrite. Report files remain alongside the livebench HTML entry.
 
 ## Deployment
 
