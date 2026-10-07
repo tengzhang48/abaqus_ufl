@@ -55,14 +55,16 @@ export default function App() {
                 Open research software · v{siteData.repository.version}
               </p>
               <h1>
-                From Python
+                Coupled physics.
                 <br />
-                to Abaqus Fortran.
+                Built for Abaqus.
               </h1>
               <p className="hero-lede">
-                Write material laws and coupled-field declarations in Python.
-                Generate inspectable UMAT and UEL Fortran, with consistent
-                tangents and reproducible checks.
+                A formulation framework for constitutive models and coupled-field
+                finite elements. Define fields, balance laws, and material
+                responses in Python; construct residuals and consistent tangents
+                for Abaqus UMATs and UELs, with independent checks from material
+                points to full mesh simulations.
               </p>
               <div className="hero-actions">
                 <a className="button primary" href="#livebench">
@@ -76,9 +78,9 @@ export default function App() {
                 </a>
               </div>
               <div className="hero-facts" aria-label="Package features">
+                <span>Field coupling</span>
+                <span>Consistent tangents</span>
                 <span>UMAT + UEL</span>
-                <span>Self-contained Fortran</span>
-                <span>MIT source</span>
               </div>
               <p className="hero-paper">
                 Published in{" "}
@@ -94,7 +96,7 @@ export default function App() {
             >
               <div className="hero-model-heading">
                 <span>Ogden elasticity</span>
-                <span>Python → UEL → simulation</span>
+                <span>Equations → weak form → simulation</span>
               </div>
               <BenchmarkPreview
                 caseId="ogden_bvp"
@@ -116,7 +118,7 @@ export default function App() {
           <div className="shell">
             <div className="section-heading split-heading">
               <div>
-                <p className="eyebrow">A readable path to generated code</p>
+                <p className="eyebrow">From formulation to verification</p>
                 <h2>Keep the physics in view.</h2>
               </div>
               <p>
@@ -152,7 +154,7 @@ export default function App() {
         <section className="section home-scope" id="scope">
           <div className="shell home-scope-grid">
             <div>
-              <p className="eyebrow">Two generation targets</p>
+              <p className="eyebrow">Two Abaqus interfaces</p>
               <h2>
                 Material laws.
                 <br />
@@ -310,11 +312,12 @@ export default function App() {
           <div className="shell start-grid">
             <div>
               <p className="eyebrow light">Start with a working model</p>
-              <h2>Generate your first UMAT.</h2>
+              <h2>Build and verify a material model.</h2>
               <p>
-                Clone the package and run the Neo-Hookean example. Python,
-                NumPy, and SymPy are required; compiled checks also use
-                gfortran, f2py, Meson, and Ninja.
+                Follow the Neo-Hookean model from its constitutive law to
+                independent reference checks and a compiled UMAT. Python,
+                NumPy, and SymPy are required; compiled checks also use gfortran,
+                f2py, Meson, and Ninja.
               </p>
               <div className="hero-actions">
                 <a

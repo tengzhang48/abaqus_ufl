@@ -1,8 +1,11 @@
 # abaqus_ufl
 
-`abaqus_ufl` helps researchers turn a supported constitutive model or
-coupled-field element declaration written in Python into inspectable,
-self-contained Fortran for Abaqus/Standard.
+`abaqus_ufl` is a declarative formulation framework for constitutive models
+and coupled-field finite elements in Abaqus/Standard. It connects supported
+Python declarations of fields, balance laws, and material responses to
+residuals, consistent tangents, and self-contained UMAT/UEL implementations,
+with independent verification from material points to boundary-value
+simulations.
 
 [Project website](https://tengzhang48.github.io/abaqus_ufl/) ·
 [source repository](https://github.com/tengzhang48/abaqus_ufl) ·
@@ -15,15 +18,16 @@ simple](https://doi.org/10.1016/j.eml.2026.102530), *Extreme Mechanics Letters*
 [![Livebench](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml/badge.svg)](https://github.com/tengzhang48/abaqus_ufl/actions/workflows/pages.yml)
 [Livebench walkthroughs](https://tengzhang48.github.io/abaqus_ufl/livebench/)
 
-The practical aim is not simply to write Fortran faster. It is to separate the
-parts of a user subroutine that are otherwise difficult to audit: field and
-state definitions, constitutive responses, residual terms, tangent blocks,
-local-variable treatment, DOF packing, and Abaqus interface conventions.
+The aim is to make finite-element formulations easier to develop, inspect,
+and verify. The declaration keeps field and state definitions, constitutive
+responses, residual terms, tangent blocks, local-variable treatment, DOF
+packing, and Abaqus interface conventions explicit.
 
 ```text
-Python declaration
+Governing equations and constitutive laws
+  → supported Python material or weak-form declaration
   → consistency and model-specific checks
-  → generated fixed-form Fortran
+  → residuals, tangent blocks, and generated UMAT/UEL Fortran
   → compiled element or material checks
   → user-owned Abaqus analysis
 ```
@@ -94,7 +98,7 @@ SymPy.
 
 ## Livebench
 
-Run two transient boundary-value simulations, the six public example bundles,
+Run four mesh boundary-value simulations, the six public example bundles,
 and the serial FE verification case without an Abaqus installation or license:
 
 ```bash
@@ -111,16 +115,24 @@ status, elapsed time, source revision, environment, and logs in
 code; they are never counted as passes. The boundary-value cases solve:
 
 - a 2D plate with a spatially varying heating bath on one edge and cold
-  temperatures on the other three edges; and
+  temperatures on the other three edges;
 - a plane-strain strip clamped at one end, with hot/cold baths driving thermal
-  diffusion and quasi-static finite-strain bending.
+  diffusion and quasi-static finite-strain bending;
+- a plane-strain Ogden block under finite shear, with fixed bottom, displaced
+  top, and free sides; and
+- a plane-strain J2 plasticity block under shear loading and unloading,
+  retaining stress and plastic strain at every integration point.
 
-Both advance through 20 accepted time increments. The plate solves 529 free
-temperature DOFs; the strip solves 343 temperature and 864 displacement DOFs.
+The thermal cases advance through 20 accepted time increments. The plate solves
+529 free temperature DOFs; the strip solves 343 temperature and 864 displacement
+DOFs.
 Independent Fourier solutions, spatial/time refinement, heat balance, thermal
-dissipation, and a scoped beam approximation check the results. A separate
-case retains the affine patch and diffusion-mode checks using the optional
-[`abaqus_ufl.fe` runtime](abaqus_ufl/fe/README.md).
+dissipation, and a scoped beam approximation check the results. Ogden shear
+advances through 12 load increments with 510 free displacement DOFs; plasticity
+uses 20 cycle increments with 286 free displacement DOFs. Independent stress,
+energy/work, equilibrium, history, and mesh-refinement checks audit these
+mechanical cases. A separate case retains the affine patch and diffusion-mode
+checks using the optional [`abaqus_ufl.fe` runtime](abaqus_ufl/fe/README.md).
 
 The [livebench](https://tengzhang48.github.io/abaqus_ufl/livebench/) walks each
 boundary-value model through its equations, weak form, Python declaration,
@@ -133,10 +145,12 @@ workflow** in [Livebench and website](https://github.com/tengzhang48/abaqus_ufl/
 Other users can run locally or run the workflow in their own fork. See
 [the livebench guide](docs/LIVEBENCH.md) for individual cases and report details.
 
-The new simulations call the actual generated UEL throughout global FE
-assembly and solve the free mesh DOFs. The material/element bundles retain
-their separate checks. The paper-scale Abaqus analyses retain their own
-evidence records. See [the BVP definitions and oracles](docs/BOUNDARY_VALUE_SIMULATIONS.md).
+The thermal and Ogden simulations call the actual generated UEL throughout
+global FE assembly. The plasticity case calls the shipped 3D UMAT at every
+integration point through a case-local Quad4 host. All four solve the free
+mesh DOFs. The material/element bundles retain their separate checks. The
+paper-scale Abaqus analyses retain their own evidence records. See
+[the BVP definitions and oracles](docs/BOUNDARY_VALUE_SIMULATIONS.md).
 
 ## Optional serial FE runtime
 
