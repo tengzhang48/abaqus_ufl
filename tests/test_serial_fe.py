@@ -37,8 +37,13 @@ def test_convergence_tolerance_scales_with_reactions(stiffness):
     exact = nodes[:, 0] + 2 * nodes[:, 1]
     conditions = {int(i): float(exact[i]) for i in boundary_nodes(nodes)}
     element = lambda index, coordinates, U, DU: (stiffness * ring @ U, stiffness * ring)
-    U = newton_solve(nodes, elems, 1, element, conditions)
+    history = []
+    U = newton_solve(nodes, elems, 1, element, conditions, record_iteration=history.append)
     assert np.allclose(U, exact, rtol=0, atol=1e-12)
+    assert history[0]["iteration"] == 0
+    assert history[0]["relative_residual"] > 1e-9
+    assert history[-1]["relative_residual"] <= 1e-9
+    assert all(np.isfinite(h["free_residual_inf"]) for h in history)
 
 
 def _fake_element(response):

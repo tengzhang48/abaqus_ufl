@@ -64,7 +64,8 @@ def assemble(nodes, elems, dof_per_node, element_fn, U, DU=None, *, du_is_total=
 
 
 def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
-                 U0=None, U_previous=None, max_iter=25, tol=1e-9):
+                 U0=None, U_previous=None, max_iter=25, tol=1e-9,
+                 record_iteration=None):
     """Solve free-DOF equilibrium with prescribed global DOF values.
 
     Returns U only on convergence. Previous nodal history is fixed throughout
@@ -72,6 +73,8 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
     convergence raise an error; this small driver has no automatic time
     cutback, distributed assembly, contact, or material-state transaction.
     ``tol`` is relative to the larger of 1 and the largest residual entry, reactions included.
+    ``record_iteration`` optionally receives the accepted iterate's iteration
+    number, free residual norm, and relative residual, including convergence.
     """
     nodes, elems, size = _mesh_inputs(nodes, elems, dof_per_node)
     if not np.isfinite(tol) or tol <= 0:
@@ -91,8 +94,12 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
     for iteration in range(max_iter + 1):
         residual, tangent = assemble(nodes, elems, dof_per_node, element_fn, U, U - previous)
         norm = np.linalg.norm(residual[free], ord=np.inf) if len(free) else 0.0
+        residual_scale = max(1.0, np.linalg.norm(residual, ord=np.inf))
+        if record_iteration is not None:
+            record_iteration({"iteration": iteration, "free_residual_inf": float(norm),
+                              "relative_residual": float(norm / residual_scale)})
         # Reactions carry the force scale, so tol is relative to them (or 1).
-        if norm <= tol * max(1.0, np.linalg.norm(residual, ord=np.inf)):
+        if norm <= tol * residual_scale:
             return U
         if iteration == max_iter:
             break

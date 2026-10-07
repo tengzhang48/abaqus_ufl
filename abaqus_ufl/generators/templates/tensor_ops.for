@@ -681,7 +681,7 @@ C     --- Local variables ---
       DOUBLE COMPLEX :: nsq1, nsq2, nsq3, best_nsq
       DOUBLE PRECISION, PARAMETER ::
      &  PI = 3.14159265358979323846d0
-      DOUBLE PRECISION :: twopi3, max_imag
+      DOUBLE PRECISION :: twopi3, max_imag, real_scale, spectral_scale
       INTEGER :: i, j, k, best_idx
 
       zi = DCMPLX(0.0d0, 1.0d0)
@@ -691,9 +691,11 @@ C     Complex-step path: rotate the real state to its principal basis
 C     before applying the quasi-degenerate fallback. Repeated spectra
 C     must not depend on alignment with the input coordinate axes.
       max_imag = 0.0d0
+      real_scale = 0.0d0
       DO i = 1, 3
         DO j = 1, 3
           max_imag = MAX(max_imag, ABS(AIMAG(A(i,j))))
+          real_scale = MAX(real_scale, ABS(DBLE(A(i,j))))
         END DO
       END DO
       IF (max_imag .GT. 0.0d0) THEN
@@ -719,8 +721,11 @@ C     B = A - q*I
      &   + 2.0d0 * p1
       p  = SQRT(p2 / 6.0d0)
 
-C     Guard: A is a multiple of identity plus a tiny perturbation.
-      IF (ABS(DBLE(p)) .LT. 1.0d-30) THEN
+C     Relative near-isotropic guard: rounded eigenvalues may coincide
+C     while tiny real off-diagonals leave p nonzero. Raw cross-product
+C     eigenvectors then collapse. Keep the perturbation in the fallback.
+      IF (ABS(DBLE(p)) .LT. 1.0d-30 .OR.
+     &    ABS(DBLE(p)) .LE. 1.0d-14 * real_scale) THEN
         CALL eig33z_rotated_fallback(A, lam, V)
         RETURN
       END IF
@@ -779,6 +784,15 @@ C     Sort by real part (ascending, 3-element bubble sort)
       END DO
 
 C     --- Eigenvectors via cross products of rows of (A - lam*I) ---
+C     A rounded repeated pair can miss the r guard. Use the declared
+C     quasi-repeated band before cross-product columns become parallel.
+      spectral_scale = MAX(ABS(DBLE(lam(1))), ABS(DBLE(lam(2))),
+     &                     ABS(DBLE(lam(3))))
+      IF (MIN(DBLE(lam(2)-lam(1)), DBLE(lam(3)-lam(2)))
+     &    .LE. 1.0d-6 * spectral_scale) THEN
+        CALL eig33z_rotated_fallback(A, lam, V)
+        RETURN
+      END IF
       DO k = 1, 3
 C       M = A - lam(k) * I
         DO i = 1, 3

@@ -59,6 +59,11 @@ The previous solution remains fixed during Newton and line search.
 Direct `assemble` calls must supply `DU=U-U_previous`. For an explicitly
 from-zero call, use `du_is_total=True`. There is no silent history default.
 
+`newton_solve(..., record_iteration=callback)` optionally reports the accepted
+iterate's iteration number, free residual infinity norm, and scaled relative
+residual, including the converged iterate. Rejected line-search trials are not
+recorded as accepted steps.
+
 ## Verification
 
 `tools/check_fe_runtime.py` compiles the public thermo-mechanical Quad4
@@ -73,6 +78,14 @@ declaration and checks:
 The livebench records these numerical errors alongside the six existing
 material/element bundles. These mesh checks establish the stated host and
 element contracts; they do not reproduce the paper's full Abaqus examples.
+
+The livebench also runs actual multi-increment boundary-value problems:
+`tools/check_heated_plate.py` solves spatially two-dimensional heating with
+prescribed edge temperatures; `tools/check_thermal_bending.py` solves
+thermally driven bending with a clamped end and traction-free remaining
+mechanical edges. Each compiles once, advances accepted nodal history,
+retains the solved fields, and checks independent continuum or reduced
+references. See [the BVP definitions](../../docs/BOUNDARY_VALUE_SIMULATIONS.md).
 
 This project-authored serial runtime and its wrapper use the repository's
 MIT license. It does not include the separately attributed research host

@@ -37,6 +37,12 @@ and state range.
 Deliberately omitted: multiple Ogden terms (a straightforward extension
 of the same reconstruction) and any inelasticity.
 
+`build.py` also writes `ogden_plane_strain_uel.for`, a displacement-only
+plane-strain Quad4 UEL generated from the same law
+(`OgdenPlaneStrainProblem`). The livebench finite-shear block compiles
+exactly this file; [its record](../../docs/BOUNDARY_VALUE_SIMULATIONS.md)
+lists the checks and limits of that boundary-value simulation.
+
 ## Independent oracle
 
 `check_reference.py` uses three hand-derived, eig-free checks:

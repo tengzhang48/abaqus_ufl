@@ -66,6 +66,23 @@ class OgdenOneTerm(au.Material):
         return F @ S
 
 
+class OgdenPlaneStrainProblem(au.WeakForm):
+    """Displacement-only plane-strain Quad4 weak form for the same law.
+
+    Only displacement is solved; first Piola stress comes from
+    ``OgdenOneTerm``. The livebench shear block compiles this UEL.
+    """
+
+    material = OgdenOneTerm
+    ndim = 2
+
+    def define_fields(self):
+        self.u = au.VectorField("u", degree=1)
+
+    def momentum_equation(self, v, F):
+        return self.material.stress_PK1(F)
+
+
 def generate(output=None):
     """Verify the Python tangent and write the generated UMAT."""
     model = OgdenOneTerm()
@@ -79,5 +96,16 @@ def generate(output=None):
     return output
 
 
+def generate_uel(output=None):
+    """Write the plane-strain Quad4 UEL that the livebench block compiles."""
+    if output is None:
+        output = Path(__file__).with_name("ogden_plane_strain_uel.for")
+    output = Path(output)
+    au.generate_uel(OgdenPlaneStrainProblem(), str(output),
+                    element="Quad4", formulation="standard")
+    return output
+
+
 if __name__ == "__main__":
     print("Generated {}".format(generate()))
+    print("Generated {}".format(generate_uel()))

@@ -1,7 +1,8 @@
 # Livebench
 
-The livebench runs the six public UMAT/UEL verification bundles and a serial
-FE mesh benchmark through Python and the actual generated Fortran subroutines
+The livebench runs four boundary-value simulations, six public
+UMAT/UEL verification bundles, and a serial FE verification case through
+Python and the actual generated Fortran subroutines
 using f2py. It requires no Abaqus installation, license, or commercial solver
 service.
 
@@ -13,6 +14,8 @@ From a repository checkout with Python 3.8+, gfortran, Meson, and Ninja:
 pip install -e ".[dev]"
 python tools/run_livebench.py
 python tools/run_livebench.py --case neo_hookean_umat --output benchmark-results/neo
+python tools/run_livebench.py --case heated_plate_bvp --case thermal_bending_bvp
+python tools/run_livebench.py --case ogden_bvp --case plasticity_bvp
 ```
 
 Repeat `--case` to select several cases. `--timeout` sets a positive time
@@ -30,17 +33,44 @@ checks regenerate into temporary directories, compare with the committed
 Fortran, compile, call through f2py, and check output and tangent/state
 contracts. They do not overwrite the committed generated sources.
 
-The seventh case runs `tools/check_fe_runtime.py` through the optional
+The serial verification case runs `tools/check_fe_runtime.py` through the optional
 `abaqus_ufl.fe` runtime. It compiles the Quad4 UEL once and reuses the module
 for an affine mechanics patch and three refined transient diffusion meshes.
 Both tests have independent quantitative closed-form oracles. The case
 manifest is `tools/livebench_cases.json`, shared by the runner and website.
 
+The two thermal BVP cases use the same generated Quad4 with genuine boundary
+conditions and solve every free field DOF at each of 20 time increments:
+
+- `check_heated_plate.py`: a 24 × 24 plate, a spatially varying hot top
+  boundary, and three cold edges; 529 free thermal DOFs. Independent Fourier
+  solutions separate space and time error. Mesh studies use 6², 12² and 24²
+  elements; time studies use four step sizes on a fixed 12² mesh.
+- `check_thermal_bending.py`: a 48 × 8 plane-strain strip clamped at its left
+  end, with zero traction elsewhere and opposite thermal baths; 343 free
+  thermal and 864 free displacement DOFs. It checks the thermal Fourier
+  solution, thermal dissipation, clamp force/moment balance, refinement, and
+  a small-strain slender-beam approximation with explicit tolerances.
+- `check_ogden_bvp.py`: a 16 × 16 finite-strain shear block with 510 free
+  displacement DOFs. A displacement-only UEL reuses the shipped Ogden law;
+  independent principal-stretch stress/energy, global virtual work, the α=2
+  limit and reaction refinement check 12 accepted increments.
+- `check_plasticity_bvp.py`: a 12 × 12 small-strain load/unload block with
+  286 free displacement DOFs and 576 Gauss points. A case-local Quad4 host
+  calls the generated 3D J2 UMAT. Independent return mapping, endpoint work,
+  irreversible state, unloading/reverse yielding and refinement check 20
+  accepted increments; trial state cannot overwrite accepted history.
+
+See [the equations, oracles, and acceptance gates](BOUNDARY_VALUE_SIMULATIONS.md).
+CI includes deliberately broken compiled controls for lost nodal history,
+delayed thermal boundary values, prescribed strip displacements, and disabled
+thermal expansion; each must fail its relevant gate.
+
 CI runs the complete test suite on Python 3.10 and 3.12. The livebench job
 also runs the bundles on Python 3.12 to produce the website's numerical
 report. Compiled coverage remains independent of the website workflow.
 
-The livebench records 16 plots and fields during these checks:
+The livebench records 39 plots and fields during these checks:
 
 | Case | Numerical comparisons |
 | --- | --- |
@@ -51,6 +81,10 @@ The livebench records 16 plots and fields during these checks:
 | Quad4 | Thermal nodal loading and integrated heat storage versus closed forms |
 | Quad8 | Deformed thermal-load ratio versus the exact C⁻¹ pull-back factor 1/λ² |
 | Serial FE | Three temperature profiles, the temperature field, spatial convergence, and an affine displacement patch |
+| Heated plate BVP | Full temperature history, center response, final profile, heat content, and space/time convergence |
+| Thermal bending BVP | Full displacement/temperature histories, tip deflection, through-thickness temperature, centerline, and accepted equilibrium residuals |
+| Ogden BVP | Non-affine finite-shear deformation, independent material shear law, grip reaction, refinement, and independent free equilibrium |
+| J2 BVP | Loading/unloading displacement, projected plastic strain with raw GP provenance, reaction hysteresis, accepted plastic history, equilibrium, and reaction refinement |
 
 Optional `record` callbacks capture the existing state histories and mesh
 solutions. Additional material/element sweeps reuse the module already
@@ -67,7 +101,8 @@ The runner saves:
   versions, and GitHub Actions run URL when available;
 - `logs/`: the complete output and traceback of each check.
 - `figures/`: standalone Matplotlib SVG figures for every view and each
-  response-curve discrepancy, including the setup and source revision.
+  response-curve discrepancy, including the setup and source revision;
+  mesh views also have compact final-field PNG previews for their entrance cards.
 
 Metric values come from the check functions' return values, not rounded
 console output. Checks that return no metrics still retain their assertions
@@ -90,10 +125,37 @@ result. A setup or website-build failure leaves the previous published
 report in place; the displayed timestamp and commit identify that older
 run. Pull requests and forks do not deploy the upstream website.
 
-Choose a physical problem, then select its response, field, or convergence
-view. Curves overlay the computed samples and the independent reference;
+The homepage leads with the package purpose and four clickable cards showing
+actual recorded mesh fields. Documentation and getting started are direct
+navigation choices; research and verification records are compact links with
+available evidence details. Each boundary-value model
+opens its own walkthrough: **Equations → Weak form → Python → Generated
+Fortran → Simulation**. The first stages explain the fields, reference-domain
+balance equations, test functions and boundary conditions. The Python and
+Fortran stages show excerpts from the actual shipped declarations and build
+path. Supporting material and element checks open separate result pages.
+
+The simulation stage shows the mesh, step size, actual free DOF counts and
+independent comparisons from the recorded solve. Time controls play
+or inspect recorded accepted frames. Geometry and color scales remain fixed
+during playback; thermal deformation is magnified by ten, while Ogden and J2
+use actual deformation (×1). Boundary overlays
+identify the prescribed edges. Frame CSV and complete-history CSV downloads
+retain time and authoritative nodal fields; standalone field SVGs explicitly
+show the final frame.
+
+At the simulation stage, select a response, field, or convergence view.
+Curves overlay the computed samples and the independent reference;
 the difference view exposes discrepancies that are hidden by overlapping
-lines. Pointer and keyboard controls inspect individual samples or nodes.
+lines. FEM views show field contours and optional element edges without
+default node dots. Opening **Inspect nodal values** reveals a node slider and
+a small cross at the selected node. Pointer and keyboard controls inspect
+curve samples; the node slider supports keyboard inspection.
+The J2 plastic-strain mesh is explicitly a nodal projection of raw Gauss-point
+state. Its report preserves every point's accepted state, coordinates and
+weights, and the parser verifies projection consistency and point coverage.
+Cyclic curves explicitly preserve chronological sample order rather than
+sorting the returning displacement branch.
 CSV downloads retain the original numerical precision. Downloadable SVG
 figures are generated with Matplotlib from the same recorded arrays.
 The source, metrics, logs, and run environment remain available
@@ -104,7 +166,8 @@ reports remain readable and explicitly state that response data were not
 recorded. The publication gate requires all current plot IDs for successful
 cases. Invalid arrays, nonfinite data, inconsistent agreement claims, or
 invalid mesh connectivity are rejected. Without an available report the
-page shows an unavailable state. Browsers inspect recorded results; they
+simulation stage shows an unavailable state; the equation and source stages
+remain readable. Browsers inspect recorded results; they
 do not run Fortran. To preview local data, run:
 
 ```bash
@@ -122,5 +185,7 @@ Publication metadata is recorded in `publication.json`.
 
 Reference-model agreement and compiled element execution have separate
 roles. A passing livebench is not a new Abaqus solve, complete reproduction
-of the four paper figures, or physical validation. See the individual
+of the four paper figures, or physical validation. The BVPs are license-free
+global FE simulations; the bending model uses one-way heat-to-mechanics
+coupling and a quasi-static plane-strain mechanical solve. See the individual
 example records and `paper_examples/README.md` for those evidence levels.

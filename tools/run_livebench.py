@@ -31,6 +31,10 @@ CHECK_LABELS = {
     "check_assembled.py": "Assembled element",
     "check_compiled.py": "Generated Fortran / f2py",
     "check_fe_runtime.py": "Mesh solves / f2py",
+    "check_heated_plate.py": "Transient boundary-value solve / f2py",
+    "check_thermal_bending.py": "Thermal bending boundary-value solve / f2py",
+    "check_ogden_bvp.py": "Ogden finite-shear boundary-value solve / f2py",
+    "check_plasticity_bvp.py": "J2 cyclic boundary-value solve / f2py",
 }
 
 # Call the existing check function rather than scraping rounded numbers from
@@ -203,7 +207,7 @@ def run_benchmarks(case_ids, output, timeout=300.0):
     report["status"] = "passed" if all(c["status"] == "passed" for c in report["cases"]) else "failed"
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
                                      dir=str(output), delete=False) as stream:
-        json.dump(report, stream, indent=2, allow_nan=False)
+        json.dump(report, stream, separators=(",", ":"), allow_nan=False)
         stream.write("\n")
         temporary_path = Path(stream.name)
     temporary_path.replace(output / "report.json")
@@ -213,7 +217,7 @@ def run_benchmarks(case_ids, output, timeout=300.0):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--case", choices=sorted(CASES), action="append",
-                        help="Run one case (repeatable); the default runs all seven.")
+                        help="Run one case (repeatable); the default runs every declared case.")
     parser.add_argument("--output", type=Path, default=ROOT / "benchmark-results")
     parser.add_argument("--timeout", type=float, default=300.0,
                         help="Maximum seconds per check (default: 300).")
