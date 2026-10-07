@@ -273,7 +273,12 @@ def eig(A):
     # deviation's contribution to eigenvalues AND eigenvectors to first
     # order. The old fallback (lam = q, V = I) silently zeroed CS
     # derivatives of spectral functions at C = I (audit finding H2).
-    if abs(p.real) < 1e-30:
+    # At a nearly isotropic real state, rounded eigenvalues can all equal q
+    # while off-diagonal roundoff leaves p nonzero. Cross-product columns
+    # then collapse. A relative guard sends these states to the existing
+    # principal-basis fallback without discarding their perturbation.
+    scale = float(np.max(np.abs(A.real)))
+    if abs(p.real) < 1e-30 or abs(p.real) <= 1e-14 * scale:
         return _eig_rotated_fallback(A)
 
     # For nearly-diagonal matrices the trigonometric formula is unstable
@@ -318,6 +323,13 @@ def eig(A):
     # Sort by real part for consistent ordering
     idx = np.argsort(lam.real)
     lam = lam[idx]
+
+    # A repeated pair can acquire a spurious cubic-root split even when
+    # the invariant r misses its near-endpoint guard. Resolve the real
+    # principal basis throughout the already declared quasi-repeated band
+    # before raw cross-product columns become parallel.
+    if np.min(np.diff(lam.real)) <= 1e-6 * np.max(np.abs(lam.real)):
+        return _eig_rotated_fallback(A)
 
     # Compute eigenvectors
     V = np.zeros((3, 3), dtype=np.complex128)

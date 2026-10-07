@@ -10,9 +10,34 @@ Tests:
 """
 
 import numpy as np
+import pytest
 
 from abaqus_ufl.core.tensor import det, inv, trace, eye, log, sqrt, exp
 from abaqus_ufl.core.tensor import eig, sqrtm, logm, expm, normalize, polar
+
+
+@pytest.mark.parametrize("scale", [1e-20, 1.0, 1e20])
+def test_real_nearly_isotropic_eigenvectors_remain_invertible(scale):
+    """Tiny real off-diagonals must not collapse rounded equal roots."""
+    A = scale * np.eye(3)
+    A[0, 1] = A[1, 0] = scale * 1e-17
+    eigenvalues, vectors = eig(A)
+    assert np.isfinite(vectors).all()
+    assert abs(np.linalg.det(vectors)) > 0.9
+    reconstructed = vectors @ np.diag(eigenvalues) @ np.linalg.inv(vectors)
+    assert np.linalg.norm(reconstructed - A) / np.linalg.norm(A) < 1e-14
+
+
+def test_rotated_small_uniaxial_stretch_retains_repeated_real_basis():
+    angle = 0.51
+    Q = np.array([[np.cos(angle), -np.sin(angle), 0],
+                  [np.sin(angle), np.cos(angle), 0], [0, 0, 1.]])
+    A = Q.T @ np.diag([(1+1e-6)**2, 1., 1.]) @ Q
+    eigenvalues, vectors = eig(A)
+    assert np.isfinite(vectors).all()
+    assert abs(np.linalg.det(vectors)) > 0.9
+    reconstructed = vectors @ np.diag(eigenvalues) @ np.linalg.inv(vectors)
+    np.testing.assert_allclose(reconstructed, A, rtol=1e-14, atol=1e-14)
 
 
 def test_known_results():
@@ -405,7 +430,7 @@ def test_eig_value_at_scaled_rotated_distinct_spectra():
     )
 
     for scale in (
-            1.0, 1.0e-9, 1.0e-12, 1.0e-13, 1.0e-20, 1.0e-30, 1.0e-31):
+            1.0, 1.0e-9, 1.0e-12, 1.0e-13, 1.0e-20, 1.0e-30, 1.0e-31, 1.0e-60):
         diag = scale * np.array([0.1, 1.0, 10.0])
         A0 = Q @ np.diag(diag) @ Q.T
         lam, V = eig(A0)

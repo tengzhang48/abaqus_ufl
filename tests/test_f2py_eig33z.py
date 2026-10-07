@@ -15,6 +15,26 @@ TENSOR_OPS = os.path.join(
     REPO, 'abaqus_ufl', 'generators', 'templates', 'tensor_ops.for')
 
 
+@pytest.mark.parametrize("scale", [1e-20, 1.0, 1e20])
+def test_compiled_real_nearly_isotropic_sqrt_is_finite(eig33z_module, scale):
+    """Value-only calls retain a nonsingular basis at roundoff-size shear."""
+    A = scale * np.eye(3)
+    A[0, 1] = A[1, 0] = scale * 1e-17
+    got = eig33z_module.drive_sqrtm33z_value(A)
+    assert np.isfinite(got).all()
+    assert np.linalg.norm(got - np.sqrt(scale) * np.eye(3)) / np.sqrt(scale) < 1e-14
+
+
+def test_compiled_rotated_small_uniaxial_stretch(eig33z_module):
+    angle = 0.51
+    Q = np.array([[np.cos(angle), -np.sin(angle), 0],
+                  [np.sin(angle), np.cos(angle), 0], [0, 0, 1.]])
+    A = Q.T @ np.diag([(1+1e-6)**2, 1., 1.]) @ Q
+    expected = Q.T @ np.diag([1+1e-6, 1., 1.]) @ Q
+    got = eig33z_module.drive_sqrtm33z_value(A)
+    np.testing.assert_allclose(got, expected, rtol=1e-14, atol=1e-14)
+
+
 @pytest.fixture(scope='session')
 def eig33z_module():
     module_name = 'eig33z_f2py'
@@ -191,7 +211,7 @@ def test_compiled_eig_sqrtm_value_at_rotated_repeated_spectrum(
 
 @pytest.mark.parametrize(
     'scale',
-    [1.0, 1.0e-9, 1.0e-12, 1.0e-13, 1.0e-20, 1.0e-30, 1.0e-31],
+    [1.0, 1.0e-9, 1.0e-12, 1.0e-13, 1.0e-20, 1.0e-30, 1.0e-31, 1.0e-60],
 )
 def test_compiled_eig_sqrtm_value_at_scaled_rotated_distinct_spectrum(
         eig33z_module, scale):

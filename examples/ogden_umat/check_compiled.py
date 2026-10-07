@@ -177,6 +177,10 @@ def check(*, record=None):
 
         props = [MU, ALPHA, K]
         model = OgdenOneTerm()
+        angle = 0.51
+        rotation = np.array([[math.cos(angle), -math.sin(angle), 0.0],
+                             [math.sin(angle), math.cos(angle), 0.0],
+                             [0.0, 0.0, 1.0]])
         uniaxial_F = np.diag([
             UNIAXIAL,
             1.0 / math.sqrt(UNIAXIAL),
@@ -202,6 +206,15 @@ def check(*, record=None):
             parity_errors.append(float(np.max(np.abs(stress - expected))))
             print("[PASS] f2py stress parity at {} state".format(name))
 
+        # Physical zero-stress oracle, independent of the Python eig path.
+        # Roundoff in R.T@R formerly produced singular real eigenvectors.
+        rotation_stress, rotation_tangent, _ = call_umat(module, rotation, props)
+        rotation_error = float(np.max(abs(rotation_stress)))
+        if (not np.isfinite(rotation_error) or rotation_error > 1e-12
+                or not np.isfinite(rotation_tangent).all()):
+            raise AssertionError("rigid rotation must return finite zero stress")
+        print("[PASS] compiled rigid rotation has finite zero stress")
+
         # Runtime-property degeneracy: alpha = 2 through the compiled module
         # against the eig-free closed form.
         F = generic_F()
@@ -220,6 +233,7 @@ def check(*, record=None):
         for name, F in (
             ("distinct", generic_F()),
             ("repeated", uniaxial_F),
+            ("rotation", rotation),
         ):
             ddsdde = call_umat(module, F, props)[1]
             _, fd = fd_jaumann_tangent(module, F, props)
@@ -256,6 +270,8 @@ def check(*, record=None):
             "alpha2_closed_form_max_abs_error": closed_form_error,
             "tangent_rel_error_distinct": tangent_errors["distinct"],
             "tangent_rel_error_repeated": tangent_errors["repeated"],
+            "rigid_rotation_stress_max_abs_error": rotation_error,
+            "tangent_rel_error_rotation": tangent_errors["rotation"],
         }
 
 
