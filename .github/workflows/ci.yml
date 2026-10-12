@@ -26,6 +26,9 @@ jobs:
       - name: Install package (dev extras)
         run: python -m pip install -e ".[dev]"
       - name: Run test suite (includes example verification bundles)
+        # A skipped compiled gate fails here instead of silently passing.
+        env:
+          ABAQUS_UFL_FAIL_ON_SKIP: "1"
         run: python -m pytest tests -q
 
   regeneration:

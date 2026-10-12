@@ -143,7 +143,7 @@ matrix backend is `iterative`, not `eig`.
 | `eig(A)` / `eigh(A)` | Yes | Self-contained CS-safe eigensolver, no LAPACK; `eigh` is an alias for the general `eig` |
 | `trace(A)` | Yes | |
 | `0.5*(A + A.T)`, `dev(A)` | Yes | Symmetric/deviatoric parts; the translator has no unary `sym` |
-| `abs(x)` | **No** | Use `x` directly or `sqrt(x*x)` if needed |
+| `abs(x)` | **No** | Rejected by the translator unless the argument is real (e.g. `abs(x.real)`); use `sqrt(x*x)` for a CS-safe magnitude |
 | `max(a, b)` | **No** | Use `if a.real > b.real` branching |
 | `min(a, b)` | **No** | Same |
 | `sign(x)` | **No** | Branch on real part instead |

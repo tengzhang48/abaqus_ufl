@@ -10,7 +10,8 @@ the full license-free pipeline of every shipped example.
 
 The compiled gates need gfortran plus a working ``numpy.f2py`` backend
 (meson/ninja on NumPy 2.x); environments without that toolchain skip
-those gates rather than fail.
+those gates rather than fail. CI sets ``ABAQUS_UFL_FAIL_ON_SKIP=1``
+(see ``conftest.py``), so there a skipped gate fails.
 """
 import shutil
 import subprocess

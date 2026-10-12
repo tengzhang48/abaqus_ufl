@@ -9,12 +9,14 @@ The local pressure is stored in ``SVARS(1)`` and statically condensed from the
 element tangent before returning AMATRX/RHS to Abaqus.
 """
 
+from ..core.verify import verify_before_generation
 from .element_config import ELEMENT_CONFIGS
 from .uel_gen import (
     _generate_all_material_subs,
     _read_template,
     _wrap_lines,
 )
+from .umat_gen import _nonfinite_cutback_lines
 
 
 def _mat_call_args(prefix, method, F_arg='Fz', p_arg='p_scalar_z',
@@ -537,6 +539,8 @@ def _generate_uel_local_pressure(weakform, mat_prefix, cfg):
     lines.append('          AMATRX(i,j) = Kxx(i,j) - Kxp(i)*Kpx(j)/K_pp')
     lines.append('        END DO')
     lines.append('      END DO')
+    # Before the state commit below, so a non-finite result commits nothing.
+    lines.extend(_nonfinite_cutback_lines('RHS(i,1)', 'AMATRX(i,j)', 'NDOFEL'))
     lines.append('      IF (LFLAGS(3) .EQ. 1 .AND. NSVARS .GE. 1)')
     lines.append('     &  SVARS(1) = p_elem')
     lines.append('C     Optional diagnostic layouts.')
@@ -643,8 +647,14 @@ def _generate_uvarm_bridge():
 
 def generate_uel_local_pressure(weakform, output_path,
                                 mat_prefix='localpressuregel',
-                                element_config=None):
-    """Generate a Quad4/Hex8 UEL with global u/mu and local pressure."""
+                                element_config=None, verify=True):
+    """Generate a Quad4/Hex8 UEL with global u/mu and local pressure.
+
+    ``verify`` runs ``weakform.verify()`` first: True (default) at the default
+    state, a dict of ``verify()`` arguments at a model-specific state, False
+    not at all. ``VerificationError`` stops generation on a tangent mismatch.
+    """
+    verify_before_generation(weakform, verify)
     cfg = element_config or ELEMENT_CONFIGS['quad4']
     if cfg.name not in ('quad4', 'hex8'):
         raise ValueError("local_pressure formulation currently supports "

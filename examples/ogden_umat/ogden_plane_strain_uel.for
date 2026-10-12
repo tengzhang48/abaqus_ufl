@@ -231,6 +231,22 @@ C       dPK1_dF (sign=+1, grad-grad)
 
       END DO
 
+C     --- Non-finite RHS or AMATRX: request a smaller increment
+      DO i = 1, NDOFEL
+        IF (RHS(i,1) .NE. RHS(i,1) .OR.
+     &      DABS(RHS(i,1)) .GT. HUGE(1.0d0)) THEN
+          PNEWDT = 0.25d0
+          RETURN
+        END IF
+        DO j = 1, NDOFEL
+          IF (AMATRX(i,j) .NE. AMATRX(i,j) .OR.
+     &        DABS(AMATRX(i,j)) .GT. HUGE(1.0d0)) THEN
+            PNEWDT = 0.25d0
+            RETURN
+          END IF
+        END DO
+      END DO
+
       RETURN
       END SUBROUTINE UEL
 

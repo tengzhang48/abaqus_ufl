@@ -97,9 +97,9 @@ def _check_operator_signs(material, state, verbose=True):
     primal field, flux = +kappa*grad(primal), which is CORRECT there)
     can false-warn if the verify state sits at a spinodal (psi'' < 0);
     signatures cannot distinguish that from a degradation-coupled
-    storage. Assess mixed pairs with the coupled dispersion pattern
-    (test_phase_flux_operator.py, mixed-split bulk-phase-stability test)
-    and dismiss if the dispersion is stable.
+    storage. Assess such a mixed pair with a dispersion analysis of the
+    coupled two-field block, and dismiss the warning if the dispersion is
+    stable.
     """
     import warnings as _warnings
 
@@ -341,6 +341,20 @@ def _check_major_symmetry(material, state, tol=1e-6, verbose=True):
 # Main entry point
 # ===================================================================
 
+def verify_before_generation(model, verify):
+    """Run ``model.verify()`` as a generator's first step.
+
+    ``verify`` is True (default state and tolerance), False (skip), or a dict
+    of ``verify()`` keyword arguments such as ``dict(state=..., tol=...)`` for
+    a model whose representative verification state is not the default.
+    """
+    if verify is False or verify is None:
+        return
+    kwargs = {} if verify is True else dict(verify)
+    kwargs.setdefault('verbose', False)
+    model.verify(**kwargs)
+
+
 def run_verification(material, state=None, tol=1e-6, verbose=True):
     """
     Run all verification checks for a Material instance.
@@ -416,7 +430,7 @@ def run_verification(material, state=None, tol=1e-6, verbose=True):
                 verbose=False)
             if not ok:
                 failed.append(f"d({method_name})/d({field_var})")
-        if not material.has_state:
+        if not material.has_state and getattr(material, "symmetric_tangent", True):
             ok = _check_major_symmetry(material, state, tol, verbose=False)
             if not ok:
                 failed.append("major symmetry dP/dF")

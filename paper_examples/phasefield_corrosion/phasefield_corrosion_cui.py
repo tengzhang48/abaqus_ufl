@@ -472,7 +472,8 @@ def generate(output_path=None):
             os.path.dirname(__file__), "generated",
             "phasefield_corrosion_cui_uel.for")
     generate_uel(problem, output_path, element="Quad8R",
-                 formulation="standard")
+                 formulation="standard",
+                 verify=dict(state=verification_state(), tol=1.0e-5))
     _apply_visualization_bridge(output_path)
     _strip_trailing_whitespace(output_path)
     return output_path, problem
@@ -528,7 +529,8 @@ def generate_diag(output_path=None):
             os.path.dirname(__file__), "generated",
             "phasefield_corrosion_cui_diag_uel.for")
     generate_uel(problem, output_path, element="Quad8R",
-                 formulation="standard")
+                 formulation="standard",
+                 verify=dict(state=verification_state(), tol=1.0e-5))
     _apply_visualization_bridge(output_path)
     _strip_trailing_whitespace(output_path)
     return output_path, problem

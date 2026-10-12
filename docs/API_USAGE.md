@@ -357,7 +357,9 @@ Use this order for every new model:
 
 1. Document the theory, non-scope, conventions, fields/DOFs, and state layout.
 2. Add an independent quantitative oracle and model-specific regime checks.
-3. Run material-method tangent consistency with `verify()`.
+3. Run material-method tangent consistency with `verify()`. The generators
+   also run it at the default state before writing Fortran (opt out with
+   `verify=False`); check any model-specific states yourself.
 4. For a UEL, check assembled `RHS`/`AMATRX`, DOF/state layout, and an
    appropriate patch or invariant.
 5. Regenerate deterministically and compile the Fortran with `gfortran`.

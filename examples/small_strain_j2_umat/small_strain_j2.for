@@ -165,6 +165,22 @@ C     --- Complex-step DDSDDE wrt Abaqus DSTRAN ---
         DDSDDE(6,col) = -AIMAG(sigma_new_z(2,3)) / CS_H
       END DO
 
+C     --- Non-finite STRESS or DDSDDE: request a smaller increment
+      DO i = 1, NTENS
+        IF (STRESS(i) .NE. STRESS(i) .OR.
+     &      DABS(STRESS(i)) .GT. HUGE(1.0d0)) THEN
+          PNEWDT = 0.25d0
+          RETURN
+        END IF
+        DO j = 1, NTENS
+          IF (DDSDDE(i,j) .NE. DDSDDE(i,j) .OR.
+     &        DABS(DDSDDE(i,j)) .GT. HUGE(1.0d0)) THEN
+            PNEWDT = 0.25d0
+            RETURN
+          END IF
+        END DO
+      END DO
+
       RETURN
       END SUBROUTINE UMAT
 

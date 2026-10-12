@@ -84,7 +84,7 @@ the same code path.
 | `SIN`, `COS` | yes | |
 | `det(A)`, `inv(A)` | yes | Explicit formula |
 | `A @ B`, `A.T` | yes | |
-| `ABS(x)` | no | Use `x` directly, or `SQRT(x*x)` |
+| `ABS(x)` | no | Rejected by the translator unless `x` is real; use `SQRT(x*x)` |
 | `MAX(a,b)`, `MIN(a,b)` | no | Branch on `DBLE(a) > DBLE(b)` |
 | `SIGN(x)` | no | Branch on `DBLE(x) > 0` |
 | `IF (x > threshold)` with complex `x` | no | `IF (DBLE(x) > threshold)` |

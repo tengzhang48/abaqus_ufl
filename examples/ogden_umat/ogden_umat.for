@@ -49,6 +49,7 @@ C     --- Local variables ---
       DOUBLE PRECISION :: F(3,3), P_real(3,3)
       DOUBLE PRECISION :: dPdF(3,3,3,3)
       DOUBLE COMPLEX :: Fz(3,3), Pz(3,3)
+      DOUBLE PRECISION :: det33d
       INTEGER :: i, j
 
 C     --- Initialize optional Abaqus outputs ---
@@ -70,6 +71,12 @@ C     --- Get deformation gradient ---
         END DO
       END DO
 
+C     --- Inverted or degenerate element: request a smaller increment
+      IF (det33d(F) .LE. 0.0d0) THEN
+        PNEWDT = 0.25d0
+        RETURN
+      END IF
+
 C     --- Compute PK1 stress (real evaluation) ---
       CALL real2complex33(F, Fz)
       CALL ogdenoneterm_stress_PK1(Fz, PROPS, Pz)
@@ -84,6 +91,22 @@ C     --- Compute dP/dF via complex step ---
 
 C     --- Convert PK1 -> Cauchy + Jaumann tangent (Voigt) ---
       CALL pk1_to_cauchy_jaumann(F, P_real, dPdF, STRESS, DDSDDE)
+
+C     --- Non-finite STRESS or DDSDDE: request a smaller increment
+      DO i = 1, NTENS
+        IF (STRESS(i) .NE. STRESS(i) .OR.
+     &      DABS(STRESS(i)) .GT. HUGE(1.0d0)) THEN
+          PNEWDT = 0.25d0
+          RETURN
+        END IF
+        DO j = 1, NTENS
+          IF (DDSDDE(i,j) .NE. DDSDDE(i,j) .OR.
+     &        DABS(DDSDDE(i,j)) .GT. HUGE(1.0d0)) THEN
+            PNEWDT = 0.25d0
+            RETURN
+          END IF
+        END DO
+      END DO
 
       RETURN
       END SUBROUTINE UMAT

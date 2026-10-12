@@ -167,7 +167,10 @@ The package distinguishes several kinds of evidence because they catch
 different failures:
 
 - `Material.verify()` compares the implemented complex-step tangent with
-  finite differences for the selected state.
+  finite differences for the selected state. `generate_umat`,
+  `generate_small_strain_umat` and `generate_uel` run it at the default state
+  before writing Fortran and stop with `VerificationError` on a mismatch;
+  `verify=False` opts out.
 - A model-specific oracle checks a limit, invariant, analytic solution, or
   independently implemented response.
 - Deterministic regeneration checks that the committed Fortran matches the

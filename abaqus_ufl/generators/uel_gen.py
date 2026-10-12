@@ -20,11 +20,13 @@ import textwrap
 import ast
 import numpy as np
 
+from ..core.verify import verify_before_generation
 from ..core.fields import VectorField, ScalarField
 from ..core.defs import FIELD_ARGS
 from ..core.weakform import EQUATION_INFO
 from .element_config import ElementConfig, ELEMENT_CONFIGS
 from .umat_gen import (FortranTranslator, _get_source_body,
+                       _nonfinite_cutback_lines,
                        _state_var_info, _nstate_per_gp,
                        _fortran_dims, _fortran_init_value,
                        _fortran_call)
@@ -1559,6 +1561,7 @@ C     --- Gauss point field values ---
     # End Gauss loop
     lines.append('      END DO')
     lines.append('')
+    lines.extend(_nonfinite_cutback_lines('RHS(i,1)', 'AMATRX(i,j)', 'NDOFEL'))
     lines.append('      RETURN')
     lines.append('      END SUBROUTINE UEL')
 
@@ -2262,6 +2265,7 @@ C     --- Complex temps for material evaluation ---
     lines.append('      END DO')
     lines.append('C     End Pass 3')
     lines.append('')
+    lines.extend(_nonfinite_cutback_lines('RHS(i,1)', 'AMATRX(i,j)', 'NDOFEL'))
     lines.append('      RETURN')
     lines.append('      END SUBROUTINE UEL')
 
@@ -2354,7 +2358,8 @@ def _generate_cs_tangent_dPdF(weakform, mat_prefix):
 # =====================================================================
 
 def generate_uel(weakform, output_path, element='Quad8', mat_prefix=None,
-                 fbar=None, element_config=None, formulation=None):
+                 fbar=None, element_config=None, formulation=None,
+                 verify=True):
     """
     Generate a complete UEL .for file from a WeakForm instance.
 
@@ -2373,7 +2378,13 @@ def generate_uel(weakform, output_path, element='Quad8', mat_prefix=None,
                      ``'fbar_mechanics'``, or ``'local_pressure'``.
                      When omitted, the legacy *fbar* auto-detection is
                      preserved.
+        verify: run ``weakform.verify()`` before generating. True (default)
+                uses the default state; a dict of ``verify()`` arguments, e.g.
+                ``dict(state=..., tol=...)``, uses a model-specific state;
+                False skips it. ``VerificationError`` stops generation when
+                the complex-step and finite-difference tangents disagree.
     """
+    verify_before_generation(weakform, verify)
     if mat_prefix is None:
         mat_prefix = weakform._mat.__class__.__name__.lower()
 
@@ -2414,7 +2425,8 @@ def generate_uel(weakform, output_path, element='Quad8', mat_prefix=None,
         from .uel_local_pressure import generate_uel_local_pressure
         return generate_uel_local_pressure(weakform, output_path,
                                            mat_prefix=mat_prefix,
-                                           element_config=cfg)
+                                           element_config=cfg,
+                                           verify=False)
 
     if getattr(weakform, 'local_field_names', []):
         raise ValueError(
