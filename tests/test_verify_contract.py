@@ -188,3 +188,28 @@ def test_umat_generator_passes_a_model_specific_verification_state(tmp_path):
     state = material._make_state()
     generate_umat(material, str(tmp_path / 'umat.for'), verify=dict(state=state, tol=1e-5))
     assert seen['state'] is state and seen['tol'] == 1e-5
+
+
+@pytest.mark.parametrize('value', [None, 0, 'yes'])
+def test_verify_option_must_be_bool_or_dict(tmp_path, value):
+    with pytest.raises(TypeError, match='verify must be True, False, or a dict'):
+        generate_umat(NeoHookean(), str(tmp_path / 'umat.for'), verify=value)
+
+
+def test_build_compiled_uel_verifies_and_forwards_the_option(monkeypatch):
+    from abaqus_ufl.fe import compiled_element
+
+    with pytest.raises(VerificationError):
+        compiled_element.build_compiled_uel(displacement_problem(DroppedTerm))
+    problem = displacement_problem(NeoHookean)
+    seen = {}
+
+    def record(**kwargs):
+        seen.update(kwargs)
+        raise VerifyCalled()
+
+    monkeypatch.setattr(problem, 'verify', record)
+    state = {'F': np.eye(3)}
+    with pytest.raises(VerifyCalled):
+        compiled_element.build_compiled_uel(problem, verify=dict(state=state, tol=1e-5))
+    assert seen['state'] is state and seen['tol'] == 1e-5

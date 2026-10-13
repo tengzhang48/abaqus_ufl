@@ -1107,6 +1107,7 @@ C     --- Shape functions and mapping ---""")
       DOUBLE PRECISION :: detJ, Jinv({_jinv},{_jinv}), wdetJ
       DOUBLE PRECISION :: dt_safe
       DOUBLE PRECISION :: det33d
+      LOGICAL :: isnonfinite_d
       INTEGER :: ngp_out, stat
 
 C     --- Gauss point field values ---
@@ -1940,6 +1941,7 @@ C     --- Complex temps for material evaluation ---
 
             DOUBLE PRECISION :: det33d
       DOUBLE COMPLEX :: det33z
+      LOGICAL :: isnonfinite_d
       INTEGER :: idx, ii_v, jj_v, i, j, k, l, m, N, kk, gg
       INTEGER :: row, col
     """)

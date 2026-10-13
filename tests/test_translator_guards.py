@@ -108,6 +108,22 @@ def test_abs_of_real_part_is_allowed():
     assert 'ABS((DBLE(J) - ' in stress_source(AbsOfRealPart())
 
 
+class LoopIndexRatio(au.Material):
+    props = dict(G=1.0)
+
+    def stress_PK1(self, F):
+        s = 0.0
+        for i in range(1, 3):
+            for j in range(1, 3):
+                s = s + i / j
+        return self.G * s * (F - inv(F).T)
+
+
+def test_division_of_loop_indices_is_real_division():
+    """i and j are Fortran INTEGERs; Python's i / j must not truncate."""
+    assert '(DBLE(i) / DBLE(j))' in stress_source(LoopIndexRatio())
+
+
 # ---------------------------------------------------------------------------
 # Integer powers (G5)
 # ---------------------------------------------------------------------------
@@ -175,8 +191,25 @@ def test_integer_power_uses_an_integer_exponent(material, emitted):
     assert not re.search(r'\*\* DCMPLX\(', source)
 
 
+class LoopIndexReciprocal(au.Material):
+    props = dict(G=1.0)
+
+    def stress_PK1(self, F):
+        s = 0.0
+        for k in range(1, 4):
+            s = s + k ** (-1)
+        return self.G * s * (F - inv(F).T)
+
+
+def test_negative_power_of_a_loop_index_is_real_division():
+    """k is a Fortran INTEGER; k**(-1) must not become integer division."""
+    source = stress_source(LoopIndexReciprocal())
+    assert '(DBLE(k) ** (-1))' in source
+    assert '(k ** (-1))' not in source
+
+
 def test_fractional_power_keeps_a_complex_exponent():
-    assert '(J ** DCMPLX(5.000000000000000d-01, 0.0d0))' in stress_source(SquareRoot())
+    assert re.search(r'\(J \*\* DCMPLX\(5\.0+d-01, 0\.0d0\)\)', stress_source(SquareRoot()))
 
 
 # ---------------------------------------------------------------------------

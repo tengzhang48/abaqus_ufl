@@ -18,7 +18,14 @@ Use it when debugging generated UMAT/UEL behavior.
   solver-dependent and should be used deliberately. The generators already
   emit `PNEWDT = 0.25` for `det F <= 0` (finite-strain UMATs and UELs) and for
   NaN or Inf in `STRESS`/`DDSDDE` or `RHS`/`AMATRX` (all generated UMATs and
-  UELs); `tests/test_runtime_guards.py` calls each guard.
+  UELs); `tests/test_runtime_guards.py` calls each guard. The NaN/Inf test
+  (`isnonfinite_d` in `tensor_ops.for`) checks the IEEE exponent bits, because
+  a fast floating-point model can fold `x .NE. x` to false: gfortran
+  `-ffast-math` does (tested in the same file), and Intel compilers default to
+  a fast model.
+- A finite-strain UMAT computes stress from `DFGRD1`, so run its steps with
+  `NLGEOM=YES`. A zero or inverted `DFGRD1` (det F <= 0) requests a cutback
+  instead of returning NaN stress.
 - Derive or measure tangent symmetry; do not infer it from the number of
   fields. Use `UNSYMM` when the assembled UEL or UMAT tangent is genuinely
   nonsymmetric. If it is omitted for a nonsymmetric operator, convergence can
@@ -154,7 +161,9 @@ Use it when debugging generated UMAT/UEL behavior.
 - Plane strain still uses 3x3 tensors with `F33 = 1`.
 - **Powers.** A whole-number exponent (`z**2`, `z**2.0`, `z**-1`) is emitted as a
   Fortran integer power, evaluated by multiplication (tested in
-  `tests/test_translator_guards.py`). A fractional exponent still becomes the
+  `tests/test_translator_guards.py`). An INTEGER base (a loop index) with a
+  negative exponent is converted with `DBLE` first, and `i / j` between two
+  loop indices is emitted as real division, matching Python. A fractional exponent still becomes the
   complex power `z ** DCMPLX(a)` = `exp(a*log z)`, whose value at `z = 0` depends
   on the compiler's runtime library (gfortran 11 returns 0; NaN has been reported
   elsewhere). For a fractional power of a quantity that can be exactly zero, such

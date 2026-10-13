@@ -224,6 +224,13 @@ class FortranTranslator(ast.NodeVisitor):
         self._var_kinds = dict(initial_var_kinds or {'F': 'tensor'})
         self._integer_vars = set()  # for-loop indices; emitted as Fortran INTEGER
         self._real_vars = set()    # scalar vars assigned from .real, safe in IF comparisons
+        # Dummies declared DOUBLE PRECISION (dt, time, X, predefined fields).
+        self._real_names = set(getattr(material, '_param_args', ()) or ())
+        # DOUBLE COMPLEX dummies the complex step never perturbs: history and
+        # state at the start of the increment.
+        self._unperturbed_names = (
+            set(getattr(material, '_history_args', ()) or ())
+            | set(getattr(material, '_state_arg_names', ()) or ()))
         self._state_return_map = None  # set by tuple return handler
         self._state_var_names = state_var_names or []
         self._helper_sources = (
@@ -978,6 +985,11 @@ class FortranTranslator(ast.NodeVisitor):
             # Variables assigned from x.real are DBLE(x) and real-safe.
             if n.id in self._real_vars:
                 return True
+            # dt, time, X and predefined fields are DOUBLE PRECISION dummies.
+            if n.id in self._real_names:
+                return True
+        if isinstance(n, ast.Subscript):
+            return self._is_real_safe(n.value)
         if isinstance(n, ast.Attribute):
             # x.real is real-safe.
             if n.attr == 'real':
@@ -995,6 +1007,36 @@ class FortranTranslator(ast.NodeVisitor):
             return self._is_real_safe(n.left) and self._is_real_safe(n.right)
         if isinstance(n, ast.UnaryOp):
             return self._is_real_safe(n.operand)
+        return False
+
+    def _is_unperturbed(self, n):
+        """True if the complex step never perturbs the expression.
+
+        Such values may be DOUBLE COMPLEX in Fortran (so comparisons still
+        need .real), but abs() of them drops no perturbation.
+        """
+        if self._is_real_safe(n):
+            return True
+        if isinstance(n, ast.Name):
+            return n.id in self._unperturbed_names
+        if isinstance(n, ast.Subscript):
+            return self._is_unperturbed(n.value)
+        if isinstance(n, ast.BinOp):
+            return self._is_unperturbed(n.left) and self._is_unperturbed(n.right)
+        if isinstance(n, ast.UnaryOp):
+            return self._is_unperturbed(n.operand)
+        return False
+
+    def _is_integer_expr(self, n):
+        """True if the expression is a Fortran INTEGER (loop indices, int())."""
+        if isinstance(n, ast.Name):
+            return n.id in self._integer_vars
+        if isinstance(n, ast.Call):
+            return self._get_func_name(n) == 'int'
+        if isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub, ast.Mult, ast.Pow)):
+            return self._is_integer_expr(n.left) and self._is_integer_expr(n.right)
+        if isinstance(n, ast.UnaryOp):
+            return self._is_integer_expr(n.operand)
         return False
 
     @staticmethod
@@ -1148,6 +1190,12 @@ class FortranTranslator(ast.NodeVisitor):
             else:
                 result_kind = 'scalar'
 
+            # Python '/' is true division; between two Fortran INTEGERs it
+            # would truncate.
+            if (isinstance(node.op, ast.Div) and self._is_integer_expr(node.left)
+                    and self._is_integer_expr(node.right)):
+                return f'(DBLE({left}) / DBLE({right}))', result_kind
+
             # A whole-number exponent becomes a Fortran integer power,
             # evaluated by multiplication. A complex exponent would call
             # pow, i.e. exp(n*log(z)), whose behaviour at z = 0 depends on
@@ -1155,8 +1203,12 @@ class FortranTranslator(ast.NodeVisitor):
             if isinstance(node.op, ast.Pow):
                 n = self._integer_exponent(node.right)
                 if n is not None:
-                    exponent = str(n) if n >= 0 else f'({n})'
-                    return f'({left} ** {exponent})', result_kind
+                    if n >= 0:
+                        return f'({left} ** {n})', result_kind
+                    # An INTEGER base with a negative exponent would be
+                    # integer division in Fortran (k**(-1) = 0 for k > 1).
+                    base = f'DBLE({left})' if self._is_integer_expr(node.left) else left
+                    return f'({base} ** ({n}))', result_kind
 
             return f'({left} {op_str} {right})', result_kind
 
@@ -1343,7 +1395,7 @@ class FortranTranslator(ast.NodeVisitor):
                 # ABS of a DOUBLE COMPLEX value is its modulus: the
                 # complex-step perturbation is dropped and the tangent is
                 # silently wrong. Only real-safe arguments are allowed.
-                if not self._is_real_safe(node.args[0]):
+                if not self._is_unperturbed(node.args[0]):
                     raise NotImplementedError(
                         "abs() of a possibly complex value is not "
                         "complex-step safe: Fortran ABS returns the modulus "
@@ -2517,22 +2569,21 @@ def _nonfinite_cutback_lines(vector, matrix, size):
 
     ``vector`` and ``matrix`` are element references written with the
     caller's INTEGER loop variables i and j, e.g. 'STRESS(i)' and
-    'DDSDDE(i,j)'. NaN is caught by x .NE. x, as in the local-pressure solve,
-    and infinity by the HUGE bound.
+    'DDSDDE(i,j)'. The caller declares LOGICAL :: isnonfinite_d, the
+    template function that tests the IEEE exponent bits; unlike x .NE. x, it
+    is not folded away by fast floating-point models (e.g. -ffast-math).
     """
     name = vector.split('(')[0]
     matrix_name = matrix.split('(')[0]
     return [
         f'C     --- Non-finite {name} or {matrix_name}: request a smaller increment',
         f'      DO i = 1, {size}',
-        f'        IF ({vector} .NE. {vector} .OR.',
-        f'     &      DABS({vector}) .GT. HUGE(1.0d0)) THEN',
+        f'        IF (isnonfinite_d({vector})) THEN',
         '          PNEWDT = 0.25d0',
         '          RETURN',
         '        END IF',
         f'        DO j = 1, {size}',
-        f'          IF ({matrix} .NE. {matrix} .OR.',
-        f'     &        DABS({matrix}) .GT. HUGE(1.0d0)) THEN',
+        f'          IF (isnonfinite_d({matrix})) THEN',
         '            PNEWDT = 0.25d0',
         '            RETURN',
         '          END IF',
@@ -2640,6 +2691,7 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
     lines.append(
         '      DOUBLE COMPLEX :: Fz(3,3), Pz(3,3)')
     lines.append('      DOUBLE PRECISION :: det33d')
+    lines.append('      LOGICAL :: isnonfinite_d')
 
     if has_state:
         for name, entry in sv_info.items():
@@ -2897,6 +2949,7 @@ def _generate_small_strain_umat_wrapper(
             lines.append(f'      DOUBLE COMPLEX :: {name}_new_z{dims}')
         lines.append('      DOUBLE PRECISION :: dt_safe')
         lines.append('      DOUBLE PRECISION :: svinit_max')
+    lines.append('      LOGICAL :: isnonfinite_d')
     lines.append('      INTEGER :: i, j, col')
     lines.append('')
 

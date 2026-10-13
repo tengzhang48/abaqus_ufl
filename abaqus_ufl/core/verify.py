@@ -348,9 +348,16 @@ def verify_before_generation(model, verify):
     of ``verify()`` keyword arguments such as ``dict(state=..., tol=...)`` for
     a model whose representative verification state is not the default.
     """
-    if verify is False or verify is None:
+    if verify is False:
         return
-    kwargs = {} if verify is True else dict(verify)
+    if verify is True:
+        kwargs = {}
+    elif isinstance(verify, dict):
+        kwargs = dict(verify)
+    else:
+        raise TypeError(
+            "verify must be True, False, or a dict of verify() arguments, "
+            f"not {verify!r}")
     kwargs.setdefault('verbose', False)
     model.verify(**kwargs)
 

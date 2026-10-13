@@ -36,6 +36,63 @@ class DirectReturnNeoHookean(au.Material):
         return self.G * (F - inv(F).T) + self.K * log(det(F)) * inv(F).T
 
 
+class LoopIndexArithmetic(au.Material):
+    """INTEGER loop indices in k**(-1) and i/j: s = 11/6 + 9/2 as in Python."""
+    props = dict(G=G)
+
+    def stress_PK1(self, F):
+        s = 0.0
+        for k in range(1, 4):
+            s = s + k ** (-1)
+        for i in range(1, 3):
+            for j in range(1, 3):
+                s = s + i / j
+        return self.G * s * (F - inv(F).T)
+
+
+class SmallStrainRealArguments(au.SmallStrainMaterial):
+    """abs() and a comparison on dt (real) and abs() on a_old (unperturbed)."""
+    props = dict(G=10.0)
+    state_vars = dict(a=0.0)
+
+    def stress_update(self, sigma_old, strain_old, dstrain, a_old, dt):
+        scale = 1.0 + 0.1 * abs(dt - 0.5) + 0.1 * abs(a_old)
+        if dt > 0.25:
+            scale = scale + 0.2
+        return sigma_old + 2.0 * self.G * scale * dstrain, {'a': a_old}
+
+
+class HeatWithRealArguments(au.Material):
+    """abs() of X, time and the history value T_old in a UEL material."""
+    props = dict(k=0.5, rho_cp=1.0, x0=0.5)
+
+    def stress_PK1(self, F, T):
+        return F - inv(F).T
+
+    def solvent_storage(self, F, F_old, T, T_old, dt, time, X):
+        ramp = 1.0 + 0.1 * abs(X[0] - self.x0) + 0.01 * abs(time) + 0.01 * abs(T_old)
+        return self.rho_cp * ramp * (T - T_old) / dt
+
+    def solvent_flux(self, F, T, grad_T):
+        return -self.k * grad_T
+
+
+class HeatWithRealArgumentsProblem(au.WeakForm):
+    material = HeatWithRealArguments
+    ndim = 2
+
+    def define_fields(self):
+        self.u = au.VectorField('u', degree=1)
+        self.T = au.ScalarField('T', degree=1, test='theta')
+
+    def momentum_equation(self, v, F, T):
+        return self.material.stress_PK1(F, T)
+
+    def transport_equation(self, theta, F, T, grad_T, F_old, T_old, dt, time, X):
+        return (self.material.solvent_storage(F, F_old, T, T_old, dt, time, X),
+                self.material.solvent_flux(F, T, grad_T))
+
+
 class SingularAtIdentity(au.Material):
     props = dict(G=G)
 
@@ -123,3 +180,69 @@ def test_uel_requests_a_cutback_for_nonfinite_output(tmp_path, formulation):
     stretched = np.array([0.0, 0.0, 0.1, 0.0, 0.1, 0.05, 0.0, 0.05])
     rhs, amatrx, _, pnewdt = call_uel(module, SQUARE, stretched, [G], du=stretched)
     assert pnewdt == 1.0 and np.isfinite(rhs).all() and np.isfinite(amatrx).all()
+
+
+def test_integer_loop_arithmetic_evaluates_like_python(tmp_path):
+    generate_umat(LoopIndexArithmetic(), str(tmp_path / 'umat.for'))
+    module = build_umat_module(tmp_path / 'umat.for', tmp_path, 'guard_loop_arithmetic_umat')
+    stress, _, _, pnewdt = call_umat(module, SHEAR, [G])
+    J = np.linalg.det(SHEAR)
+    s = (1.0 + 1.0 / 2 + 1.0 / 3) + (1.0 / 1 + 1.0 / 2 + 2.0 / 1 + 2.0 / 2)
+    sigma = s * G * (SHEAR - np.linalg.inv(SHEAR).T) @ SHEAR.T / J
+    expected = [sigma[0, 0], sigma[1, 1], sigma[2, 2], sigma[0, 1], sigma[0, 2], sigma[1, 2]]
+    assert pnewdt == 1.0
+    np.testing.assert_allclose(stress, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_abs_and_comparison_of_real_arguments_compile_and_run(tmp_path):
+    """dt is DOUBLE PRECISION and a_old is never perturbed, so abs() of both
+    and a comparison on dt are allowed and must compile."""
+    generate_small_strain_umat(SmallStrainRealArguments(), str(tmp_path / 'umat.for'))
+    module = build_umat_module(tmp_path / 'umat.for', tmp_path, 'guard_real_args_umat')
+    stress, _, ddsdde, pnewdt = call_umat(module, np.eye(3), [10.0], dstran=[1e-3, 0, 0, 0, 0, 0])
+    scale = 1.0 + 0.1 * abs(1.0 - 0.5) + 0.2           # dtime = 1 in call_umat
+    assert pnewdt == 1.0
+    np.testing.assert_allclose(stress[0], 2.0 * 10.0 * scale * 1e-3, rtol=1e-12)
+    assert np.isfinite(ddsdde).all()
+
+
+def test_abs_of_position_time_and_history_compiles_in_a_uel(tmp_path):
+    generate_uel(HeatWithRealArgumentsProblem(), str(tmp_path / 'uel.for'),
+                 element='Quad4', formulation='standard')
+    module = build_uel_module(tmp_path / 'uel.for', tmp_path, 'guard_real_args_uel')
+    u = np.array([0.0, 0.0, 0.1, 0.0, 0.0, 0.2, 0.1, 0.05, 0.3, 0.0, 0.0, 0.1])
+    rhs, amatrx, _, pnewdt = call_uel(module, SQUARE, u, [0.5, 1.0, 0.5], du=0.5 * u)
+    assert pnewdt == 1.0 and np.isfinite(rhs).all() and np.isfinite(amatrx).all()
+
+
+def test_nonfinite_check_survives_fast_math(tmp_path):
+    """isnonfinite_d tests exponent bits, so it still detects NaN and Inf when
+    the compiler may assume no NaNs (where x .NE. x is folded to .FALSE.)."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import abaqus_ufl.generators as generators
+
+    gfortran = shutil.which('gfortran')
+    if gfortran is None:
+        pytest.skip('gfortran not available')
+    template = Path(generators.__file__).with_name('templates') / 'tensor_ops.for'
+    program = tmp_path / 'probe.f90'
+    program.write_text(
+        "program probe\n"
+        "  implicit none\n"
+        "  logical :: isnonfinite_d\n"
+        "  double precision :: x(5)\n"
+        "  read (*, *) x\n"
+        "  print '(5l2)', isnonfinite_d(x(1)), isnonfinite_d(x(2)), isnonfinite_d(x(3)),"
+        " isnonfinite_d(x(4)), isnonfinite_d(x(5))\n"
+        "end program probe\n")
+    exe = tmp_path / 'probe'
+    subprocess.run([gfortran, '-O2', '-ffast-math', '-ffixed-line-length-none',
+                    '-o', str(exe), str(program), str(template)], check=True,
+                   capture_output=True, text=True)
+    # Values arrive at run time, so the compiler cannot fold them.
+    out = subprocess.run([str(exe)], input='NaN Inf -Inf 1.5 1.7976931348623157d308\n',
+                         capture_output=True, text=True, check=True)
+    assert out.stdout.split() == ['T', 'T', 'T', 'F', 'F']

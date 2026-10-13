@@ -238,6 +238,7 @@ def _generate_uel_local_pressure(weakform, mat_prefix, cfg):
     lines.append('      INTEGER :: ngp_out, stat, idx, ii_v, jj_v')
     lines.append('      INTEGER :: i, j, k, l, kk, iter_p, row, col')
     lines.append('      INTEGER :: conv_p')
+    lines.append('      LOGICAL :: isnonfinite_d')
     lines.append('')
     lines.append('      DO ii_v = 1, NNODE_E')
     lines.append('        DO i = 1, ndim')

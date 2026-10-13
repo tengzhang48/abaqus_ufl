@@ -20,6 +20,12 @@ def build_umat_module(umat_path, workdir, module_name):
     cmd = [sys.executable, '-m', 'numpy.f2py', '-c',
            os.path.join(WRAPPER_DIR, 'drive_umat.f90'), str(umat_path),
            '-m', module_name, 'only:', 'drive_umat', ':']
+    return _build(cmd, workdir, module_name, 'UMAT')
+
+
+def _build(cmd, workdir, module_name, label):
+    if np.lib.NumpyVersion(np.__version__) >= '1.26.0':
+        cmd = cmd + ['--backend', 'meson']
     result = subprocess.run(cmd, cwd=str(workdir), capture_output=True,
                             text=True, check=False)
     if result.returncode != 0:
@@ -27,11 +33,13 @@ def build_umat_module(umat_path, workdir, module_name):
         if any(sig in combined for sig in TOOLCHAIN_SIGNATURES):
             pytest.skip('f2py build backend unavailable; toolchain signature:\n'
                         + combined[-600:])
-        raise RuntimeError(f'f2py UMAT build failed:\n{combined}')
-    if str(workdir) not in sys.path:
-        sys.path.insert(0, str(workdir))
-    sys.modules.pop(module_name, None)
-    return __import__(module_name)
+        raise RuntimeError(f'f2py {label} build failed:\n{combined}')
+    sys.path.insert(0, str(workdir))
+    try:
+        sys.modules.pop(module_name, None)
+        return __import__(module_name)
+    finally:
+        sys.path.remove(str(workdir))
 
 
 def call_umat(module, dfgrd1, props, nstatv=1, time=(0.0, 0.0), ntens=6, dstran=None):
@@ -50,20 +58,7 @@ def build_uel_module(uel_path, workdir, module_name):
     wrapper = os.path.join(os.path.dirname(compiled_element.__file__), 'drive_uel.f90')
     cmd = [sys.executable, '-m', 'numpy.f2py', '-c', wrapper, str(uel_path),
            '-m', module_name, 'only:', 'drive_uel', ':']
-    if np.lib.NumpyVersion(np.__version__) >= '1.26.0':
-        cmd.extend(['--backend', 'meson'])
-    result = subprocess.run(cmd, cwd=str(workdir), capture_output=True,
-                            text=True, check=False)
-    if result.returncode != 0:
-        combined = f'{result.stdout}\n{result.stderr}'
-        if any(sig in combined for sig in TOOLCHAIN_SIGNATURES):
-            pytest.skip('f2py build backend unavailable; toolchain signature:\n'
-                        + combined[-600:])
-        raise RuntimeError(f'f2py UEL build failed:\n{combined}')
-    if str(workdir) not in sys.path:
-        sys.path.insert(0, str(workdir))
-    sys.modules.pop(module_name, None)
-    return __import__(module_name)
+    return _build(cmd, workdir, module_name, 'UEL')
 
 
 def call_uel(module, coords, u, props, du=None, lflags=(1, 0, 1, 0, 0, 0)):

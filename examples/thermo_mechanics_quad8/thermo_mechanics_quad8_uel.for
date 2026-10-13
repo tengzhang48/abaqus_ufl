@@ -57,6 +57,7 @@ C     --- Shape functions and mapping ---
       DOUBLE PRECISION :: detJ, Jinv(2,2), wdetJ
       DOUBLE PRECISION :: dt_safe
       DOUBLE PRECISION :: det33d
+      LOGICAL :: isnonfinite_d
       INTEGER :: ngp_out, stat
 
 C     --- Gauss point field values ---
@@ -395,14 +396,12 @@ C       dstorage_dT (sign=+1, value-value)
 
 C     --- Non-finite RHS or AMATRX: request a smaller increment
       DO i = 1, NDOFEL
-        IF (RHS(i,1) .NE. RHS(i,1) .OR.
-     &      DABS(RHS(i,1)) .GT. HUGE(1.0d0)) THEN
+        IF (isnonfinite_d(RHS(i,1))) THEN
           PNEWDT = 0.25d0
           RETURN
         END IF
         DO j = 1, NDOFEL
-          IF (AMATRX(i,j) .NE. AMATRX(i,j) .OR.
-     &        DABS(AMATRX(i,j)) .GT. HUGE(1.0d0)) THEN
+          IF (isnonfinite_d(AMATRX(i,j))) THEN
             PNEWDT = 0.25d0
             RETURN
           END IF
@@ -678,6 +677,23 @@ C----------------------------------------------------------------------
 
       RETURN
       END FUNCTION det33d
+
+C----------------------------------------------------------------------
+C     isnonfinite_d: true for NaN or +-Inf. Tests the IEEE exponent bits
+C     (all ones), so it is not folded away by fast floating-point models
+C     that assume no NaNs, as x .NE. x and IEEE_IS_FINITE can be.
+C----------------------------------------------------------------------
+      FUNCTION isnonfinite_d(x) RESULT(bad)
+      IMPLICIT NONE
+      DOUBLE PRECISION, INTENT(IN) :: x
+      LOGICAL :: bad
+      INTEGER(KIND=8) :: bits
+
+      bits = TRANSFER(x, bits)
+      bad = IAND(ISHFT(bits, -52), 2047_8) .EQ. 2047_8
+
+      RETURN
+      END FUNCTION isnonfinite_d
 
 C----------------------------------------------------------------------
 C     inv33z: Inverse of 3x3 complex matrix
