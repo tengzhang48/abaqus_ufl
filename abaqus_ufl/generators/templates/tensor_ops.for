@@ -42,6 +42,23 @@ C----------------------------------------------------------------------
       END FUNCTION det33d
 
 C----------------------------------------------------------------------
+C     isnonfinite_d: true for NaN or +-Inf. Tests the IEEE exponent bits
+C     (all ones), so it is not folded away by fast floating-point models
+C     that assume no NaNs, as x .NE. x and IEEE_IS_FINITE can be.
+C----------------------------------------------------------------------
+      FUNCTION isnonfinite_d(x) RESULT(bad)
+      IMPLICIT NONE
+      DOUBLE PRECISION, INTENT(IN) :: x
+      LOGICAL :: bad
+      INTEGER(KIND=8) :: bits
+
+      bits = TRANSFER(x, bits)
+      bad = IAND(ISHFT(bits, -52), 2047_8) .EQ. 2047_8
+
+      RETURN
+      END FUNCTION isnonfinite_d
+
+C----------------------------------------------------------------------
 C     inv33z: Inverse of 3x3 complex matrix
 C----------------------------------------------------------------------
       SUBROUTINE inv33z(A, Ainv)

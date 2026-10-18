@@ -50,6 +50,8 @@ import os
 import numpy as np
 from collections import OrderedDict
 
+from ..core.verify import verify_before_generation
+
 try:
     from ..core.verify import VerificationError
 except ImportError:
@@ -222,6 +224,13 @@ class FortranTranslator(ast.NodeVisitor):
         self._var_kinds = dict(initial_var_kinds or {'F': 'tensor'})
         self._integer_vars = set()  # for-loop indices; emitted as Fortran INTEGER
         self._real_vars = set()    # scalar vars assigned from .real, safe in IF comparisons
+        # Dummies declared DOUBLE PRECISION (dt, time, X, predefined fields).
+        self._real_names = set(getattr(material, '_param_args', ()) or ())
+        # DOUBLE COMPLEX dummies the complex step never perturbs: history and
+        # state at the start of the increment.
+        self._unperturbed_names = (
+            set(getattr(material, '_history_args', ()) or ())
+            | set(getattr(material, '_state_arg_names', ()) or ()))
         self._state_return_map = None  # set by tuple return handler
         self._state_var_names = state_var_names or []
         self._helper_sources = (
@@ -960,6 +969,92 @@ class FortranTranslator(ast.NodeVisitor):
             raise NotImplementedError(
                 f"Unsupported statement: {ast.dump(node)}")
 
+    def _is_real_safe(self, n):
+        """True if the expression is real in the generated Fortran.
+
+        All other material variables are DOUBLE COMPLEX in the complex-step
+        tangent engine, so comparisons and abs() on them are unsafe.
+        """
+        if isinstance(n, ast.Constant):
+            return True
+        if isinstance(n, ast.Name):
+            # for-loop indices are emitted as Fortran INTEGER,
+            # so direct comparison is type-promoted and safe.
+            if n.id in self._integer_vars:
+                return True
+            # Variables assigned from x.real are DBLE(x) and real-safe.
+            if n.id in self._real_vars:
+                return True
+            # dt, time, X and predefined fields are DOUBLE PRECISION dummies.
+            if n.id in self._real_names:
+                return True
+        if isinstance(n, ast.Subscript):
+            return self._is_real_safe(n.value)
+        if isinstance(n, ast.Attribute):
+            # x.real is real-safe.
+            if n.attr == 'real':
+                return True
+            # self.<prop> is a material property; the generator
+            # emits it as PROPS(K) which is REAL*8 in Fortran,
+            # never a CS-perturbed complex variable.
+            if isinstance(n.value, ast.Name) and n.value.id == 'self':
+                return True
+        if isinstance(n, ast.Call):
+            fn = self._get_func_name(n)
+            if fn in ('abs', 'float', 'int'):
+                return True
+        if isinstance(n, ast.BinOp):
+            return self._is_real_safe(n.left) and self._is_real_safe(n.right)
+        if isinstance(n, ast.UnaryOp):
+            return self._is_real_safe(n.operand)
+        return False
+
+    def _is_unperturbed(self, n):
+        """True if the complex step never perturbs the expression.
+
+        Such values may be DOUBLE COMPLEX in Fortran (so comparisons still
+        need .real), but abs() of them drops no perturbation.
+        """
+        if self._is_real_safe(n):
+            return True
+        if isinstance(n, ast.Name):
+            return n.id in self._unperturbed_names
+        if isinstance(n, ast.Subscript):
+            return self._is_unperturbed(n.value)
+        if isinstance(n, ast.BinOp):
+            return self._is_unperturbed(n.left) and self._is_unperturbed(n.right)
+        if isinstance(n, ast.UnaryOp):
+            return self._is_unperturbed(n.operand)
+        return False
+
+    def _is_integer_expr(self, n):
+        """True if the expression is a Fortran INTEGER (loop indices, int())."""
+        if isinstance(n, ast.Name):
+            return n.id in self._integer_vars
+        if isinstance(n, ast.Call):
+            return self._get_func_name(n) == 'int'
+        if isinstance(n, ast.BinOp) and isinstance(n.op, (ast.Add, ast.Sub, ast.Mult, ast.Pow)):
+            return self._is_integer_expr(n.left) and self._is_integer_expr(n.right)
+        if isinstance(n, ast.UnaryOp):
+            return self._is_integer_expr(n.operand)
+        return False
+
+    @staticmethod
+    def _integer_exponent(n):
+        """The exponent as an int if it is a whole-number constant, else None."""
+        sign = 1
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)):
+            sign = -1 if isinstance(n.op, ast.USub) else 1
+            n = n.operand
+        if not isinstance(n, ast.Constant) or isinstance(n.value, bool):
+            return None
+        v = n.value
+        if isinstance(v, float) and not v.is_integer():
+            return None
+        if not isinstance(v, (int, float)) or abs(v) > 1000:
+            return None
+        return sign * int(v)
+
     def _visit_expr(self, node):
         """Returns (fortran_expr_str, kind) where kind is 'scalar' or 'tensor'."""
 
@@ -1094,6 +1189,26 @@ class FortranTranslator(ast.NodeVisitor):
                 result_kind = 'vector'
             else:
                 result_kind = 'scalar'
+
+            # Python '/' is true division; between two Fortran INTEGERs it
+            # would truncate.
+            if (isinstance(node.op, ast.Div) and self._is_integer_expr(node.left)
+                    and self._is_integer_expr(node.right)):
+                return f'(DBLE({left}) / DBLE({right}))', result_kind
+
+            # A whole-number exponent becomes a Fortran integer power,
+            # evaluated by multiplication. A complex exponent would call
+            # pow, i.e. exp(n*log(z)), whose behaviour at z = 0 depends on
+            # the compiler's runtime library.
+            if isinstance(node.op, ast.Pow):
+                n = self._integer_exponent(node.right)
+                if n is not None:
+                    if n >= 0:
+                        return f'({left} ** {n})', result_kind
+                    # An INTEGER base with a negative exponent would be
+                    # integer division in Fortran (k**(-1) = 0 for k > 1).
+                    base = f'DBLE({left})' if self._is_integer_expr(node.left) else left
+                    return f'({base} ** ({n}))', result_kind
 
             return f'({left} {op_str} {right})', result_kind
 
@@ -1277,9 +1392,17 @@ class FortranTranslator(ast.NodeVisitor):
                     f'{args[3]}, {args[4]}, {args[5]}, {tmp})')
                 return tmp, 'tensor'
             elif func_name == 'abs':
-                # abs(x) -> ABS(x)
-                # CS safety: should only be applied to real values
-                # (e.g., abs(f.real), not abs(complex_var))
+                # ABS of a DOUBLE COMPLEX value is its modulus: the
+                # complex-step perturbation is dropped and the tangent is
+                # silently wrong. Only real-safe arguments are allowed.
+                if not self._is_unperturbed(node.args[0]):
+                    raise NotImplementedError(
+                        "abs() of a possibly complex value is not "
+                        "complex-step safe: Fortran ABS returns the modulus "
+                        "and drops the perturbation, so the tangent would be "
+                        "wrong. Use sqrt(x*x) for a complex-step-safe "
+                        "magnitude, or abs(x.real) where no derivative is "
+                        "needed.")
                 return f'ABS({args[0]})', 'scalar'
             elif func_name == 'sqrtm':
                 tmp = self._new_temp('SQRTM')
@@ -1348,37 +1471,7 @@ class FortranTranslator(ast.NodeVisitor):
             # invalid in Fortran. The user must explicitly extract the
             # real part (e.g. x.real > 0) which the generator maps to
             # DBLE(x) .GT. 0.0d0.
-            def _is_real_safe(n):
-                if isinstance(n, ast.Constant):
-                    return True
-                if isinstance(n, ast.Name):
-                    # for-loop indices are emitted as Fortran INTEGER,
-                    # so direct comparison is type-promoted and safe.
-                    if n.id in self._integer_vars:
-                        return True
-                    # Variables assigned from x.real are DBLE(x) and real-safe.
-                    if n.id in self._real_vars:
-                        return True
-                if isinstance(n, ast.Attribute):
-                    # x.real is real-safe.
-                    if n.attr == 'real':
-                        return True
-                    # self.<prop> is a material property; the generator
-                    # emits it as PROPS(K) which is REAL*8 in Fortran,
-                    # never a CS-perturbed complex variable.
-                    if isinstance(n.value, ast.Name) and n.value.id == 'self':
-                        return True
-                if isinstance(n, ast.Call):
-                    fn = self._get_func_name(n)
-                    if fn in ('abs', 'float', 'int'):
-                        return True
-                if isinstance(n, ast.BinOp):
-                    return _is_real_safe(n.left) and _is_real_safe(n.right)
-                if isinstance(n, ast.UnaryOp):
-                    return _is_real_safe(n.operand)
-                return False
-
-            if not _is_real_safe(node.left):
+            if not self._is_real_safe(node.left):
                 var_name = getattr(node.left, 'id', ast.dump(node.left))
                 raise NotImplementedError(
                     f"Comparison on potentially-complex expression "
@@ -2471,6 +2564,35 @@ C     validation/deck contract, not guaranteed by this kinematic conversion.
 # UMAT wrapper generation
 # ===================================================================
 
+def _nonfinite_cutback_lines(vector, matrix, size):
+    """Fortran lines that request a cutback when an output is NaN or Inf.
+
+    ``vector`` and ``matrix`` are element references written with the
+    caller's INTEGER loop variables i and j, e.g. 'STRESS(i)' and
+    'DDSDDE(i,j)'. The caller declares LOGICAL :: isnonfinite_d, the
+    template function that tests the IEEE exponent bits; unlike x .NE. x, it
+    is not folded away by fast floating-point models (e.g. -ffast-math).
+    """
+    name = vector.split('(')[0]
+    matrix_name = matrix.split('(')[0]
+    return [
+        f'C     --- Non-finite {name} or {matrix_name}: request a smaller increment',
+        f'      DO i = 1, {size}',
+        f'        IF (isnonfinite_d({vector})) THEN',
+        '          PNEWDT = 0.25d0',
+        '          RETURN',
+        '        END IF',
+        f'        DO j = 1, {size}',
+        f'          IF (isnonfinite_d({matrix})) THEN',
+        '            PNEWDT = 0.25d0',
+        '            RETURN',
+        '          END IF',
+        '        END DO',
+        '      END DO',
+        '',
+    ]
+
+
 def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
     """
     Generate the standard Abaqus UMAT interface subroutine.
@@ -2568,6 +2690,8 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
         '      DOUBLE PRECISION :: dPdF(3,3,3,3)')
     lines.append(
         '      DOUBLE COMPLEX :: Fz(3,3), Pz(3,3)')
+    lines.append('      DOUBLE PRECISION :: det33d')
+    lines.append('      LOGICAL :: isnonfinite_d')
 
     if has_state:
         for name, entry in sv_info.items():
@@ -2611,6 +2735,12 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
     lines.append('          F(i,j) = DFGRD1(i,j)')
     lines.append('        END DO')
     lines.append('      END DO')
+    lines.append('')
+    lines.append('C     --- Inverted or degenerate element: request a smaller increment')
+    lines.append('      IF (det33d(F) .LE. 0.0d0) THEN')
+    lines.append('        PNEWDT = 0.25d0')
+    lines.append('        RETURN')
+    lines.append('      END IF')
     lines.append('')
 
     if has_state:
@@ -2706,6 +2836,7 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
         '      CALL pk1_to_cauchy_jaumann(F, P_real, dPdF, '
         'STRESS, DDSDDE)')
     lines.append('')
+    lines.extend(_nonfinite_cutback_lines('STRESS(i)', 'DDSDDE(i,j)', 'NTENS'))
     lines.append('      RETURN')
     lines.append('      END SUBROUTINE UMAT')
 
@@ -2818,6 +2949,7 @@ def _generate_small_strain_umat_wrapper(
             lines.append(f'      DOUBLE COMPLEX :: {name}_new_z{dims}')
         lines.append('      DOUBLE PRECISION :: dt_safe')
         lines.append('      DOUBLE PRECISION :: svinit_max')
+    lines.append('      LOGICAL :: isnonfinite_d')
     lines.append('      INTEGER :: i, j, col')
     lines.append('')
 
@@ -2963,6 +3095,9 @@ def _generate_small_strain_umat_wrapper(
         '        DDSDDE(6,col) = -AIMAG(sigma_new_z(2,3)) / CS_H',
         '      END DO',
         '',
+    ])
+    lines.extend(_nonfinite_cutback_lines('STRESS(i)', 'DDSDDE(i,j)', 'NTENS'))
+    lines.extend([
         '      RETURN',
         '      END SUBROUTINE UMAT',
     ])
@@ -2974,7 +3109,7 @@ def _generate_small_strain_umat_wrapper(
 # ===================================================================
 
 def generate_umat(material, output_path, mat_prefix=None,
-                  matrix_backend='iterative'):
+                  matrix_backend='iterative', verify=True):
     """
     Generate a complete .for file for Abaqus UMAT.
 
@@ -2990,7 +3125,13 @@ def generate_umat(material, output_path, mat_prefix=None,
                         Available for backward compatibility/debugging; require
                         compiled spectrum-specific derivative gates for the
                         constitutive states in scope.
+        verify: run ``material.verify()`` before generating. True (default)
+                uses the default state; a dict of ``verify()`` arguments, e.g.
+                ``dict(state=..., tol=...)``, uses a model-specific state;
+                False skips it. ``VerificationError`` stops generation when
+                the complex-step and finite-difference tangents disagree.
     """
+    verify_before_generation(material, verify)
     if matrix_backend not in ('eig', 'iterative'):
         raise ValueError(
             "matrix_backend must be 'eig' or 'iterative'")
@@ -3130,7 +3271,7 @@ def generate_umat(material, output_path, mat_prefix=None,
 
 def generate_small_strain_umat(material, output_path, mat_prefix=None,
                                update_method='stress_update',
-                               extra_fortran_files=None):
+                               extra_fortran_files=None, verify=True):
     """Generate a small-strain Abaqus UMAT from a stress update method.
 
     By default the generator translates ``stress_update``.  Advanced models can
@@ -3143,7 +3284,13 @@ def generate_small_strain_umat(material, output_path, mat_prefix=None,
         Additional Fortran source files to append verbatim to the generated
         ``.for`` output.  This is useful for hand-written helper subroutines
         referenced via ``@fortran_helper``.
+    verify : bool or dict
+        Run ``material.verify()`` before generating. True (default) uses the
+        default state; a dict of ``verify()`` arguments, e.g.
+        ``dict(state=..., tol=...)``, uses a model-specific state; False skips
+        it. ``VerificationError`` stops generation on a tangent mismatch.
     """
+    verify_before_generation(material, verify)
     predef_names = _predef_var_names(material)
     if predef_names:
         param_args = set(PARAM_ARGS) | set(predef_names)

@@ -12,6 +12,7 @@ import uuid
 import numpy as np
 
 from abaqus_ufl.core.fields import VectorField
+from abaqus_ufl.core.verify import verify_before_generation
 from abaqus_ufl.generators.uel_gen import generate_uel
 
 
@@ -24,22 +25,27 @@ def _signature(weakform):
             tuple((name, type(field), field.degree) for name, field in weakform.fields.items()))
 
 
-def build_compiled_uel(weakform, workdir=None):
+def build_compiled_uel(weakform, workdir=None, verify=True):
     """Generate a standard Quad4 UEL and return its compiled f2py module.
 
     The wrapper ships in the wheel. No tests directory or external solver is
     needed. Without ``workdir``, the module owns a temporary build directory;
     a supplied directory retains the source and compiler log for inspection.
     Each build has a unique module name to prevent stale extension reuse.
+    ``verify`` runs ``weakform.verify()`` before anything is built: True
+    (default state), a dict of ``verify()`` arguments for a model-specific
+    state, or False.
     """
     signature = _signature(weakform)
+    verify_before_generation(weakform, verify)
     if shutil.which("gfortran") is None:
         raise RuntimeError("gfortran is required to build a compiled UEL")
     temporary = tempfile.TemporaryDirectory(prefix="abaqus_ufl_fe_") if workdir is None else None
     build = Path(temporary.name if temporary else workdir).resolve()
     build.mkdir(parents=True, exist_ok=True)
     source = build / "element.for"
-    generate_uel(weakform, str(source), element="Quad4", formulation="standard")
+    generate_uel(weakform, str(source), element="Quad4", formulation="standard",
+                 verify=False)
     wrapper = Path(__file__).with_name("drive_uel.f90")
     module_name = "_abaqus_ufl_fe_" + uuid.uuid4().hex
     command = [sys.executable, "-m", "numpy.f2py", "-c", str(wrapper), str(source),

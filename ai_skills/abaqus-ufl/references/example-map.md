@@ -21,7 +21,7 @@ this map.
 | `examples/_template` | Complete minimal Python-to-compiled-UMAT pipeline | Working elastic demonstration; replace its physics and model-specific checks. |
 | `HOWTO_ADD_AN_EXAMPLE.md` | Pipeline responsibilities and release gates | Canonical public contract; filenames remain example-owned. |
 | `tools/` | Simple Abaqus run/extract/compare support | One-element/simple output only; difficult output bridges remain example-owned. |
-| `tools/run_livebench.py` | Run the released reference, assembled, and compiled bundles | Seven cases including a small serial FE mesh gate; no Abaqus required. |
+| `tools/run_livebench.py` | Run the released reference, assembled, and compiled bundles | Eleven cases: seven material, element and serial FE checks, and four boundary-value simulations; no Abaqus required. |
 | `abaqus_ufl/fe/README.md` | Standard Quad4 mesh-level f2py execution | Optional serial SciPy driver; uniform degree-one nodal fields, no material/local state variables. |
 
 ## Released scientific examples

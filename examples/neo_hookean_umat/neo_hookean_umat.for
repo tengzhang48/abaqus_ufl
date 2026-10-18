@@ -49,6 +49,8 @@ C     --- Local variables ---
       DOUBLE PRECISION :: F(3,3), P_real(3,3)
       DOUBLE PRECISION :: dPdF(3,3,3,3)
       DOUBLE COMPLEX :: Fz(3,3), Pz(3,3)
+      DOUBLE PRECISION :: det33d
+      LOGICAL :: isnonfinite_d
       INTEGER :: i, j
 
 C     --- Initialize optional Abaqus outputs ---
@@ -70,6 +72,12 @@ C     --- Get deformation gradient ---
         END DO
       END DO
 
+C     --- Inverted or degenerate element: request a smaller increment
+      IF (det33d(F) .LE. 0.0d0) THEN
+        PNEWDT = 0.25d0
+        RETURN
+      END IF
+
 C     --- Compute PK1 stress (real evaluation) ---
       CALL real2complex33(F, Fz)
       CALL neohookean_stress_PK1(Fz, PROPS, Pz)
@@ -84,6 +92,20 @@ C     --- Compute dP/dF via complex step ---
 
 C     --- Convert PK1 -> Cauchy + Jaumann tangent (Voigt) ---
       CALL pk1_to_cauchy_jaumann(F, P_real, dPdF, STRESS, DDSDDE)
+
+C     --- Non-finite STRESS or DDSDDE: request a smaller increment
+      DO i = 1, NTENS
+        IF (isnonfinite_d(STRESS(i))) THEN
+          PNEWDT = 0.25d0
+          RETURN
+        END IF
+        DO j = 1, NTENS
+          IF (isnonfinite_d(DDSDDE(i,j))) THEN
+            PNEWDT = 0.25d0
+            RETURN
+          END IF
+        END DO
+      END DO
 
       RETURN
       END SUBROUTINE UMAT
@@ -317,6 +339,23 @@ C----------------------------------------------------------------------
 
       RETURN
       END FUNCTION det33d
+
+C----------------------------------------------------------------------
+C     isnonfinite_d: true for NaN or +-Inf. Tests the IEEE exponent bits
+C     (all ones), so it is not folded away by fast floating-point models
+C     that assume no NaNs, as x .NE. x and IEEE_IS_FINITE can be.
+C----------------------------------------------------------------------
+      FUNCTION isnonfinite_d(x) RESULT(bad)
+      IMPLICIT NONE
+      DOUBLE PRECISION, INTENT(IN) :: x
+      LOGICAL :: bad
+      INTEGER(KIND=8) :: bits
+
+      bits = TRANSFER(x, bits)
+      bad = IAND(ISHFT(bits, -52), 2047_8) .EQ. 2047_8
+
+      RETURN
+      END FUNCTION isnonfinite_d
 
 C----------------------------------------------------------------------
 C     inv33z: Inverse of 3x3 complex matrix

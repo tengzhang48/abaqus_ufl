@@ -47,7 +47,9 @@ The existing example pipeline is:
 1. Document theory, scope, conventions, fields/DOFs, and state layout.
 2. Add Python reference checks and an independent quantitative oracle.
 3. Run `model.verify()` or `problem.verify()` for implemented-method tangent
-   consistency, plus regime checks for every claimed branch.
+   consistency, plus regime checks for every claimed branch. The generators
+   also run `verify()` at the default state and stop on a mismatch; a
+   model-specific or multi-state check remains part of this step.
 4. For a UEL, check assembled `RHS`/`AMATRX`, DOF/state layout, and an
    appropriate patch or invariant; `problem.verify()` alone is not this gate.
 5. Generate deterministically and compile every generated Fortran source.
@@ -129,7 +131,8 @@ return G * (F - FinvT) + K * log(J) * FinvT
 
 This is clearer than a one-line return such as
 `G*(F-inv(F).T) + K*log(det(F))*inv(F).T`. The direct form is now regression-
-tested, but it previously exposed a generator bug that emitted
+tested (`tests/test_translator_guards.py`, `tests/test_runtime_guards.py`), but
+it previously exposed a generator bug that emitted
 `det33z(F(ii,jj))`, which compiled and failed only at runtime with NaNs. After
 generating finite-strain Fortran, grep for impossible component-indexed helper
 calls before blaming physics:

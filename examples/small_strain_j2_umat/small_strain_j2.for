@@ -56,6 +56,7 @@ C======================================================================
       DOUBLE COMPLEX :: ep_new_z
       DOUBLE PRECISION :: dt_safe
       DOUBLE PRECISION :: svinit_max
+      LOGICAL :: isnonfinite_d
       INTEGER :: i, j, col
 
 C     --- Initialize optional Abaqus outputs ---
@@ -163,6 +164,20 @@ C     --- Complex-step DDSDDE wrt Abaqus DSTRAN ---
         DDSDDE(4,col) = -AIMAG(sigma_new_z(1,2)) / CS_H
         DDSDDE(5,col) = -AIMAG(sigma_new_z(1,3)) / CS_H
         DDSDDE(6,col) = -AIMAG(sigma_new_z(2,3)) / CS_H
+      END DO
+
+C     --- Non-finite STRESS or DDSDDE: request a smaller increment
+      DO i = 1, NTENS
+        IF (isnonfinite_d(STRESS(i))) THEN
+          PNEWDT = 0.25d0
+          RETURN
+        END IF
+        DO j = 1, NTENS
+          IF (isnonfinite_d(DDSDDE(i,j))) THEN
+            PNEWDT = 0.25d0
+            RETURN
+          END IF
+        END DO
       END DO
 
       RETURN
@@ -340,6 +355,23 @@ C----------------------------------------------------------------------
 
       RETURN
       END FUNCTION det33d
+
+C----------------------------------------------------------------------
+C     isnonfinite_d: true for NaN or +-Inf. Tests the IEEE exponent bits
+C     (all ones), so it is not folded away by fast floating-point models
+C     that assume no NaNs, as x .NE. x and IEEE_IS_FINITE can be.
+C----------------------------------------------------------------------
+      FUNCTION isnonfinite_d(x) RESULT(bad)
+      IMPLICIT NONE
+      DOUBLE PRECISION, INTENT(IN) :: x
+      LOGICAL :: bad
+      INTEGER(KIND=8) :: bits
+
+      bits = TRANSFER(x, bits)
+      bad = IAND(ISHFT(bits, -52), 2047_8) .EQ. 2047_8
+
+      RETURN
+      END FUNCTION isnonfinite_d
 
 C----------------------------------------------------------------------
 C     inv33z: Inverse of 3x3 complex matrix

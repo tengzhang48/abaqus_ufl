@@ -342,3 +342,30 @@ def test_frozen_pressure_negative_control(tmp_path):
     assert rel > 1.0e-3, (
         'frozen-pressure control PASSED the comparison (rel err %.3e); '
         'the main test would not discriminate' % rel)
+
+
+class SingularStressGel(PressureGelMaterial):
+    """0/0 stress in the undeformed state; the pressure equation stays finite."""
+
+    def stress_PK1(self, F, p, mu):
+        return self.G * (F - inv(F).T) / (det(F) - 1.0) + p * inv(F).T
+
+
+class SingularStressGelQuad4(PressureGelLocalPressureQuad4):
+    material = SingularStressGel
+
+
+def test_nonfinite_condensed_output_cuts_back_before_the_state_commit(tmp_path):
+    """The local pressure solve converges, but RHS/AMATRX are NaN: the element
+    must request a cutback and leave SVARS(1) as it came in."""
+    case = CASES['quad4']
+    path = tmp_path / 'singular_gel.for'
+    # Deliberately singular at F = I, so verification is skipped.
+    au.generate_uel(SingularStressGelQuad4(), str(path), element='Quad4',
+                    formulation='local_pressure', verify=False)
+    module = _build(path, 'localp_singular_stress', tmp_path)
+    U, _ = _state(case)
+    U[[0, 1, 3, 4, 6, 7, 9, 10]] = 0.0          # undeformed: F = I everywhere
+    _, _, p_out, pnewdt = _call(module, case, U, np.zeros_like(U), svars_in=0.123)
+    assert pnewdt < 1.0
+    assert p_out == 0.123

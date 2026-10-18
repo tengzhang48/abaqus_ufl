@@ -15,7 +15,17 @@ Use it when debugging generated UMAT/UEL behavior.
 - Use `PNEWDT` for inverted elements, large increments, or detected invalid
   states. Set `PNEWDT` to a fraction such as `0.25` to request a cutback and
   to `1.0` when the state is acceptable. Larger growth requests are
-  solver-dependent and should be used deliberately.
+  solver-dependent and should be used deliberately. The generators already
+  emit `PNEWDT = 0.25` for `det F <= 0` (finite-strain UMATs and UELs) and for
+  NaN or Inf in `STRESS`/`DDSDDE` or `RHS`/`AMATRX` (all generated UMATs and
+  UELs); `tests/test_runtime_guards.py` calls each guard. The NaN/Inf test
+  (`isnonfinite_d` in `tensor_ops.for`) checks the IEEE exponent bits, because
+  a fast floating-point model can fold `x .NE. x` to false: gfortran
+  `-ffast-math` does (tested in the same file), and Intel compilers default to
+  a fast model.
+- A finite-strain UMAT computes stress from `DFGRD1`, so run its steps with
+  `NLGEOM=YES`. A zero or inverted `DFGRD1` (det F <= 0) requests a cutback
+  instead of returning NaN stress.
 - Derive or measure tangent symmetry; do not infer it from the number of
   fields. Use `UNSYMM` when the assembled UEL or UMAT tangent is genuinely
   nonsymmetric. If it is omitted for a nonsymmetric operator, convergence can
@@ -80,14 +90,16 @@ Use it when debugging generated UMAT/UEL behavior.
 
 ## Material / WeakForm Authoring
 
-- Equation and material method names are **matched, not validated**. Only the
-  canonical names in `core/defs.py:METHOD_INFO` and
-  `core/weakform.py:EQUATION_INFO` are detected (`stress_PK1`, `pressure_resid`,
-  `solvent_storage`, `solvent_flux`, `momentum_equation`, `pressure_equation`,
-  `transport_equation`, ...). A method with a different name (e.g. a paper-spec
-  sketch's `pp_potential`, `constraint_resid`) is **silently ignored** — no
-  tangent block, no Fortran. When porting a spec, reconcile method names against
-  `defs.py`/`weakform.py` first.
+- Material method names are **matched, not validated**. Only the canonical
+  names in `core/defs.py:METHOD_INFO` and `core/weakform.py:EQUATION_INFO` are
+  detected (`stress_PK1`, `pressure_resid`, `solvent_storage`, `solvent_flux`,
+  `momentum_equation`, `pressure_equation`, `transport_equation`, ...). A
+  declared equation whose material defines none of its recognized storage/flux
+  methods now raises `TypeError` (`weakform.py`, tested in
+  `tests/test_equation_method_guard.py`). A material method with any other
+  name (e.g. a paper-spec sketch's `pp_potential`, `constraint_resid`) is still
+  **silently ignored** — no tangent block, no Fortran. When porting a spec,
+  reconcile method names against `defs.py`/`weakform.py` first.
 - Test-function-to-field mapping is by convention (`v->u`, `q->p`, `w->mu`;
   `weakform.py:TEST_TO_FIELD`). Map physics onto these slots: the value-assembly
   `pressure_equation` is the natural home for an algebraic constraint; the mixed
@@ -147,12 +159,16 @@ Use it when debugging generated UMAT/UEL behavior.
   (`(exp(2x)-1)/(exp(2x)+1)`). An unsupported name raises "Unsupported function:
   <name>" at generate time (verify() is unaffected).
 - Plane strain still uses 3x3 tensors with `F33 = 1`.
-- **`z**2` (integer power) codegens to complex `z ** DCMPLX(2.0)` = `exp(2*log z)`,
-  which is **NaN at `z = 0`** (`log 0 = -inf`). For a square of any quantity that
-  can be zero — e.g. `(X[0] - R0)**2` where a Gauss point may sit at `R0` — write
-  the explicit product `dx*dx`, not `dx**2`. `verify()` and a direct probe at a
-  generic state will NOT catch this; only an input where the base is exactly 0
-  (a centroid Gauss point, a symmetric coordinate) trips it.
+- **Powers.** A whole-number exponent (`z**2`, `z**2.0`, `z**-1`) is emitted as a
+  Fortran integer power, evaluated by multiplication (tested in
+  `tests/test_translator_guards.py`). An INTEGER base (a loop index) with a
+  negative exponent is converted with `DBLE` first, and `i / j` between two
+  loop indices is emitted as real division, matching Python. A fractional exponent still becomes the
+  complex power `z ** DCMPLX(a)` = `exp(a*log z)`, whose value at `z = 0` depends
+  on the compiler's runtime library (gfortran 11 returns 0; NaN has been reported
+  elsewhere). For a fractional power of a quantity that can be exactly zero, such
+  as a Gauss point at a symmetric coordinate, guard it with a branch on the real
+  part. `verify()` at a generic state will not catch this.
 - `X` (Gauss-point reference position, a vector) and `time` (total time) are
   injectable UEL params (`PARAM_ARGS`): add them to a material/equation method
   signature and the generator threads `X_gp = sum_a N_a X_a` and `TIME(2)` in.
@@ -356,9 +372,11 @@ FinvT = inv(F).T
 return G * (F - FinvT) + K * log(J) * FinvT
 ```
 
-Regression tests now cover the direct-return `det(F)` case, but after
-generation it is still worth grepping the `.for` file for impossible patterns
-such as `det33z(F(ii,jj))`. If any matrix helper receives a component-indexed
+Regression tests now cover the direct-return `det(F)` case
+(`tests/test_translator_guards.py` and `tests/test_runtime_guards.py`), and
+the same test scans every committed `.for` file for component-indexed
+`det33z` arguments. For a new model it is still worth grepping its `.for`
+file for impossible patterns such as `det33z(F(ii,jj))`. If any matrix helper receives a component-indexed
 tensor argument, treat that as a code-generation shape bug, not a mechanics or
 solver-convergence issue.
 
