@@ -99,3 +99,18 @@ values are illustrative in any consistent unit system; the checks in
 this bundle define the tested parameter and state range. Mass,
 damping, and initial-acceleration requests (`LFLAGS(3)=3,4,6`) return
 zeroed arrays, and nonpositive `det F` states request a cutback.
+
+## Parallel host check
+
+With a compatible PETSc/MPI environment, run from the repository root:
+
+```bash
+mpiexec -n 2 python examples/scalar_diffusion_uel/check_parallel.py
+```
+
+This compiles once in a shared `.parallel-build/` folder and checks both
+distributed PETSc assembly/solves and replicated MPI element batching against
+serial. Two increments exercise accepted nodal history. An affine mechanics
+patch and the independent Q1 backward-Euler heat eigenmode also check the
+result. See the [runtime API](../../abaqus_ufl/fe/README.md#petsc-and-mpi) for
+memory, state-commit and optional-dependency contracts.

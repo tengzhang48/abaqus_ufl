@@ -22,11 +22,13 @@ Section 4: Shipped templates (generic utilities)
 
 ### Sort tangent blocks deterministically
 
-Python dict iteration is insertion-order, but tangent blocks built from set
-operations or dict merges can vary in order between runs. Wrap them in
-`OrderedDict(sorted(...))` so the generated tangent engine has the same
-argument order every time. Non-deterministic output defeats diffing and
-caching.
+Python dict iteration preserves insertion order, but intermediate set
+operations can still reorder generated tangent arguments. Compute one
+canonical ordering and reuse it at declarations and calls. Preserve declared
+state/history layout rather than sorting one side independently. The
+[history-order lesson](coupled-multiphysics.md#match-callercallee-ordering-for-multi-scalar-history-arguments)
+owns that specific failure. Deterministic output makes diffs, caching and
+regeneration checks meaningful.
 
 ### Detect helper methods via the AST
 
@@ -47,13 +49,9 @@ Compute node count from the element-type parameter, not from the weak form.
 
 ### Single-letter Fortran names are landmines
 
-Fortran is case-insensitive: `J` (a determinant) and `j` (a loop index) are the
-same symbol, and a loop variable `a`/`b` collides with a UEL dummy argument
-`A(NDOFEL)`. Python-level tests pass; the compiler rejects it. Never emit
-single uppercase letters (I, J, K, L, M, N, A, U, V) as generated variable
-names — use descriptive names (`Jdet`, `detJ`, `JdetInv`). Add a compile smoke
-test that runs gfortran on generated `.for` files; structural Python tests
-cannot catch compiler-level name clashes.
+The canonical [Fortran namespace lesson](abaqus-and-fortran.md#fortran-is-case-insensitive)
+explains this failure. Use descriptive, noncolliding names and compile generated
+sources; Python-level spelling differences do not distinguish Fortran symbols.
 
 ### Fortran array slices are inclusive — off-by-one is silent
 
@@ -140,9 +138,10 @@ It can pass while Newton still fails, for three reasons:
    never advances time or commits state variables, so state read/write and
    reset bugs only surface during a real Newton solve.
 
-Always follow a passing stiffness check with an actual Newton solve — that is
-the real test. When the check passes but Newton fails, the bug is in the solver
-infrastructure (symmetry, BCs, time stepping), not in the element tangent.
+A representative Newton solve adds evidence beyond a one-state stiffness
+check. A later failure can still involve a tangent at an untested state, the
+constitutive law, or solver/setup choices. Probe the actual failing state;
+the earlier pass does not uniquely locate the cause.
 
 ### Add one feature at a time — test simpler before complex
 
@@ -298,23 +297,8 @@ initial state through the generated state layout before validating physics.
 
 ### Independent review is most valuable attacking the validation envelope
 
-Multi-agent review pays off less as extra code and more as adversarial review
-of the validation envelope. The high-value question is not "are the formulas
-right?" but "which branches have the acceptance tests never exercised?" — that
-is what exposes defects in regimes the green tests miss. A workable division of
-labour:
-
-- one agent implements against the current scope;
-- a second agent reviews the validation envelope and asks which branches are
-  unreached;
-- the implementing agent fixes only confirmed defects and adds adversarial
-  regressions;
-- a review agent re-checks whether any remaining mismatch is a model error, a
-  codegen/reference parity gap, a calibration issue, or a solver issue.
-
-The reviewer should design counterexamples, not just read formulas:
-non-diagonal tensors, nonzero seeded state, split intervals, non-homogeneous
-gradients, near-singular limits, and loading paths that activate the claimed
-physics. The payoff comes when the models disagree for specific, testable
-reasons — and the honest output is a sharper status ("these defects fixed; full
-parity still open"), not a premature all-clear.
+The canonical [agent workflow lesson](agent-workflow.md#default-to-one-agent-and-an-independent-oracle)
+owns this advice. Default to one agent and an independently derived oracle;
+review branch coverage and counterexamples instead of treating a larger team
+as evidence of correctness. The former team-as-default prescription is
+superseded by [pivot P3](../pivots.md#p3-one-agent-with-an-independent-oracle).

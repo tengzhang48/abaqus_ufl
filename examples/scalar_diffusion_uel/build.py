@@ -36,6 +36,7 @@ class HeatDiffusionMaterial(au.Material):
     """
 
     props = dict(G=1.0, K=10.0, alpha=1e-3, k=0.5, rho_cp=1.0)
+    reference_state = {'T': 0.0}
 
     def stress_PK1(self, F, T):
         J = det(F)

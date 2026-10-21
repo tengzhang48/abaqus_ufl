@@ -1,4 +1,4 @@
-# Optional serial FE runtime
+# Optional FE runtimes
 
 `abaqus_ufl.fe` assembles small verification meshes and solves their free DOFs
 with SciPy. Its compiled adapter calls the generated Fortran `UEL` through
@@ -9,12 +9,13 @@ pip install -e ".[fe]"
 python tools/check_fe_runtime.py
 ```
 
-The supported compiled path is deliberately small: **2D standard Quad4**,
-uniform degree-one nodal fields, interleaved node/component DOFs, and
-stateless materials. Previous nodal values are passed through `DU`; transient
-transport is supported. Material `SVARS`, condensed local fields, mixed
-interpolation, F-bar, other topologies, contact, dynamics, external force
-assembly, automatic time cutbacks, PETSc, and MPI are outside this API.
+The supported compiled path is **2D standard Quad4**, uniform degree-one
+nodal fields, and interleaved node/component DOFs. Previous nodal values are
+passed through `DU`; transient transport and explicit material `SVARS`
+commits are supported. Condensed local fields, mixed interpolation, F-bar,
+other topologies, contact, dynamics, external force assembly and automatic
+time cutbacks are outside this API. PETSc and MPI are optional hosts for
+this same element contract.
 Unsupported layouts are rejected before compilation.
 
 ## API
@@ -63,6 +64,93 @@ from-zero call, use `du_is_total=True`. There is no silent history default.
 iterate's iteration number, free residual infinity norm, and scaled relative
 residual, including the converged iterate. Rejected line-search trials are not
 recorded as accepted steps.
+
+## Exact batches and material state
+
+The scalar path remains the default. To evaluate all elements in one f2py
+call, pass `batch_fn=element.element_rk_batch` to `newton_solve`, or call
+`assemble_batched` with the same explicit `DU` contract as `assemble`.
+
+Construct `CompiledAbaqusElement(..., cache_batches=True)` to reuse the last
+successful full batch. The default is `False`. This is safe only when the
+kernel's complete result is determined by its arguments and no external
+mutable state or required per-call side effect is involved. Exact snapshots
+include geometry, U, DU, committed SVARS, properties, IDs, flags, parameters,
+time and increment counters; module identity is also checked. Returned arrays
+cannot modify the saved result. `batch_evaluations` counts actual attempts;
+`batch_cache_hits` counts reuse. Scalar calls are never cached.
+
+For a material declaring `state_vars`, supply `n_elem=len(elems)` to allocate
+committed state. Every evaluation starts from that state and discards its
+trial updates. Only after convergence, call
+`element.commit_step(nodes, elems, dof_per_node, U, U_previous)`. An exact
+cached trial may supply the commit without another kernel call. Commit,
+`begin_increment`, `reject_step` and `clear_batch_cache` release the cache;
+rejected/nonfinite kernel output is never cached or committed. A failed
+Newton solve clears the bound adapter's cache. Custom solver rejection or
+restart code should call `reject_step()` as well.
+
+Generated UELs initialize SVARS from the material declaration when `TIME(2)=0`.
+For a manually seeded state, use the appropriate nonzero beginning time so
+that initialization does not replace it. Retain the accepted nodal solution
+separately and set the beginning-of-increment clock before each step.
+
+## PETSc and MPI
+
+The package and MPI modules import without `petsc4py` or `mpi4py`. PETSc is
+loaded only when requested; these hosts use PETSc collectives and do not
+require mpi4py. Use a launcher that matches the MPI library linked to PETSc.
+No MPI vendor or blanket ban on mpi4py is part of the framework contract.
+
+Three interfaces serve different sizes of problem:
+
+| Interface | Distribution | Input and return |
+|---|---|---|
+| `make_petsc_solver` / `make_fieldsplit_solver` | Single-rank communicator, default `COMM_SELF` | Serial CSR matrix and full RHS; full solution |
+| `MPIBatchedElement` | Partitioned element evaluation; replicated mesh, state and assembly; rank-zero linear solve | Full batches on every rank; full R/K and solution |
+| `solve_steps_mpi` / `solve_steps_mpi_local` | Distributed PETSc matrix and owned/ghost solution | Replicated mesh convenience interface, or local partitions; final full solution gathered on every rank |
+
+For a serial CSR solve, pass `linear_solve=make_petsc_solver(pc="lu",
+solver="mumps")` to `newton_solve`. Iterative PCs such as `gamg` default to
+GMRES for nonsymmetric coupled tangents. `make_fieldsplit_solver` takes named
+per-node component groups, for example `[("u", [0, 1]), ("T", [2])]`.
+MUMPS, hypre and other external PETSc solver packages must exist in the local
+PETSc build when selected; their failures are reported, never treated as a
+converged solve.
+
+The public parallel example compiles once on rank zero into a shared folder,
+then checks two-increment mechanics and heat diffusion against serial and
+independent affine/discrete-eigenmode oracles:
+
+```bash
+mpiexec -n 2 python examples/scalar_diffusion_uel/check_parallel.py
+```
+
+Run from the repository root on a shared filesystem. The default
+`.parallel-build/` directory retains source and logs. Use `--build-dir` to
+choose another shared build directory, and use a distinct directory for each
+simultaneous job. The MPI batch adapter's
+`root_linear_solver()` is a collective callable; every rank must enter it.
+Do not use `MPIBatchedElement` as the local evaluator of the distributed host.
+
+`solve_steps_mpi(..., begin_step=callback)` calls `callback(step, fraction)`
+on every rank before assembly; use it to call `element.begin_increment(step)`.
+It takes global element indices and an optional full-mesh `commit_fn`.
+`solve_steps_mpi_ghost` is a compatibility spelling for this ghost-vector host.
+`solve_steps_mpi_local` takes `(ndof, my_gm, my_coords, dof_per_node, ...)`,
+local element indices, optional local `batch_fn` and `commit_element_fn`.
+`partition_structured_quad` constructs local structured meshes directly;
+`partition_unstructured` returns a node permutation and ownership count for
+local assembly. Preserve original global one-based `elem_ids` on each compiled
+adapter so JELEM does not collide between partitions.
+
+The distributed host checks KSP convergence, line search, finite output and
+Newton convergence before commit. Errors and cutbacks are voted collectively
+before data gathers. Bound compiled adapters' SVARS are restored if any rank
+rejects a commit; arbitrary external side effects in custom callbacks require
+their own transaction. There is no adaptive cutback, bounded/staggered solve
+or restart service here. Mesh convenience inputs, final output, and full-mesh
+commit callbacks are replicated; this is not an end-to-end scaling claim.
 
 ## Verification
 

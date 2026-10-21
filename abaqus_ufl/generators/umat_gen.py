@@ -150,6 +150,61 @@ def _get_source_body(method):
     return body_nodes, textwrap.dedent(src)
 
 
+def _stress_only_body(nodes):
+    """Slice pure, straight-line state updates that cannot affect stress.
+
+    Control flow, mutation, sidecar/helper calls and unknown calls retain the
+    original body. An update used by stress stays in its dependency slice.
+    The full method is still translated for the residual/state path first.
+    """
+    if not nodes or not isinstance(nodes[-1], ast.Return):
+        return nodes, False
+    result = nodes[-1].value
+    if (not isinstance(result, ast.Tuple) or len(result.elts) != 2
+            or not isinstance(result.elts[1], ast.Dict)):
+        return nodes, False
+    if any(not isinstance(n, ast.Assign) or len(n.targets) != 1
+           or not isinstance(n.targets[0], ast.Name) for n in nodes[:-1]):
+        return nodes, False
+    pure = {'eye', 'trace', 'det', 'inv', 'dev', 'sqrt', 'log', 'exp',
+            'logm', 'expm', 'sqrtm', 'dyad', 'sin', 'cos', 'tan',
+            'sinh', 'cosh', 'tanh', 'atan', 'acos', 'erf', 'erfc', 'abs'}
+    for node in nodes:
+        for child in ast.walk(node):
+            if isinstance(child, (ast.NamedExpr, ast.Await, ast.Yield, ast.YieldFrom)):
+                return nodes, False
+            if isinstance(child, ast.Call):
+                func = child.func
+                allowed = isinstance(func, ast.Name) and func.id in pure
+                allowed = allowed or (isinstance(func, ast.Attribute)
+                    and isinstance(func.value, ast.Name) and func.value.id == 'np'
+                    and func.attr in ('array', 'sqrt', 'log', 'exp', 'sin', 'cos'))
+                if not allowed:
+                    return nodes, False
+
+    def reads(node):
+        return {n.id for n in ast.walk(node) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+
+    needed = reads(result.elts[0])
+    kept = []
+    for node in reversed(nodes[:-1]):
+        target = node.targets[0].id
+        if target in needed:
+            kept.append(node)
+            needed.discard(target)
+            needed.update(reads(node.value))
+    # Only tangent callers use this variant and discard its state dummies.
+    return list(reversed(kept)) + [ast.Return(value=result.elts[0])], True
+
+
+def _stress_tangent_name(material, mat_prefix, ndim):
+    if ndim == 2 and material.has_state:
+        nodes, _ = _get_source_body(material._methods['stress_PK1']['callable'])
+        if _stress_only_body(nodes)[1]:
+            return f'{mat_prefix}_stress_PK1_tangent'
+    return f'{mat_prefix}_stress_PK1'
+
+
 def _reject_early_returns(body_nodes, method_name='<method>'):
     """Raise if any Return appears inside a nested control-flow block.
 
@@ -688,7 +743,7 @@ class FortranTranslator(ast.NodeVisitor):
             f'{", ".join(call_args)})')
         return result, return_kind
 
-    def translate_stress(self, method):
+    def translate_stress(self, method, stress_only=False):
         """
         Translate stress_PK1(self, F, ...) -> Fortran subroutine body.
 
@@ -696,6 +751,8 @@ class FortranTranslator(ast.NodeVisitor):
         """
         nodes, src = _get_source_body(method)
         _reject_early_returns(nodes, method_name=getattr(method, '__name__', '?'))
+        if stress_only:
+            nodes, _ = _stress_only_body(nodes)
         for node in nodes:
             self._visit_stmt(node)
         return (self._declarations, self._statements,
@@ -1826,7 +1883,8 @@ def _generate_statev_write(sv_info):
 # Material stress subroutine generation
 # ===================================================================
 
-def _generate_stress_subroutine(material, mat_prefix, matrix_backend='iterative'):
+def _generate_stress_subroutine(material, mat_prefix, matrix_backend='iterative',
+                                stress_only=False):
     """
     Generate the COMPLEX*16 stress subroutine from the Python method.
 
@@ -1862,7 +1920,7 @@ def _generate_stress_subroutine(material, mat_prefix, matrix_backend='iterative'
             translator._var_kinds[name + '_old'] = 'scalar'
 
     decls, stmts, return_expr, return_kind = \
-        translator.translate_stress(method)
+        translator.translate_stress(method, stress_only=stress_only)
 
     nprops = len(material.props_names)
     tensor_vars = {n for n, k in translator._var_kinds.items()
@@ -2051,7 +2109,12 @@ def _generate_stress_subroutine(material, mat_prefix, matrix_backend='iterative'
         lines.append('C' + '=' * 70)
         lines.extend(translator._helper_sources)
 
-    return '\n'.join(lines)
+    source = '\n'.join(lines)
+    if stress_only:
+        source = source.replace(f'{mat_prefix}_stress_PK1(', f'{mat_prefix}_stress_PK1_tangent(')
+        source = source.replace(f'END SUBROUTINE {mat_prefix}_stress_PK1',
+                                f'END SUBROUTINE {mat_prefix}_stress_PK1_tangent')
+    return source
 
 
 def _predef_var_names(material):
@@ -2289,7 +2352,7 @@ def _generate_small_strain_update_subroutine(material, mat_prefix,
 # Complex-step tangent engine generation
 # ===================================================================
 
-def _generate_cs_dPdF(mat_prefix, nprops, sv_info=None):
+def _generate_cs_dPdF(mat_prefix, nprops, sv_info=None, ndim=3, stress_sub=None):
     """
     Generate the complex-step dP/dF tangent engine.
 
@@ -2303,6 +2366,7 @@ def _generate_cs_dPdF(mat_prefix, nprops, sv_info=None):
     if sv_info is None:
         sv_info = OrderedDict()
     has_state = bool(sv_info)
+    stress_sub = stress_sub or f'{mat_prefix}_stress_PK1'
 
     # Build argument list
     args = ['F']
@@ -2356,8 +2420,11 @@ def _generate_cs_dPdF(mat_prefix, nprops, sv_info=None):
             '      IF (dt_safe .LT. 1.0d-14) dt_safe = 1.0d-14')
         lines.append('')
 
-    lines.append('      DO k = 1, 3')
-    lines.append('        DO l = 1, 3')
+    if ndim == 2:
+        lines.append('C     Plane-strain tangent: only in-plane columns are filled')
+        lines.append('      dPdF = 0.0d0')
+    lines.append(f'      DO k = 1, {ndim}')
+    lines.append(f'        DO l = 1, {ndim}')
     lines.append('          CALL real2complex33(F, Fz)')
 
     if has_state:
@@ -2391,10 +2458,10 @@ def _generate_cs_dPdF(mat_prefix, nprops, sv_info=None):
         for name in sv_info:
             call_args.append(f'{name}_new_z')
         lines.append(_fortran_call(
-            '          ', f'{mat_prefix}_stress_PK1', call_args))
+            '          ', stress_sub, call_args))
     else:
         lines.append(
-            f'          CALL {mat_prefix}_stress_PK1'
+            f'          CALL {stress_sub}'
             f'(Fz, props, Pz)')
 
     lines.append('          DO i = 1, 3')
@@ -2593,7 +2660,7 @@ def _nonfinite_cutback_lines(vector, matrix, size):
     ]
 
 
-def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
+def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None, ndim=3):
     """
     Generate the standard Abaqus UMAT interface subroutine.
 
@@ -2692,6 +2759,8 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
         '      DOUBLE COMPLEX :: Fz(3,3), Pz(3,3)')
     lines.append('      DOUBLE PRECISION :: det33d')
     lines.append('      LOGICAL :: isnonfinite_d')
+    if ndim == 2:
+        lines.append('      DOUBLE PRECISION :: stress6(6), tangent6(6,6)')
 
     if has_state:
         for name, entry in sv_info.items():
@@ -2721,7 +2790,9 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
         '      DRPLDT = 0.0d0',
         '      DDSDDE = 0.0d0',
         '',
-        '      IF (NDI .NE. 3 .OR. NSHR .NE. 3 .OR. NTENS .NE. 6) THEN',
+        ('      IF (NDI .NE. 3 .OR. NSHR .NE. 1 .OR. NTENS .NE. 4) THEN'
+         if ndim == 2 else
+         '      IF (NDI .NE. 3 .OR. NSHR .NE. 3 .OR. NTENS .NE. 6) THEN'),
         '        PNEWDT = 0.5d0',
         '        RETURN',
         '      END IF',
@@ -2736,6 +2807,17 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
     lines.append('        END DO')
     lines.append('      END DO')
     lines.append('')
+    if ndim == 2:
+        lines.extend([
+            'C     Plane strain requires F33=1 and zero out-of-plane shears',
+            '      IF (DABS(F(3,3)-1.0d0) .GT. 1.0d-12 .OR.',
+            '     &    DABS(F(1,3))+DABS(F(2,3))+DABS(F(3,1))',
+            '     &    +DABS(F(3,2)) .GT. 1.0d-12) THEN',
+            '        PNEWDT = 0.5d0',
+            '        RETURN',
+            '      END IF',
+            '',
+        ])
     lines.append('C     --- Inverted or degenerate element: request a smaller increment')
     lines.append('      IF (det33d(F) .LE. 0.0d0) THEN')
     lines.append('        PNEWDT = 0.25d0')
@@ -2832,9 +2914,17 @@ def _generate_umat_wrapper(mat_prefix, nprops, sv_info=None):
     lines.append(
         'C     --- Convert PK1 -> Cauchy + Jaumann tangent '
         '(Voigt) ---')
-    lines.append(
-        '      CALL pk1_to_cauchy_jaumann(F, P_real, dPdF, '
-        'STRESS, DDSDDE)')
+    if ndim == 2:
+        lines.extend([
+            '      CALL pk1_to_cauchy_jaumann(F, P_real, dPdF,',
+            '     &  stress6, tangent6)',
+            '      STRESS = stress6(1:4)',
+            '      DDSDDE = tangent6(1:4,1:4)',
+        ])
+    else:
+        lines.append(
+            '      CALL pk1_to_cauchy_jaumann(F, P_real, dPdF, '
+            'STRESS, DDSDDE)')
     lines.append('')
     lines.extend(_nonfinite_cutback_lines('STRESS(i)', 'DDSDDE(i,j)', 'NTENS'))
     lines.append('      RETURN')
@@ -3109,7 +3199,7 @@ def _generate_small_strain_umat_wrapper(
 # ===================================================================
 
 def generate_umat(material, output_path, mat_prefix=None,
-                  matrix_backend='iterative', verify=True):
+                  matrix_backend='iterative', verify=True, ndim=3):
     """
     Generate a complete .for file for Abaqus UMAT.
 
@@ -3118,6 +3208,9 @@ def generate_umat(material, output_path, mat_prefix=None,
         output_path: path to write the .for file
         mat_prefix: prefix for generated subroutine names
                     (default: lowercase class name)
+        ndim: 3 (default, unchanged full tangent) or 2 (plane strain only).
+              2 perturbs only F(1:2,1:2); out-of-plane columns are zero and
+              must not be used for plane stress or a 3D material call.
         matrix_backend: matrix-function backend for generated Fortran.
                     'iterative' (default) uses fixed-count iterative helpers
                         and avoids eigenvector gauges inside matrix functions.
@@ -3132,6 +3225,8 @@ def generate_umat(material, output_path, mat_prefix=None,
                 the complex-step and finite-difference tangents disagree.
     """
     verify_before_generation(material, verify)
+    if isinstance(ndim, bool) or not isinstance(ndim, (int, np.integer)) or ndim not in (2, 3):
+        raise ValueError("ndim must be 2 (plane strain) or 3")
     if matrix_backend not in ('eig', 'iterative'):
         raise ValueError(
             "matrix_backend must be 'eig' or 'iterative'")
@@ -3170,10 +3265,14 @@ def generate_umat(material, output_path, mat_prefix=None,
     # Generate sections
     stress_src = _generate_stress_subroutine(
         material, mat_prefix, matrix_backend=matrix_backend)
-    cs_src = _generate_cs_dPdF(mat_prefix, nprops, sv_info)
+    stress_sub = _stress_tangent_name(material, mat_prefix, ndim)
+    if stress_sub.endswith('_tangent'):
+        stress_src += '\n\n' + _generate_stress_subroutine(
+            material, mat_prefix, matrix_backend=matrix_backend, stress_only=True)
+    cs_src = _generate_cs_dPdF(mat_prefix, nprops, sv_info, ndim, stress_sub)
     convert_src = _generate_pk1_to_cauchy_jaumann()
     umat_src = _generate_umat_wrapper(
-        mat_prefix, nprops, sv_info)
+        mat_prefix, nprops, sv_info, ndim=ndim)
 
     # Header
     nstatv = _nstate_per_gp(sv_info)

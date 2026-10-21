@@ -7,11 +7,12 @@ include CITATION.cff
 include CREDITS.md
 include conftest.py
 include README.md
+include CHANGELOG.md
 include HOWTO_ADD_AN_EXAMPLE.md
 include environment.yml
 recursive-include abaqus_ufl *.for
 recursive-include abaqus_ufl/fe *.f90 *.md
-recursive-include tests *.py *.f90
+recursive-include tests *.py *.f90 *.json
 recursive-include docs *.md *.json
 recursive-include ai_skills *.md
 recursive-include examples *.py *.for *.f90 *.md *.inp *.json *.sh

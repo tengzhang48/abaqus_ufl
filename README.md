@@ -152,13 +152,21 @@ mesh DOFs. The material/element bundles retain their separate checks. The
 paper-scale Abaqus analyses retain their own evidence records. See
 [the BVP definitions and oracles](docs/BOUNDARY_VALUE_SIMULATIONS.md).
 
-## Optional serial FE runtime
+## Optional FE runtimes
 
 `abaqus_ufl.fe` provides a small SciPy mesh driver and a packaged f2py UEL
 adapter. Install it with `pip install -e ".[fe]"` and run
-`python tools/check_fe_runtime.py`. It currently supports standard 2D Quad4
-elements with uniform degree-one nodal fields and no material/local state
-variables. Transient nodal history is explicit. Read the
+`python tools/check_fe_runtime.py`. It supports standard 2D Quad4 elements
+with uniform degree-one nodal fields, explicit nodal history and explicit
+material-state commits. Batched assembly and exact batch caching are opt-in.
+Optional PETSc hosts provide distributed assembly/solves and replicated MPI
+element batching. For a two-rank check against serial and independent oracles:
+
+```bash
+mpiexec -n 2 python examples/scalar_diffusion_uel/check_parallel.py
+```
+
+Read the
 [runtime API and verification scope](abaqus_ufl/fe/README.md) before adapting it.
 
 ## What a passing check means
@@ -225,8 +233,8 @@ See [`CREDITS.md`](CREDITS.md).
   paths, branching, state, and verification.
 - [Design documentation](docs/README.md): generator and tangent-engine
   internals.
-- [Lessons learned](docs/lessons/): distilled Abaqus, Fortran, code-generation,
-  validation, and release lessons.
+- [Start here: lessons, pitfalls, pivots and skills](docs/lessons/README.md):
+  one task-to-item index and a canonical home for each kind of guidance.
 - [Fresh-clone Abaqus validation](docs/ABAQUS_VALIDATION_2026-07-30.md):
   current-source smoke solves, paper-case datachecks, and remaining scope.
 - [AI-assistant guide](ai_skills/README.md): operational project guidance for

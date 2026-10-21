@@ -66,3 +66,9 @@ def test_module_level_skip_fails_with_the_variable(tmp_path):
     assert code == 5 and '1 skipped' in summary, summary    # 5: no tests ran
     code, summary = run_probe(tmp_path, MODULE_SKIP, fail_on_skip=True)
     assert code != 0 and 'error' in summary, summary
+
+
+def test_absent_optional_runtime_can_skip_in_the_mpi_free_ci_job(tmp_path):
+    source = "import pytest\ndef test_optional():\n    pytest.skip('optional runtime: petsc4py is not installed')\n"
+    code, summary = run_probe(tmp_path, source, fail_on_skip=True)
+    assert code == 0 and '1 skipped' in summary, summary

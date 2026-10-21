@@ -543,8 +543,9 @@ C     Convert history variables (real, not perturbed)
       T_old_z = DCMPLX(T_old, 0.0d0)
 
 C     === dPK1_dF: d(stress_PK1)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dPK1_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           Tz = DCMPLX(T, 0.0d0)
           CALL real2complex3(grad_T, grad_T_z)
@@ -570,8 +571,9 @@ C     === dPK1_dT: d(stress_PK1)/d(T) ===
       END DO
 
 C     === dflux_dF: d(solvent_flux)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dflux_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           Tz = DCMPLX(T, 0.0d0)
           CALL real2complex3(grad_T, grad_T_z)
@@ -595,7 +597,8 @@ C     === dflux_dT: d(solvent_flux)/d(T) ===
       END DO
 
 C     === dflux_dgrad_T: d(solvent_flux)/d(grad_T) ===
-      DO k = 1, 3
+      dflux_dgrad_T = 0.0d0
+      DO k = 1, 2
         CALL real2complex33(F, Fz)
         Tz = DCMPLX(T, 0.0d0)
         CALL real2complex3(grad_T, grad_T_z)
@@ -608,8 +611,9 @@ C     === dflux_dgrad_T: d(solvent_flux)/d(grad_T) ===
       END DO
 
 C     === dstorage_dF: d(solvent_storage)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dstorage_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           Tz = DCMPLX(T, 0.0d0)
           CALL real2complex3(grad_T, grad_T_z)

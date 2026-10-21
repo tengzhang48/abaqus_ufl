@@ -43,7 +43,7 @@ theory-to-compiled-code-to-output example pipeline.
 ## Lessons Learned
 
 General, hard-won lessons for Abaqus UMAT/UEL development and code generation —
-see the [lessons/](lessons/) index (Abaqus/Fortran traps, finite-element
+start with the [lessons, pitfalls, pivots and skills index](lessons/README.md) (Abaqus/Fortran traps, finite-element
 pitfalls, complex-step and matrix functions, code generation and testing,
 coupled multiphysics, and field notes).
 

@@ -21,3 +21,8 @@ into that environment's skills directory.
 
 Agents can also read `ai_skills/abaqus-ufl/SKILL.md` directly when working in
 this repository.
+
+Use the [four-kind task index](../docs/lessons/README.md) first. The repository
+skill is routing metadata for this revision. If an installed copy is used,
+record which revision it matches and refresh it when the repository guidance
+changes; keep explanations in their linked canonical homes.

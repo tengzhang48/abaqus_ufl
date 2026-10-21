@@ -22,7 +22,8 @@ this map.
 | `HOWTO_ADD_AN_EXAMPLE.md` | Pipeline responsibilities and release gates | Canonical public contract; filenames remain example-owned. |
 | `tools/` | Simple Abaqus run/extract/compare support | One-element/simple output only; difficult output bridges remain example-owned. |
 | `tools/run_livebench.py` | Run the released reference, assembled, and compiled bundles | Eleven cases: seven material, element and serial FE checks, and four boundary-value simulations; no Abaqus required. |
-| `abaqus_ufl/fe/README.md` | Standard Quad4 mesh-level f2py execution | Optional serial SciPy driver; uniform degree-one nodal fields, no material/local state variables. |
+| [Host API](../../../abaqus_ufl/fe/README.md) | Standard Quad4 mesh-level f2py execution | SciPy and optional PETSc/MPI hosts; uniform degree-one nodal fields, explicit material-state commits and opt-in exact batches; condensed local fields excluded. |
+| [Parallel heat/mechanics check](../../../examples/scalar_diffusion_uel/check_parallel.py) | Shared-build MPI batching and distributed PETSc assembly/solves | Small two/four-rank comparisons with serial, an affine patch and a discrete heat oracle; no scaling or paper-reproduction claim. |
 
 ## Released scientific examples
 

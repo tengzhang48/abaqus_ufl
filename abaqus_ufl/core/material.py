@@ -287,12 +287,12 @@ class Material:
 
         return func
 
-    def verify(self, state=None, tol=1e-6, verbose=True):
+    def verify(self, state=None, tol=1e-6, verbose=True, reference_state=None):
         """
         Run all verification checks.
 
         Checks:
-          1. Stress-free reference (P=0 at F=I, p=0) — if stress_PK1
+          1. Stress-free reference (P=0 at the supplied or declared reference)
           2. CS vs FD for all tangent blocks
           3. Major symmetry of dP/dF (if stress_PK1 defined)
 
@@ -306,6 +306,9 @@ class Material:
                    internal state.
             tol: tolerance for CS vs FD comparison
             verbose: print detailed results
+            reference_state: stress-free state separate from the tangent
+                probe, or declare ``reference_state`` on the material.
+                Otherwise the supplied state's non-F values are used at F=I.
 
         Returns:
             True if all checks pass
@@ -326,10 +329,12 @@ class Material:
                 else:
                     full_state[k] = v
             return run_verification(
-                self, state=full_state, tol=tol, verbose=verbose)
+                self, state=full_state, tol=tol, verbose=verbose,
+                reference_state=reference_state)
         else:
             return run_verification(
-                self, state=None, tol=tol, verbose=verbose)
+                self, state=None, tol=tol, verbose=verbose,
+                reference_state=reference_state)
 
 
 class SmallStrainMaterial(Material):

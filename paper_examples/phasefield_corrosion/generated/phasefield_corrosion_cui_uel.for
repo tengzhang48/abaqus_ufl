@@ -90,6 +90,7 @@ C     --- Shape functions and mapping ---
       DOUBLE PRECISION :: detJ, Jinv(2,2), wdetJ
       DOUBLE PRECISION :: dt_safe
       DOUBLE PRECISION :: det33d
+      LOGICAL :: isnonfinite_d
       INTEGER :: ngp_out, stat
 
 C     --- Gauss point field values ---
@@ -735,6 +736,20 @@ C       dspecies_storage_dc (sign=+1, value-value)
 
       END DO
 
+C     --- Non-finite RHS or AMATRX: request a smaller increment
+      DO i = 1, NDOFEL
+        IF (isnonfinite_d(RHS(i,1))) THEN
+          PNEWDT = 0.25d0
+          RETURN
+        END IF
+        DO j = 1, NDOFEL
+          IF (isnonfinite_d(AMATRX(i,j))) THEN
+            PNEWDT = 0.25d0
+            RETURN
+          END IF
+        END DO
+      END DO
+
       RETURN
       END SUBROUTINE UEL
 
@@ -1105,8 +1120,9 @@ C     Convert history variables (real, not perturbed)
       c_old_z = DCMPLX(c_old, 0.0d0)
 
 C     === dPK1_dF: d(stress_PK1)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dPK1_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           cz = DCMPLX(c, 0.0d0)
           phiz = DCMPLX(phi, 0.0d0)
@@ -1133,8 +1149,9 @@ C     === dPK1_dF: d(stress_PK1)/d(F) ===
       END DO
 
 C     === dphase_flux_dF: d(phase_flux)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dphase_flux_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           cz = DCMPLX(c, 0.0d0)
           phiz = DCMPLX(phi, 0.0d0)
@@ -1157,7 +1174,8 @@ C     === dphase_flux_dF: d(phase_flux)/d(F) ===
       END DO
 
 C     === dphase_flux_dgrad_phi: d(phase_flux)/d(grad_phi) ===
-      DO k = 1, 3
+      dphase_flux_dgrad_phi = 0.0d0
+      DO k = 1, 2
         CALL real2complex33(F, Fz)
         cz = DCMPLX(c, 0.0d0)
         phiz = DCMPLX(phi, 0.0d0)
@@ -1198,8 +1216,9 @@ C     === dphase_flux_dphi: d(phase_flux)/d(phi) ===
       END DO
 
 C     === dphase_storage_dF: d(phase_storage)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dphase_storage_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           cz = DCMPLX(c, 0.0d0)
           phiz = DCMPLX(phi, 0.0d0)
@@ -1254,8 +1273,9 @@ C     === dphase_storage_dphi: d(phase_storage)/d(phi) ===
       dphase_storage_dphi = AIMAG(cdotz) / CS_H
 
 C     === dspecies_flux_dF: d(species_flux)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dspecies_flux_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           cz = DCMPLX(c, 0.0d0)
           phiz = DCMPLX(phi, 0.0d0)
@@ -1278,7 +1298,8 @@ C     === dspecies_flux_dF: d(species_flux)/d(F) ===
       END DO
 
 C     === dspecies_flux_dgrad_c: d(species_flux)/d(grad_c) ===
-      DO k = 1, 3
+      dspecies_flux_dgrad_c = 0.0d0
+      DO k = 1, 2
         CALL real2complex33(F, Fz)
         cz = DCMPLX(c, 0.0d0)
         phiz = DCMPLX(phi, 0.0d0)
@@ -1300,7 +1321,8 @@ C     === dspecies_flux_dgrad_c: d(species_flux)/d(grad_c) ===
       END DO
 
 C     === dspecies_flux_dgrad_phi: d(species_flux)/d(grad_phi) ===
-      DO k = 1, 3
+      dspecies_flux_dgrad_phi = 0.0d0
+      DO k = 1, 2
         CALL real2complex33(F, Fz)
         cz = DCMPLX(c, 0.0d0)
         phiz = DCMPLX(phi, 0.0d0)
@@ -1341,8 +1363,9 @@ C     === dspecies_flux_dphi: d(species_flux)/d(phi) ===
       END DO
 
 C     === dspecies_storage_dF: d(species_storage)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dspecies_storage_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           cz = DCMPLX(c, 0.0d0)
           phiz = DCMPLX(phi, 0.0d0)
@@ -1428,6 +1451,23 @@ C----------------------------------------------------------------------
 
       RETURN
       END FUNCTION det33d
+
+C----------------------------------------------------------------------
+C     isnonfinite_d: true for NaN or +-Inf. Tests the IEEE exponent bits
+C     (all ones), so it is not folded away by fast floating-point models
+C     that assume no NaNs, as x .NE. x and IEEE_IS_FINITE can be.
+C----------------------------------------------------------------------
+      FUNCTION isnonfinite_d(x) RESULT(bad)
+      IMPLICIT NONE
+      DOUBLE PRECISION, INTENT(IN) :: x
+      LOGICAL :: bad
+      INTEGER(KIND=8) :: bits
+
+      bits = TRANSFER(x, bits)
+      bad = IAND(ISHFT(bits, -52), 2047_8) .EQ. 2047_8
+
+      RETURN
+      END FUNCTION isnonfinite_d
 
 C----------------------------------------------------------------------
 C     inv33z: Inverse of 3x3 complex matrix
@@ -2069,7 +2109,7 @@ C     --- Local variables ---
       DOUBLE COMPLEX :: nsq1, nsq2, nsq3, best_nsq
       DOUBLE PRECISION, PARAMETER ::
      &  PI = 3.14159265358979323846d0
-      DOUBLE PRECISION :: twopi3, max_imag
+      DOUBLE PRECISION :: twopi3, max_imag, real_scale, spectral_scale
       INTEGER :: i, j, k, best_idx
 
       zi = DCMPLX(0.0d0, 1.0d0)
@@ -2079,9 +2119,11 @@ C     Complex-step path: rotate the real state to its principal basis
 C     before applying the quasi-degenerate fallback. Repeated spectra
 C     must not depend on alignment with the input coordinate axes.
       max_imag = 0.0d0
+      real_scale = 0.0d0
       DO i = 1, 3
         DO j = 1, 3
           max_imag = MAX(max_imag, ABS(AIMAG(A(i,j))))
+          real_scale = MAX(real_scale, ABS(DBLE(A(i,j))))
         END DO
       END DO
       IF (max_imag .GT. 0.0d0) THEN
@@ -2107,8 +2149,11 @@ C     B = A - q*I
      &   + 2.0d0 * p1
       p  = SQRT(p2 / 6.0d0)
 
-C     Guard: A is a multiple of identity plus a tiny perturbation.
-      IF (ABS(DBLE(p)) .LT. 1.0d-30) THEN
+C     Relative near-isotropic guard: rounded eigenvalues may coincide
+C     while tiny real off-diagonals leave p nonzero. Raw cross-product
+C     eigenvectors then collapse. Keep the perturbation in the fallback.
+      IF (ABS(DBLE(p)) .LT. 1.0d-30 .OR.
+     &    ABS(DBLE(p)) .LE. 1.0d-14 * real_scale) THEN
         CALL eig33z_rotated_fallback(A, lam, V)
         RETURN
       END IF
@@ -2167,6 +2212,15 @@ C     Sort by real part (ascending, 3-element bubble sort)
       END DO
 
 C     --- Eigenvectors via cross products of rows of (A - lam*I) ---
+C     A rounded repeated pair can miss the r guard. Use the declared
+C     quasi-repeated band before cross-product columns become parallel.
+      spectral_scale = MAX(ABS(DBLE(lam(1))), ABS(DBLE(lam(2))),
+     &                     ABS(DBLE(lam(3))))
+      IF (MIN(DBLE(lam(2)-lam(1)), DBLE(lam(3)-lam(2)))
+     &    .LE. 1.0d-6 * spectral_scale) THEN
+        CALL eig33z_rotated_fallback(A, lam, V)
+        RETURN
+      END IF
       DO k = 1, 3
 C       M = A - lam(k) * I
         DO i = 1, 3
