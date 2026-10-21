@@ -258,27 +258,49 @@ def _fd_tangent(material, method_name, field_var, state, eps=1e-7):
 # Verification checks
 # ===================================================================
 
-def _check_stress_free(material, verbose=True):
-    """Check P = 0 at F = I (stress-free reference)."""
+def _stress_free_reference(material, state=None, reference_state=None):
+    """Keep reference assumptions separate from the tangent probe's F.
+
+    An explicit reference (argument or material declaration) takes precedence.
+    Otherwise the supplied verification state supplies all values except F,
+    which is set to identity. Without either, retain the historical defaults.
+    """
+    declared = getattr(material, 'reference_state', None)
+    reference = reference_state if reference_state is not None else declared
+    if reference is not None:
+        values = material._make_state(F=np.eye(3), p=0.0, mu=0.0)
+        for name, value in reference.items():
+            name = name + '_old' if name in material.state_vars else name
+            values[name] = value
+        origin = 'declared reference_state' if reference_state is None else 'verify(reference_state)'
+    elif state is not None:
+        values = dict(state)
+        values['F'] = np.eye(3)
+        origin = 'verify(state), with F=I'
+    else:
+        values = material._make_state(F=np.eye(3), p=0.0, mu=0.0)
+        origin = 'default reference, F=I, p=mu=0'
+    params = material._methods.get('stress_PK1', {}).get('all_params', [])
+    assumptions = ', '.join(
+        name + '=' + np.array2string(np.asarray(values[name]), precision=6)
+        for name in params if name in values)
+    return values, origin + ': ' + assumptions
+
+
+def _check_stress_free(material, verbose=True, state=None, reference_state=None):
+    """Check P = 0 using the supplied or declared reference state."""
     if 'stress_PK1' not in material._methods:
         return True
 
-    state = material._make_state(F=np.eye(3))
-    # Set pressure and chemical potential to zero if present
-    info = material._methods['stress_PK1']
-    if 'p' in info['all_params']:
-        state['p'] = 0.0
-    if 'mu' in info['all_params']:
-        state['mu'] = 0.0
-
-    P = material._call_method('stress_PK1', state)
+    reference, assumption = _stress_free_reference(material, state, reference_state)
+    P = material._call_method('stress_PK1', reference)
     norm = np.max(np.abs(P))
 
     ok = norm < 1e-10
     if verbose:
         status = "PASS" if ok else "FAIL"
-        print(f"  Stress-free reference: ||P(F=I)|| = {norm:.2e} "
-              f"[{status}]")
+        print(f"  Stress-free reference: ||P|| = {norm:.2e} [{status}]; "
+              f"assumed {assumption}")
     return ok
 
 
@@ -362,7 +384,8 @@ def verify_before_generation(model, verify):
     model.verify(**kwargs)
 
 
-def run_verification(material, state=None, tol=1e-6, verbose=True):
+def run_verification(material, state=None, tol=1e-6, verbose=True,
+                     reference_state=None):
     """
     Run all verification checks for a Material instance.
 
@@ -373,13 +396,18 @@ def run_verification(material, state=None, tol=1e-6, verbose=True):
 
     Args:
         material: Material instance
-        state: optional state dict (default: material._make_state())
+        state: optional state dict (default: material._make_state()). Its
+            non-F values also define the stress-free reference unless a
+            separate reference_state is supplied.
+        reference_state: optional stress-free state, independent of the
+            tangent probe. Also accepted as material.reference_state.
         tol: relative tolerance for CS vs FD comparison
         verbose: print results
 
     Returns:
         True if all checks pass
     """
+    supplied_state = state
     if state is None:
         state = material._make_state()
 
@@ -390,7 +418,7 @@ def run_verification(material, state=None, tol=1e-6, verbose=True):
         print(f"Verifying {name}:")
 
     # 1. Stress-free reference
-    ok = _check_stress_free(material, verbose)
+    ok = _check_stress_free(material, verbose, supplied_state, reference_state)
     all_pass = all_pass and ok
 
     # 2. CS vs FD for each tangent block
@@ -427,9 +455,11 @@ def run_verification(material, state=None, tol=1e-6, verbose=True):
     if not all_pass:
         failed = []
         # Re-run checks silently to capture which ones failed
-        ok = _check_stress_free(material, verbose=False)
+        ok = _check_stress_free(material, verbose=False, state=supplied_state,
+                                reference_state=reference_state)
         if not ok:
-            failed.append("stress-free reference")
+            _, assumption = _stress_free_reference(material, supplied_state, reference_state)
+            failed.append("stress-free reference (assumed " + assumption + ")")
         blocks = material.tangent_blocks()
         for (method_name, field_var), binfo in blocks.items():
             ok = _check_tangent_block(

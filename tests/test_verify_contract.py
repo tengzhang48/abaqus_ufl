@@ -26,6 +26,62 @@ class NeoHookean(au.Material):
         return self.G * (F - inv(F).T) + self.K * log(J) * inv(F).T
 
 
+class Swelling(au.Material):
+    props = dict(G=1.0, beta=0.2, c0=0.7)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.refresh_metadata(field_args={**self._field_args,
+                                         'c': {'kind': 'scalar', 'shape': ()}})
+
+    def stress_PK1(self, F, c):
+        return self.G * (F - eye(3)) - self.beta * (c - self.c0) * eye(3)
+
+
+def test_swelling_reference_uses_supplied_concentration_without_mutating_state():
+    material = Swelling()
+    state = {'F': 1.2 * np.eye(3), 'c': material.c0}
+    before = state['F'].copy()
+    assert material.verify(state=state, verbose=False)
+    assert np.array_equal(state['F'], before)
+    assert state['c'] == material.c0
+
+
+def test_stress_free_failure_reports_its_assumptions_even_when_silent():
+    with pytest.raises(VerificationError, match=r'default reference') as failure:
+        Swelling().verify(verbose=False)
+    assert 'c=0.' in str(failure.value)
+    with pytest.raises(VerificationError, match=r'verify\(state\)') as failure:
+        Swelling().verify(state={'c': 0.4}, verbose=False)
+    assert 'c=0.4' in str(failure.value)
+
+
+def test_separate_and_declared_reference_states_allow_nonreference_tangent_probes():
+    material = Swelling()
+    assert material.verify(state={'c': 0.4}, reference_state={'c': material.c0}, verbose=False)
+    material.reference_state = {'c': material.c0}
+    assert material.verify(state={'c': 0.4}, verbose=False)
+    with pytest.raises(VerificationError, match=r'verify\(reference_state\)'):
+        material.verify(reference_state={'c': 0.0}, verbose=False)
+
+
+def test_generation_accepts_a_swelling_reference_state(tmp_path):
+    class Problem(au.WeakForm):
+        material = Swelling
+        ndim = 2
+
+        def define_fields(self):
+            self.u = au.VectorField('u', degree=1)
+            self.c = au.ScalarField('c', degree=1)
+
+        def momentum_equation(self, v, F, c):
+            return self.material.stress_PK1(F, c)
+
+    generate_uel(Problem(), str(tmp_path / 'swelling.for'),
+                 element='Quad4', formulation='standard',
+                 verify={'reference_state': {'c': 0.7}})
+
+
 class DroppedTerm(au.Material):
     """J.real removes dJ/dF from the complex-step tangent. It translates and
     compiles, but the generated tangent is wrong."""

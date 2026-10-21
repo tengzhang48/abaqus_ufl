@@ -83,4 +83,6 @@ def test_recognized_names_still_construct_and_verify():
         F=F, F_old=0.98 * F, T=10.0, T_old=5.0,
         grad_T=np.array([2.0, -1.0, 0.5]), dt=0.1,
     )
-    assert problem.verify(state=state, verbose=False)
+    # The hot tangent probe is thermally stressed at F=I; declare the cold
+    # reference separately rather than asking it to be stress-free at T=10.
+    assert problem.verify(state=state, reference_state={'T': 0.0}, verbose=False)
