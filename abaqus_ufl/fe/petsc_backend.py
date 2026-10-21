@@ -104,6 +104,10 @@ def make_fieldsplit_solver(field_components, dof_per_node, ksp_type="gmres",
 
     ``field_components`` is ``[(name, [components...]), ...]``. Each component
     must appear exactly once. Schur splitting requires exactly two fields.
+    The returned callable solves full interleaved systems. Its
+    ``solve_reduced(K, b, free_dofs)`` method preserves original global DOF
+    identities after constraint elimination; ``newton_solve`` uses it
+    automatically. A fully constrained field is omitted from the solve.
     """
     PETSc = _petsc()
     comm = PETSc.COMM_SELF if comm is None else comm
@@ -116,27 +120,48 @@ def make_fieldsplit_solver(field_components, dof_per_node, ksp_type="gmres",
     if split_type not in types or (split_type == "schur" and len(fields) != 2):
         raise ValueError("invalid FieldSplit type or Schur field count")
 
-    def setup(ksp_obj, matrix):
-        if matrix.getSize()[0] % dof_per_node:
-            raise ValueError("matrix size must be divisible by dof_per_node")
-        ksp_obj.setType(ksp_type)
-        pc_obj = ksp_obj.getPC()
-        pc_obj.setType("fieldsplit")
-        pc_obj.setFieldSplitType(types[split_type])
-        nodes = np.arange(matrix.getSize()[0] // dof_per_node)
-        index_sets = [PETSc.IS().createGeneral(
-            np.sort((nodes[:, None] * dof_per_node + comps).ravel()).astype(PETSc.IntType),
-            comm=comm) for _, comps in fields]
-        pc_obj.setFieldSplitIS(*[(name, indices) for (name, _), indices in zip(fields, index_sets)])
-        try:
-            pc_obj.setUp()
-            for sub in pc_obj.getFieldSplitSubKSP():
-                sub.setType("preonly")
-                sub.getPC().setType(sub_pc)
-        except Exception:
-            for indices in index_sets:
-                indices.destroy()
-            raise
-        return index_sets
+    def solve_reduced(K, b, free_dofs):
+        def setup(ksp_obj, matrix):
+            size = matrix.getSize()[0]
+            if free_dofs is None:
+                if size % dof_per_node:
+                    raise ValueError("matrix size must be divisible by dof_per_node")
+                components = np.arange(size) % dof_per_node
+            else:
+                dofs = np.asarray(free_dofs)
+                if (dofs.shape != (size,) or not np.issubdtype(dofs.dtype, np.integer)
+                        or np.any(dofs < 0) or len(np.unique(dofs)) != size):
+                    raise ValueError("free_dofs must contain one distinct nonnegative integer per row")
+                components = dofs % dof_per_node
+            active = [(name, np.flatnonzero(np.isin(components, comps)).astype(PETSc.IntType))
+                      for name, comps in fields]
+            active = [(name, indices) for name, indices in active if len(indices)]
+            ksp_obj.setType(ksp_type)
+            pc_obj = ksp_obj.getPC()
+            if len(active) == 1:
+                # No Schur/block operation remains when every other field is fixed.
+                pc_obj.setType(sub_pc)
+                return []
+            pc_obj.setType("fieldsplit")
+            pc_obj.setFieldSplitType(types[split_type])
+            index_sets = [PETSc.IS().createGeneral(indices, comm=comm) for _, indices in active]
+            try:
+                pc_obj.setFieldSplitIS(*[(name, indices)
+                                        for (name, _), indices in zip(active, index_sets)])
+                pc_obj.setUp()
+                for sub in pc_obj.getFieldSplitSubKSP():
+                    sub.setType("preonly")
+                    sub.getPC().setType(sub_pc)
+            except Exception:
+                for indices in index_sets:
+                    indices.destroy()
+                raise
+            return index_sets
 
-    return _csr_solver(PETSc, comm, setup, rtol, atol, maxit)
+        return _csr_solver(PETSc, comm, setup, rtol, atol, maxit)(K, b)
+
+    def linear_solve(K, b):
+        return solve_reduced(K, b, None)
+
+    linear_solve.solve_reduced = solve_reduced
+    return linear_solve

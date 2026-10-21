@@ -114,6 +114,12 @@ For a serial CSR solve, pass `linear_solve=make_petsc_solver(pc="lu",
 solver="mumps")` to `newton_solve`. Iterative PCs such as `gamg` default to
 GMRES for nonsymmetric coupled tangents. `make_fieldsplit_solver` takes named
 per-node component groups, for example `[("u", [0, 1]), ("T", [2])]`.
+It preserves original component identities when `newton_solve` eliminates
+individual constrained DOFs. Custom reduced-system callers should use
+`solve.solve_reduced(K_free, b_free, free_dofs)`, where `free_dofs` gives the
+original global DOF index of each reduced row. Calling `solve(K, b)` directly
+assumes a full interleaved layout. Fully constrained fields are omitted; if
+only one field remains, its `sub_pc` acts on that remaining system.
 MUMPS, hypre and other external PETSc solver packages must exist in the local
 PETSc build when selected; their failures are reported, never treated as a
 converged solve.
@@ -131,6 +137,8 @@ Run from the repository root on a shared filesystem. The default
 choose another shared build directory, and use a distinct directory for each
 simultaneous job. The MPI batch adapter's
 `root_linear_solver()` is a collective callable; every rank must enter it.
+Batch input conversion and validation errors are voted collectively before
+any rank raises, including preparation for `commit_group` and `commit_step`.
 Do not use `MPIBatchedElement` as the local evaluator of the distributed host.
 
 `solve_steps_mpi(..., begin_step=callback)` calls `callback(step, fraction)`

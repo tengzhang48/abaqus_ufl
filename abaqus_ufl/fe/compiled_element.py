@@ -164,21 +164,38 @@ class CompiledAbaqusElement:
         return (self.kinc, tuple((a.shape, a.dtype.str, a.tobytes())
                                 for a in map(np.asarray, arrays)))
 
-    def _agree_batch_cache_hit(self, hit, error):
-        """MPI overrides must enter a collective even for disabled caches."""
+    def _check_batch_error(self, error):
+        """MPI overrides vote on preparation errors before any rank raises."""
         if error is not None:
             raise error
+
+    def _agree_batch_cache_hit(self, hit, error):
+        """MPI overrides must enter a collective even for disabled caches."""
+        self._check_batch_error(error)
         return hit
 
-    def _evaluate_batch(self, coords, U, DU, sv):
+    def _evaluate_batch(self, coords, U, DU):
         key, error, hit = None, None, False
         entry = self._batch_cache
-        if self.cache_batches:
-            try:
+        try:
+            # Preparation can fail on only one MPI rank. Include it in the
+            # same error vote as key creation, before any cache/evaluation vote.
+            coords, U, DU = (np.asarray(a, dtype=float) for a in (coords, U, DU))
+            if U.ndim != 2:
+                raise ValueError("compiled Quad4 batch U must be a two-dimensional array")
+            ne = len(U)
+            sv = self.svars.copy() if self.svars is not None else np.zeros((ne, 1))
+            if coords.shape != (ne, 4, 2) or U.shape != (ne, self.ndofel) or DU.shape != U.shape:
+                raise ValueError("compiled Quad4 batch input shapes disagree with the nodal field layout")
+            if sv.shape != (ne, self.svars_size):
+                raise ValueError("committed SVARS shape disagrees with the element batch")
+            if not all(np.isfinite(a).all() for a in (coords, U, DU, sv)):
+                raise ValueError("element inputs must be finite")
+            if self.cache_batches:
                 key = self._batch_key(coords, U, DU, sv)
                 hit = entry is not None and entry[0] is self.module and entry[1] == key
-            except Exception as exc:
-                error = exc
+        except Exception as exc:
+            error = exc
         try:
             if self._agree_batch_cache_hit(hit, error):
                 self.batch_cache_hits += 1
@@ -238,12 +255,6 @@ class CompiledAbaqusElement:
 
     def _call_batch(self, coords, U, DU, sv):
         ne = len(U)
-        if coords.shape != (ne, 4, 2) or U.shape != (ne, self.ndofel) or DU.shape != U.shape:
-            raise ValueError("compiled Quad4 batch input shapes disagree with the nodal field layout")
-        if sv.shape != (ne, self.svars_size):
-            raise ValueError("committed SVARS shape disagrees with the element batch")
-        if not all(np.isfinite(value).all() for value in (coords, U, DU, sv)):
-            raise ValueError("element inputs must be finite")
         ids = self._batch_ids(ne)
         if not ne:
             return np.empty((self.ndofel, 0)), np.empty((self.ndofel, self.ndofel, 0)), sv.T.copy(), 1.0
@@ -255,9 +266,7 @@ class CompiledAbaqusElement:
 
     def element_rk_batch(self, coords_all, U_all, DU_all):
         """Trial R/K in element-major order; committed state remains unchanged."""
-        coords, U, DU = (np.asarray(a, dtype=float) for a in (coords_all, U_all, DU_all))
-        sv = self.svars.copy() if self.svars is not None else np.zeros((len(U), 1))
-        rhs, tangent, _, _ = self._evaluate_batch(coords, U, DU, sv)
+        rhs, tangent, _, _ = self._evaluate_batch(coords_all, U_all, DU_all)
         return -np.asarray(rhs, float).T, np.ascontiguousarray(tangent.transpose(2, 0, 1))
 
     def commit_step(self, nodes, elems, dof_per_node, U, U_previous):
@@ -265,18 +274,26 @@ class CompiledAbaqusElement:
         if self.svars is None:
             self.clear_batch_cache()
             return
-        if dof_per_node != self.dof_per_node:
-            raise ValueError("commit DOF layout disagrees with the compiled element")
-        elems, nodes = np.asarray(elems), np.asarray(nodes, float)
-        gm = (elems[:, :, None] * dof_per_node + np.arange(dof_per_node)).reshape(len(elems), -1)
-        self.commit_group(nodes[elems], np.asarray(U)[gm], (np.asarray(U) - U_previous)[gm])
+        try:
+            error, inputs = None, None
+            try:
+                if dof_per_node != self.dof_per_node:
+                    raise ValueError("commit DOF layout disagrees with the compiled element")
+                elems, nodes = np.asarray(elems), np.asarray(nodes, float)
+                gm = (elems[:, :, None] * dof_per_node + np.arange(dof_per_node)).reshape(len(elems), -1)
+                inputs = nodes[elems], np.asarray(U)[gm], (np.asarray(U) - U_previous)[gm]
+            except Exception as exc:
+                error = exc
+            self._check_batch_error(error)
+            self.commit_group(*inputs)
+        finally:
+            self.clear_batch_cache()
 
     def commit_group(self, coords, U, DU):
         """Commit one adapter's full batch; never commit a rejected evaluation."""
         try:
             if self.svars is not None:
-                args = [np.asarray(a, float) for a in (coords, U, DU)]
-                _, _, state, _ = self._evaluate_batch(*args, self.svars.copy())
+                _, _, state, _ = self._evaluate_batch(coords, U, DU)
                 self.svars = np.ascontiguousarray(state.T, dtype=float)
         finally:
             self.clear_batch_cache()

@@ -101,6 +101,8 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
     number, free residual norm, and relative residual, including convergence.
     ``batch_fn`` opts into batched assembly; ``linear_solve(K,b)`` opts into
     an alternative sparse solver, such as ``make_petsc_solver`` on COMM_SELF.
+    If the solver exposes ``solve_reduced(K,b,free_dofs)``, that method receives
+    the original global DOF indices for the reduced rows (used by FieldSplit).
     """
     nodes, elems, size = _mesh_inputs(nodes, elems, dof_per_node)
     if not np.isfinite(tol) or tol <= 0:
@@ -128,46 +130,45 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
             if hasattr(owner, 'reject_step'):
                 owner.reject_step()
 
-    for iteration in range(max_iter + 1):
-        try:
+    try:
+        for iteration in range(max_iter + 1):
             residual, tangent = evaluate(U)
-        except Exception:
-            reject()
-            raise
-        norm = np.linalg.norm(residual[free], ord=np.inf) if len(free) else 0.0
-        residual_scale = max(1.0, np.linalg.norm(residual, ord=np.inf))
-        if record_iteration is not None:
-            record_iteration({"iteration": iteration, "free_residual_inf": float(norm),
-                              "relative_residual": float(norm / residual_scale)})
-        # Reactions carry the force scale, so tol is relative to them (or 1).
-        if norm <= tol * residual_scale:
-            return U
-        if iteration == max_iter:
-            break
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("error", MatrixRankWarning)
-                solve = spsolve if linear_solve is None else linear_solve
-                delta = np.asarray(solve(tangent[free][:, free], -residual[free]), dtype=float)
-        except (MatrixRankWarning, RuntimeError) as error:
-            reject()
-            raise RuntimeError("serial FE linear solve failed") from error
-        if delta.shape != (len(free),) or not np.isfinite(delta).all():
-            reject()
-            raise RuntimeError("serial FE linear solve returned a nonfinite increment")
-        for search in range(12):
-            trial = U.copy()
-            trial[free] += (0.5 ** search) * delta
-            try:
-                trial_r, _ = evaluate(trial)
-            except RuntimeError:
-                continue
-            trial_norm = np.linalg.norm(trial_r[free], ord=np.inf)
-            if trial_norm < norm or trial_norm <= tol:
-                U = trial
+            norm = np.linalg.norm(residual[free], ord=np.inf) if len(free) else 0.0
+            residual_scale = max(1.0, np.linalg.norm(residual, ord=np.inf))
+            if record_iteration is not None:
+                record_iteration({"iteration": iteration, "free_residual_inf": float(norm),
+                                  "relative_residual": float(norm / residual_scale)})
+            # Reactions carry the force scale, so tol is relative to them (or 1).
+            if norm <= tol * residual_scale:
+                return U
+            if iteration == max_iter:
                 break
-        else:
-            reject()
-            raise RuntimeError("serial FE line search failed to reduce the free residual")
-    reject()
-    raise RuntimeError("serial FE Newton solve did not converge in {} iterations".format(max_iter))
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("error", MatrixRankWarning)
+                    solve = spsolve if linear_solve is None else linear_solve
+                    reduced = getattr(solve, "solve_reduced", None)
+                    matrix, rhs = tangent[free][:, free], -residual[free]
+                    update = solve(matrix, rhs) if reduced is None else reduced(matrix, rhs, free)
+                    delta = np.asarray(update, dtype=float)
+            except (MatrixRankWarning, RuntimeError) as error:
+                raise RuntimeError("serial FE linear solve failed") from error
+            if delta.shape != (len(free),) or not np.isfinite(delta).all():
+                raise RuntimeError("serial FE linear solve returned a nonfinite increment")
+            for search in range(12):
+                trial = U.copy()
+                trial[free] += (0.5 ** search) * delta
+                try:
+                    trial_r, _ = evaluate(trial)
+                except RuntimeError:
+                    continue
+                trial_norm = np.linalg.norm(trial_r[free], ord=np.inf)
+                if trial_norm < norm or trial_norm <= tol:
+                    U = trial
+                    break
+            else:
+                raise RuntimeError("serial FE line search failed to reduce the free residual")
+        raise RuntimeError("serial FE Newton solve did not converge in {} iterations".format(max_iter))
+    except Exception:
+        reject()
+        raise

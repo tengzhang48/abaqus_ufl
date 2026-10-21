@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import signal
 import shutil
 import subprocess
 import sys
@@ -11,7 +12,7 @@ import numpy as np
 import pytest
 from scipy.sparse import csr_matrix, diags
 
-from abaqus_ufl.fe import (make_fieldsplit_solver, make_petsc_solver,
+from abaqus_ufl.fe import (make_fieldsplit_solver, make_petsc_solver, newton_solve,
                            partition_rcb, partition_structured_quad,
                            partition_unstructured, structured_quad_mesh)
 
@@ -72,6 +73,45 @@ def test_fieldsplit_on_nonsymmetric_coupled_system(petsc, split):
     assert np.allclose(solve(csr_matrix(K), K @ exact), exact, atol=1e-10, rtol=1e-10)
 
 
+@pytest.mark.parametrize('split', ['additive', 'multiplicative', 'schur'])
+@pytest.mark.parametrize('fixed', [[0], [0, 2], [0, 2, 4, 6]])
+@pytest.mark.parametrize('sub_pc', ['lu', 'gamg'])
+def test_fieldsplit_newton_with_component_constraints(petsc, split, fixed, sub_pc):
+    nodes, elems = structured_quad_mesh(1, 1)
+    exact = np.column_stack((0.2 + nodes[:, 0], 0.4 + 2 * nodes[:, 1])).ravel()
+    K = np.diag(np.arange(3., 11.)) + 0.1 * np.triu(np.ones((8, 8)), 1)
+
+    def element(ei, xy, u, du):
+        target = np.column_stack((0.2 + xy[:, 0], 0.4 + 2 * xy[:, 1])).ravel()
+        return K @ (u - target), K
+
+    solve = make_fieldsplit_solver([('u', [0]), ('q', [1])], 2,
+                                    split_type=split, sub_pc=sub_pc, rtol=1e-12)
+    actual = newton_solve(nodes, elems, 2, element,
+                          {i: exact[i] for i in fixed}, linear_solve=solve, tol=1e-11)
+    assert np.allclose(actual, exact, atol=1e-10, rtol=0)
+
+
+def test_fieldsplit_preserves_fields_when_free_count_is_divisible(petsc):
+    nodes, elems = structured_quad_mesh(1, 1)
+    exact = np.column_stack((1 + nodes[:, 0], 2 + nodes[:, 1])).ravel()
+    # Independent field blocks: exact LU on each field must converge in one
+    # GMRES iteration. Mixing their indices breaks that property.
+    K = np.eye(8) * 4
+    K[0::2, 0::2] += np.triu(np.ones((4, 4)), 1)
+    K[1::2, 1::2] += 2 * np.triu(np.ones((4, 4)), 1)
+
+    def element(ei, xy, u, du):
+        target = np.column_stack((1 + xy[:, 0], 2 + xy[:, 1])).ravel()
+        return K @ (u - target), K
+
+    solve = make_fieldsplit_solver([('u', [0]), ('q', [1])], 2,
+                                    sub_pc='lu', maxit=1, rtol=1e-12)
+    actual = newton_solve(nodes, elems, 2, element,
+                          {i: exact[i] for i in (0, 2)}, linear_solve=solve, tol=1e-11)
+    assert np.allclose(actual, exact, atol=1e-10, rtol=0)
+
+
 def test_ksp_failure_is_not_a_solution(petsc):
     K = diags(np.arange(1., 21.)).tocsr()
     solve = make_petsc_solver(pc='none', ksp='gmres', maxit=1, rtol=1e-15)
@@ -102,11 +142,21 @@ def _mpiexec(petsc, script, args, timeout=90):
     if launcher is None:
         pytest.skip('optional runtime: mpiexec is not installed')
     # This subprocess is also the MPI ABI test: failures/timeouts must fail.
-    result = subprocess.run([launcher, '-n', '2', sys.executable, str(script), *map(str, args)],
-                            cwd=ROOT, capture_output=True, text=True, timeout=timeout,
-                            env={**os.environ, 'PYTHONUTF8': '1'})
-    assert result.returncode == 0, result.stdout + result.stderr
-    return result.stdout
+    process = subprocess.Popen(
+        [launcher, '-n', '2', sys.executable, str(script), *map(str, args)],
+        cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        start_new_session=(os.name == 'posix'), env={**os.environ, 'PYTHONUTF8': '1'})
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        if os.name == 'posix':
+            os.killpg(process.pid, signal.SIGKILL)
+        else:
+            process.kill()
+        stdout, stderr = process.communicate()
+        pytest.fail('MPI probe timed out after {}s\n{}{}'.format(timeout, stdout, stderr))
+    assert process.returncode == 0, stdout + stderr
+    return stdout
 
 
 def test_parallel_compiled_example_matches_serial_and_oracles(petsc, tmp_path):

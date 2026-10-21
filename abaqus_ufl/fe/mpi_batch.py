@@ -63,8 +63,11 @@ class MPIBatchedElement(CompiledAbaqusElement):
         self.batch_calls = 0
         self.batch_elapsed_s = 0.0
 
-    def _agree_batch_cache_hit(self, hit, error):
+    def _check_batch_error(self, error):
         collective_status(error, comm=self.comm)
+
+    def _agree_batch_cache_hit(self, hit, error):
+        self._check_batch_error(error)
         return bool(np.all(gather([int(hit)], self.comm) == 1))
 
     def _call_batch(self, coords_all, U_all, DU_all, sv_all):
@@ -80,11 +83,6 @@ class MPIBatchedElement(CompiledAbaqusElement):
         packet = np.empty((end - begin, self.ndofel + self.ndofel**2 + self.svars_size))
         try:
             ids = self._batch_ids(ne)
-            if (coords_all.shape != (ne, 4, 2) or U_all.shape != (ne, self.ndofel)
-                    or DU_all.shape != U_all.shape or sv_all.shape != (ne, self.svars_size)):
-                raise ValueError("MPI batch input shapes disagree with the Quad4 layout")
-            if not all(np.isfinite(a).all() for a in (coords_all, U_all, DU_all, sv_all)):
-                raise ValueError("MPI batch inputs must be finite")
             self.elem_ids = ids[owned]
             if end > begin:
                 result = super()._call_batch(coords_all[owned], U_all[owned], DU_all[owned], sv_all[owned])

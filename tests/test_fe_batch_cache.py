@@ -8,7 +8,8 @@ import pytest
 import abaqus_ufl as au
 from abaqus_ufl.core.tensor import eye, trace
 from abaqus_ufl.fe import (CompiledAbaqusElement, IncrementTooLarge, assemble,
-                           assemble_batched, build_compiled_uel, structured_quad_mesh)
+                           assemble_batched, build_compiled_uel, newton_solve,
+                           structured_quad_mesh)
 from abaqus_ufl.fe.compiled_element import _signature
 
 
@@ -160,6 +161,53 @@ def test_manual_clear_rejection_and_increment_preserve_counters():
         assert element._batch_cache is None
     assert kernel.calls == element.batch_evaluations == 3
     assert element.batch_cache_hits == 0
+
+
+@pytest.mark.parametrize('failure', ['value', 'type', 'runtime', 'result', 'callback'])
+def test_failed_newton_clears_trial_cache(failure):
+    element, _, _ = case()
+    nodes, elems = structured_quad_mesh(2, 1)
+    previous = element.svars.copy()
+    error_type = {'type': TypeError, 'runtime': RuntimeError}.get(failure, ValueError)
+
+    def fail(*args):
+        if failure == 'result':
+            return ['invalid-number'] * len(args[1])
+        raise error_type('deliberate failure')
+
+    options = {'record_iteration': fail} if failure == 'callback' else {'linear_solve': fail}
+    with pytest.raises(error_type):
+        newton_solve(nodes, elems, 2, None, {}, batch_fn=element.element_rk_batch, **options)
+    assert element._batch_cache is None
+    assert np.array_equal(element.svars, previous)
+
+
+@pytest.mark.parametrize('argument', [0, 1, 2])
+@pytest.mark.parametrize('commit', [False, True])
+def test_batch_conversion_failure_clears_cache_without_committing(argument, commit):
+    element, _, inputs = case()
+    element.element_rk_batch(*inputs)
+    previous = element.svars.copy()
+    invalid = list(inputs)
+    invalid[argument] = invalid[argument].astype(object)
+    invalid[argument].flat[0] = 'invalid-number'
+    call = element.commit_group if commit else element.element_rk_batch
+    with pytest.raises(ValueError, match='could not convert'):
+        call(*invalid)
+    assert element._batch_cache is None
+    assert np.array_equal(element.svars, previous)
+
+
+def test_commit_step_preparation_failure_clears_cache_without_committing():
+    element, _, inputs = case()
+    element.element_rk_batch(*inputs)
+    nodes, elems = structured_quad_mesh(2, 1)
+    previous = element.svars.copy()
+    U = np.zeros(len(nodes) * 2)
+    with pytest.raises(ValueError, match='commit DOF layout'):
+        element.commit_step(nodes, elems, 3, U, U)
+    assert element._batch_cache is None
+    assert np.array_equal(element.svars, previous)
 
 
 def test_scalar_calls_stay_uncached_and_scalar_commit_invalidates_batch():
