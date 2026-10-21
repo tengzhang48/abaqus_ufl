@@ -128,7 +128,8 @@ mpiexec -n 2 python examples/scalar_diffusion_uel/check_parallel.py
 
 Run from the repository root on a shared filesystem. The default
 `.parallel-build/` directory retains source and logs. Use `--build-dir` to
-choose another shared build directory. The MPI batch adapter's
+choose another shared build directory, and use a distinct directory for each
+simultaneous job. The MPI batch adapter's
 `root_linear_solver()` is a collective callable; every rank must enter it.
 Do not use `MPIBatchedElement` as the local evaluator of the distributed host.
 

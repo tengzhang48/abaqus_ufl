@@ -240,3 +240,78 @@ the 132-character free-form line limit — split rather than concatenate.
 Resolving the race also removes the artificial ceiling on problem size:
 once the parallel loop is correct, mesh refinements that were previously
 unreachable run, and performance comparisons become meaningful at scale.
+
+## Active dimensions
+
+Plane strain retains full 3x3 tensors with F33=1 and zero out-of-plane shears.
+Only in-plane displacement derivatives enter a 2D assembly. Skipping unused
+complex-step columns saves constitutive evaluations, but is valid only for
+that kinematic contract. The [performance lesson](performance-and-parallel.md#perturb-only-active-columns)
+owns the optimization rationale and parity checks; the
+[API](../API_USAGE.md#generate_umat) owns the opt-in UMAT and automatic UEL behavior.
+
+## Gradient-of-stress consistency
+
+A bilinear displacement on an affine Q4 cell has no element-interior normal
+second derivative. Recovering a stress-gradient flux from those incomplete
+second derivatives can omit terms and retain a bias under refinement.
+A continuous auxiliary field, such as q=g*p_eff tied by an L2 projection,
+provides a defined gradient; a suitable higher-order displacement field is
+another formulation choice. Derive its coupling and consistent tangent rather
+than treating stress recovery as postprocessing.
+
+Swelling also exposes interpolation compatibility: bilinear concentration can
+prescribe a strain that bilinear displacement cannot represent. Parasitic
+stress then contaminates the damage driving force even when Newton converges.
+An internal benchmark distinguished that error from quadrature by comparing
+mixed order and condensed enhanced strain modes. More Gauss points alone did
+not cure the incompatible displacement space.
+
+Use an independent higher-order reference, mesh/time refinement and integral
+observables. Prefer displacement one order higher for the relevant coupling
+when supported by the formulation. With fixed four-node topology, enhanced
+local modes require a separate derivation, condensation and tangent check;
+they are not a newly supported generator option. The
+[pivot record](../pivots.md#p2-compatible-interpolation-for-stress-gradient-coupling)
+separates that decision from its motivation.
+
+## Mesh-order changes require new set-membership checks
+
+Adding midside nodes changes boundary, MPC, equation, coupling, contact, load
+and output sets as well as connectivity. A clean solve can leave new boundary
+nodes unconstrained, or constrain them incompatibly through both an MPC and
+contact. Rebuild sets from geometry and their distinct physical roles. Check
+membership and incompatible overlaps, then verify the intended geometric
+constraint in the solved fields; element/node counts and detJ alone miss it.
+
+Adjacent standard-element material choices may also change with interpolation
+order. Keep solver completion separate from acceptance, document any controlled
+compressibility or regularization approximation, and compare the response
+with its unregularized reference. Do not infer that a neighboring standard
+material remains valid because the UEL itself converged.
+
+## Adapter layout and accepted state are part of the element contract
+
+A generated kernel can be correct while a host infers a different topology,
+coordinate dimension, Gauss count or field layout. Derive those from the active
+configuration, or explicitly reject unsupported layouts as the small Quad4
+host does. Test each adapter with the same nontrivial state and properties.
+Read constructor overrides from the material instance rather than the class
+property defaults; otherwise a parameter change can be silently ignored.
+
+During Newton, evaluate from a copy of committed old state and commit only the
+accepted trial. Use the assembler's own quadrature/state packing for commit so
+an independent recovery loop cannot drift. The beginning-of-increment TIME
+contract determines whether declared state initializes or seeded SVARS survive;
+first and later increments both need tests. The
+[host API](../../abaqus_ufl/fe/README.md#exact-batches-and-material-state) owns its
+explicit allocation, commit and rejection calls.
+
+## Verify geometry independently of assembly
+
+Positive mapping Jacobians do not establish the intended domain. Check element
+type purity, node order and total area/volume against analytic geometry. Use
+an independent signed-area/volume calculation as well as Gauss-point detJ,
+rather than asking the assembler to certify its own map. For new templates or
+configurations, a compiled distorted-mesh affine patch with solved interior
+DOFs catches node order, mapping and quadrature defects together.

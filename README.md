@@ -233,8 +233,8 @@ See [`CREDITS.md`](CREDITS.md).
   paths, branching, state, and verification.
 - [Design documentation](docs/README.md): generator and tangent-engine
   internals.
-- [Lessons learned](docs/lessons/): distilled Abaqus, Fortran, code-generation,
-  validation, and release lessons.
+- [Start here: lessons, pitfalls, pivots and skills](docs/lessons/README.md):
+  one task-to-item index and a canonical home for each kind of guidance.
 - [Fresh-clone Abaqus validation](docs/ABAQUS_VALIDATION_2026-07-30.md):
   current-source smoke solves, paper-case datachecks, and remaining scope.
 - [AI-assistant guide](ai_skills/README.md): operational project guidance for

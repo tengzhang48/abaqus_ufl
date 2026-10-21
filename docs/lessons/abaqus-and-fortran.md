@@ -175,7 +175,7 @@ both REAL and COMPLEX arguments in standard Fortran.
 ### Always IMPLICIT NONE
 
 Without `IMPLICIT NONE`, undeclared variables starting with `i`-`n` default to
-INTEGER and `a`-`h`, `o`-`z` default to `REAL*4`. A typo like `detj` instead of
+INTEGER and `a`-`h`, `o`-`z` default to `REAL*4`. A typo like `det_j` instead of
 `detJ` then silently creates a single-precision variable.
 
 **Fix:** Put `IMPLICIT NONE` in every subroutine.
@@ -186,8 +186,11 @@ Uppercase and lowercase identifiers are the same symbol. A generated
 declaration like `DOUBLE PRECISION :: J` collides with an integer loop
 variable `j`, and compilers such as `gfortran` reject the code.
 
-**Fix:** Never use single uppercase letters (`I`, `J`, `K`, `L`, `M`, `N`) as
-variable names — they collide with lowercase loop indices.
+Use descriptive names across fields, properties, arguments, temporaries and
+loop indices. A field `d` can collide with a local `D`, and a throwaway `_`
+unpacking target is not a valid Fortran identifier. Declaration scans must
+recognize the base name of an indexed use instead of declaring `COL(ii)` as a
+new symbol. Compile generated source to expose namespace conflicts.
 
 ---
 

@@ -1,567 +1,159 @@
-# abaqus_ufl Pitfalls
-
-This file lists failure modes repeatedly found in tests, examples, and notes.
-Use it when debugging generated UMAT/UEL behavior.
-
-## Abaqus Interface
-
-- `RHS` is two-dimensional: use `RHS(i,1)`, not `RHS(i)`.
-- UEL tangent convention is `AMATRX = -d(RHS)/d(U)`.
-- Abaqus does not pass old UEL field values. Reconstruct old values as
-  `old = U - DU`.
-- `DTIME = 0` can occur during initial stiffness calls. Guard divisions by
-  `DTIME`.
-- Explicitly zero `RHS` and `AMATRX`; do not trust incoming memory.
-- Use `PNEWDT` for inverted elements, large increments, or detected invalid
-  states. Set `PNEWDT` to a fraction such as `0.25` to request a cutback and
-  to `1.0` when the state is acceptable. Larger growth requests are
-  solver-dependent and should be used deliberately. The generators already
-  emit `PNEWDT = 0.25` for `det F <= 0` (finite-strain UMATs and UELs) and for
-  NaN or Inf in `STRESS`/`DDSDDE` or `RHS`/`AMATRX` (all generated UMATs and
-  UELs); `tests/test_runtime_guards.py` calls each guard. The NaN/Inf test
-  (`isnonfinite_d` in `tensor_ops.for`) checks the IEEE exponent bits, because
-  a fast floating-point model can fold `x .NE. x` to false: gfortran
-  `-ffast-math` does (tested in the same file), and Intel compilers default to
-  a fast model.
-- A finite-strain UMAT computes stress from `DFGRD1`, so run its steps with
-  `NLGEOM=YES`. A zero or inverted `DFGRD1` (det F <= 0) requests a cutback
-  instead of returning NaN stress.
-- Derive or measure tangent symmetry; do not infer it from the number of
-  fields. Use `UNSYMM` when the assembled UEL or UMAT tangent is genuinely
-  nonsymmetric. If it is omitted for a nonsymmetric operator, convergence can
-  degrade or fail; if it is declared for a symmetric operator, Abaqus pays the
-  cost of an unsymmetric solver. `UNSYMM` does not fix bad physics or large
-  steps.
-- Solver completion does not validate ODB fields. Check the authoritative
-  solved field, any optional `UVARM`/dummy-element visualization bridge, and the
-  extractor/postprocessor as separate interfaces.
-- Finite output is not a coverage test. Require every expected instance-qualified
-  node or element/integration-point identity, reject duplicates and missing
-  records, and check non-finite values before comparing magnitudes.
-- Do not use a flat ODB list index for a multi-element result. The stable
-  integration-point identity is `(step, frame, instance, element label,
-  integration point)`; the stable nodal identity includes the instance and node
-  label.
-- Map logical fields to Abaqus fields/slots/active DOFs per formulation. A
-  thermal-style field name such as `NT11` has no universal physical meaning.
-- Treat a native duplicate mesh as topology or visualization support unless its
-  field has been audited against the authoritative UEL solution.
-- `UVARM` can receive an assembly-internal element number while the ODB shows a
-  part-local label. Convert the number space explicitly before applying a label
-  offset.
-- Never assume that a generated UEL and a native visualization element use the
-  same integration-point numbering. Declare and test the permutation
-  point-by-point.
-- Do not label an output defect as MPI/thread-related until the same identity
-  and coverage audit has been run in serial.
-- `*UEL PROPERTY` accepts at most eight real property values per data line.
-  Split longer ordered `PROPS` lists across continuation data lines. A declared
-  `NPROPS` can still be correct while an unsplit ninth value reaches the UEL as
-  zero, so inspect or instrument the received properties when a new deck fails
-  immediately.
-- A reduced-integration native element with hourglass modes and a UMAT needs
-  explicit section hourglass stiffness because Abaqus cannot infer the initial
-  shear modulus from `*User Material` during preprocessing. For a solid in
-  Abaqus/Standard, `*Hourglass Stiffness` with `0.005 G` reproduces the usual
-  total-stiffness default; place it immediately after `*Solid Section`.
-
-## DOF and State Layout
-
-- Generated UELs are node-major:
-  ```text
-  node 1: ux, uy, scalar_1, scalar_2, ...
-  node 2: ux, uy, scalar_1, scalar_2, ...
-  ```
-- Abaqus `*User Element` active DOF labels must match generated ordering.
-- Mixed-degree fields must define which nodes own which scalar DOFs.
-- Tensor UMAT `STATEV` values consume 9 slots each.
-- Document every `STATEV`/`SVARS` slot before writing an Abaqus deck.
-- For generated local-pressure UELs, do not overwrite `SVARS(1)`: it is the
-  condensed pressure state. Diagnostics require extra slots:
-  `SVARS(1+i)=phi_i` and `SVARS(1+NGP+i)=p_i`.
-- Multi-history UEL tangents need explicit caller/callee order checks. A
-  2026 audit found generated CS tangent subroutines declaring old scalar field
-  histories alphabetically while the caller passed field-declaration order.
-  Example bad pattern: callee `F_old, c_old, phi_old` and caller
-  `F_old_gp, phi_old_gp, c_old_gp`. The residual can still be correct, so this
-  shows up as Newton robustness/cutback trouble rather than a wrong-looking
-  one-step result. Add or run a regression where old scalar fields have
-  different values.
-
-## Material / WeakForm Authoring
-
-- Material method names are **matched, not validated**. Only the canonical
-  names in `core/defs.py:METHOD_INFO` and `core/weakform.py:EQUATION_INFO` are
-  detected (`stress_PK1`, `pressure_resid`, `solvent_storage`, `solvent_flux`,
-  `momentum_equation`, `pressure_equation`, `transport_equation`, ...). A
-  declared equation whose material defines none of its recognized storage/flux
-  methods now raises `TypeError` (`weakform.py`, tested in
-  `tests/test_equation_method_guard.py`). A material method with any other
-  name (e.g. a paper-spec sketch's `pp_potential`, `constraint_resid`) is still
-  **silently ignored** — no tangent block, no Fortran. When porting a spec,
-  reconcile method names against `defs.py`/`weakform.py` first.
-- Test-function-to-field mapping is by convention (`v->u`, `q->p`, `w->mu`;
-  `weakform.py:TEST_TO_FIELD`). Map physics onto these slots: the value-assembly
-  `pressure_equation` is the natural home for an algebraic constraint; the mixed
-  `transport_equation` for a conserved field's storage+flux.
-- `verify()`'s stress-free check is hardwired to a **zero-field** reference
-  (`F=I, p=0, mu=0`; `core/verify.py:_check_stress_free`). A material that is
-  stress-free at a **nonzero** natural field value (e.g. a volume fraction
-  `Phi=Phi_ref`) fails this check spuriously while every tangent block passes.
-  Drive the stress-free check at the true reference yourself; keep the
-  framework's CS-vs-FD tangent and major-symmetry checks.
-- Anything referenced as `self.<x>` inside a generated method must be a declared
-  `prop` (it becomes `PROPS(i)`). Derived attributes computed in `__init__` do
-  not translate.
-- A `self._helper()` is translated to its own Fortran subroutine (UMAT and UEL
-  paths). The helper body must use translator-supported idioms: branch with
-  **statement-form** `if x.real > 0.0:` (maps to `IF (DBLE(x) .GT. 0)`), not a
-  `hasattr`/ternary; Python floats already carry `.real`. A shared helper is
-  emitted once. (Before mid-2026 the UEL helper path was broken; if you see a
-  `field_args` NameError or "Helper method dispatch requires a material
-  instance", the generator is out of date.)
-- **State-variable update conventions (UEL `stress_PK1`)** — three rules, each a
-  real compile/codegen failure in a coupled u-c-phi element:
-  - Return the new state as a **dict literal in the `return`**:
-    `return P, {'ep': ep_new, 'Fp': Fp_new}`. Assigning it first
-    (`state = {...}; return P, state`) makes the translator hit a bare `Dict`
-    statement -> "Unsupported expression: Dict".
-  - `stress_PK1` must list **every** declared state var's `_old` in its Python
-    signature — even one it recomputes and never reads (e.g. `hydro_old` for a
-    `sigma_h` state). The codegen adds all state `_old` args to the subroutine; a
-    missing one is passed REAL into a COMPLEX arg -> "Type mismatch ... passed
-    REAL(8) to COMPLEX(8)" at compile, not at generate.
-  - A **tensor** state var (`eps_p`, `Fp`) is typed as a tensor only inside
-    `stress_PK1`; in any other method it is mis-inferred as **scalar**. A
-    `self._helper()` called from both `stress_PK1` and a scalar-equation method
-    with that tensor arg fails: "called with multiple argument kind signatures".
-    Work around by computing the needed scalar (e.g. `sigma_h`) in `stress_PK1`
-    and passing it to the scalar equation as a **scalar state var**. This also
-    keeps the J2 return map out of the scalar equation.
-
-## Fortran Generation
-
-- Fixed-format column 72 still matters. Use the repo line wrapper.
-- No `BLOCK`, variable-length arrays, or modern Fortran features in Abaqus
-  fixed-form output.
-- Use standard complex intrinsics: `LOG`, `EXP`, `SQRT`, not GNU-specific names.
-- Fortran is case-insensitive. Avoid single-letter uppercase variables that
-  collide with loop indices — **and with field/param names in coupled models**:
-  a local `D` (a driving force) collides with a damage **field** `d` ->
-  "Symbol 'd' already has basic type of COMPLEX". Rename shadowing locals
-  (`Dval`; `triax` for a triaxiality `T` that would clash with `TIME`).
-- A throwaway `_` in tuple unpacking (`a, _, c = f()`) becomes a Fortran variable
-  named `_`, which is invalid. Name every unpacked value (`a, ep_tmp, c = ...`).
-- Not every `core/tensor` function is translator-supported. Supported: `det, inv,
-  log, exp, sqrt, trace, dev, eye, dyad, sym3, sqrtm, logm, expm, tanh`. **`sym`
-  is NOT** — write `0.5*(F + F.T)`. `tanh` **IS** supported (emitted as
-  `cs_tanh`); if you prefer you can also build it from `exp`
-  (`(exp(2x)-1)/(exp(2x)+1)`). An unsupported name raises "Unsupported function:
-  <name>" at generate time (verify() is unaffected).
-- Plane strain still uses 3x3 tensors with `F33 = 1`.
-- **Powers.** A whole-number exponent (`z**2`, `z**2.0`, `z**-1`) is emitted as a
-  Fortran integer power, evaluated by multiplication (tested in
-  `tests/test_translator_guards.py`). An INTEGER base (a loop index) with a
-  negative exponent is converted with `DBLE` first, and `i / j` between two
-  loop indices is emitted as real division, matching Python. A fractional exponent still becomes the
-  complex power `z ** DCMPLX(a)` = `exp(a*log z)`, whose value at `z = 0` depends
-  on the compiler's runtime library (gfortran 11 returns 0; NaN has been reported
-  elsewhere). For a fractional power of a quantity that can be exactly zero, such
-  as a Gauss point at a symmetric coordinate, guard it with a branch on the real
-  part. `verify()` at a generic state will not catch this.
-- `X` (Gauss-point reference position, a vector) and `time` (total time) are
-  injectable UEL params (`PARAM_ARGS`): add them to a material/equation method
-  signature and the generator threads `X_gp = sum_a N_a X_a` and `TIME(2)` in.
-  Use them for spatiotemporal drivers `f(X)`, `C(t)`.
-- UEL material generation must preserve `.real` variables as real variables.
-  If a method does `x_r = x.real` and then branches on `x_r`, the generated
-  declaration must be `DOUBLE PRECISION :: x_r`, not `DOUBLE COMPLEX`. UMAT
-  already had this tracking; an F-bar UEL exposed the same requirement.
-- Stateful material subroutine calls in UEL F-bar helpers must match the
-  generated signature: all old state variables first, then `dt`. Do not blindly
-  replay the Python method order when the generated subroutine groups state
-  arguments differently.
-
-## F-bar Routing
-
-- `formulation="fbar_mechanics"` is for pure displacement UELs only. Do not
-  force it onto coupled `u + damage`, `u + mu`, or thermal
-  weak forms.
-- If a low-order coupled model needs locking control, first add a
-  pure-mechanics F-bar version to isolate the mechanical BVP. A coupled F-bar
-  variant needs a separate derivation of how `Jbar` enters every
-  volume-dependent storage/source/gradient term and the corresponding tangent
-  chain rules.
-- For a low-order coupled `u + damage` model, keep the pure-mechanics F-bar
-  element and the `u + damage` gradient-damage UEL as separate formulations;
-  they are not interchangeable.
-- F-bar fixes the low-order volumetric element route; it does not fix a
-  constitutive tangent that is already nonfinite in a single Gauss-point
-  compression probe.
-
-## Complex-Step and Matrix Functions
-
-- Complex-step tangent checks catch residual/tangent consistency, not physical
-  correctness.
-- Branch on `.real` when a branch is unavoidable. Do not branch on the
-  imaginary perturbation.
-- A branch on `.real` is **invariant** under the imaginary complex-step
-  perturbation, so an elastic/plastic (yield) switch is *not* a complex-step
-  discontinuity — do not blame the branch for a tangent NaN.
-- Repeated eigenvalues are dangerous for eig-based matrix functions — but
-  *test* whether eig actually misbehaves at the failing state before blaming
-  degeneracy. In one debugging session the degenerate states were finite in
-  both the Python `eig` and the compiled `eig33z`; the NaN was elsewhere
-  (a return-map formulation issue). Confirm the culprit at the exact state.
-- Finite-strain UMAT generation defaults to `matrix_backend="iterative"` for
-  `logm`, `sqrtm`, `expm`, and `polar` because eig-based guards can erase
-  complex-step perturbations near diagonal states.
-- One specific leak was an `eig33z` near-diagonal guard:
-  tiny complex-step off-diagonals caused the eig backend to return `V = I`,
-  zeroing shear-block derivatives in `logm33z`. Lowering the guard threshold
-  only moves the failure; the robust default is the iterative backend.
-- Use `matrix_backend="eig"` only deliberately, usually for compatibility or
-  controlled performance comparison.
-- **A CS-vs-FD failure at an extreme state can be FD noise, not a CS bug.**
-  `verify()`'s FD eps is hardwired (1e-7); a heavy element evaluation
-  (eig + iterative logm/expm + inner Newton) has a numerical noise floor that
-  central FD divides by eps. Diagnostic: sweep the FD eps — if FD CONVERGES TO
-  the CS value as eps GROWS (e.g. 9e-6 rel at eps=1e-5
-  vs 1.2e-3 at 1e-7), the CS tangent is right; probe that state directly with
-  an appropriate eps instead of "fixing" the model. Instrument the local
-  Newton's real AND imaginary residuals before blaming it.
-
-## UEL Weak-Form Signs
-
-For scalar UEL equations the generated tuple convention is:
-
-```text
-RHS += -storage * N + flux . grad(N)
-```
-
-Here `flux` is a code-generation name for the coefficient of
-`grad(test)`, not necessarily a physical flux. Do not add a separate
-physical-flux mapping layer unless the paper itself is written as a
-conservation law. The shortest safe pipeline is:
-
-1. write the weak form term you want;
-2. match it to `storage * test - flux . grad(test)`;
-3. return that coefficient directly.
-
-If the paper gives only a strong form, derive the weak form once and then use
-the same direct matching. Avoid translating through "physical flux" and then
-translating again into the tuple API; that extra mapping is where most sign
-mistakes have entered.
-
-Do not infer flux sign from field name. Phase and species equations can
-require different storage/flux sign choices.
-
-AT2 damage/fracture is a common trap. If
-`storage = Gc/ell*d - 2*(1-d)*H`, the desired weak form contains
-`+ Gc*ell*grad(d).grad(test)`, so the generated material method must return:
-
-```python
-def phase_flux(self, grad_d):
-    return -self.Gc * self.ell * grad_d
-```
-
-The old `phasefield_fracture_uel` pattern with `+Gc*ell*grad_d` is a stale bad
-template, not a rule to copy. Homogeneous smoke tests and CS tangent checks can
-pass with the wrong sign because they only prove residual/tangent consistency,
-not PDE correctness. Add a non-homogeneous gradient-sign check for every new
-damage or phase-field UEL.
-
-Do not design phase-field equations by analogy to diffusion fluxes. Diffusion
-is a conserved balance with a physical flux. AT2 damage and many order-parameter
-models are variational gradient equations; write the positive weak-form
-gradient coefficient first and then adapt its sign to the tuple convention.
-
-The same trap appears in a pure rate-plus-gradient equation.
-For a generated equation with
-
-```text
-storage = (theta - theta_old) / dt - drive
-paper: theta_dot = drive + (K / eta) * grad^2(theta)
-```
-
-the generated method must return:
-
-```python
-def phase_flux(self, grad_theta):
-    return -(self.K_F / self.eta_D0) * grad_theta
-```
-
-and similarly for order-parameter gradients:
-
-```python
-def species_flux(self, grad_S):
-    return -(self.K_E / self.eta_S) * grad_S
-```
-
-This is easy to miss because a dt-dominated transient equation can look stable
-in homogeneous tests and can even defeat derivative-sign heuristics. Use an
-assembled operator check at the resolving scale, e.g. `K = s*M - Df*L` at
-`h = sqrt(|Df|/|s|)/10`, and include a deliberately flipped-flux control case.
-
-Scope note: the built-in `OperatorSignWarning` is a screening tool, not a proof.
-It covers the current isotropic scalar-gradient examples. For anisotropic
-gradient energy or cross-gradient coupling, inspect the full `dflux/dgrad`
-tensor spectrum or assemble the full element block directly.
-
-## Multiplicative-Plasticity and Finite-Strain Kinematics
-
-For `F = Fe Fp` plasticity, a recurring class of bug is exact under
-coaxial/axisymmetric loading and wrong under rotation — so it passes
-every diagonal-`F` test and only shows up off-axis. Check these directly,
-on a deliberately NON-coaxial state (rotated principal directions, a
-non-diagonal `Fp_old` that does not commute with `expm(dt*Dp)`):
-
-- **Push-forward must use the UPDATED `Fp`.** The PK1
-  `P = Re @ Me @ inv(Ue) @ inv(Fp).T` (or any `... Fp^{-T}`) must use
-  `Fp_new`, not `Fp_old`. Using `Fp_old` after computing `Me` on the
-  updated `Fe` is internally inconsistent and is a real stress error
-  even for axisymmetric loading (it does not need rotation to bite — it
-  cost 2.6% on a compression path). The Mandel stress
-  and the pull-back map must reference the same plastic state. Dilatant
-  plasticity (`tr Dp != 0`, `Jp != 1`) also needs the `Jp` factor the
-  small-strain form drops.
-- **`Fe` reconstruction factor order.** The updated elastic gradient is
-  `Fe = F @ inv(Fp_new)` (equivalently `Fe_tr @ inv(expm(dt*Dp))`).
-  Beware rearrangements like `Fe_tr @ inv(Fp_new) @ Fp_old` — they equal
-  the correct value ONLY when `Fp_old` commutes with `expm(dt*Dp)`
-  (coaxial), and silently violate `F = Fe Fp_new` otherwise. Assert
-  `F == Fe @ Fp_new` numerically at a non-coaxial state.
-- **Eigenvector-based slip systems / spectral reconstructions.** `V.T`
-  vs `inv(V)`: the framework `eig` returns UNNORMALIZED eigenvectors
-  (use `inv(V)`, not `V.T`, for reconstruction). Wrong here is exact at
-  diagonal inputs and ~100% wrong at rotated inputs. At repeated
-  eigenvalues the eigenvectors are
-  non-unique — a genuine constitutive ambiguity, not just a numerical
-  one.
-
-General rule: treat every matrix-algebra rearrangement as unproven until
-you have checked it on a non-commuting example. "Exact on a diagonal
-case" is not evidence.
-
-## Finite-Strain Tensor-Return Shape Trap
-
-When a finite-strain UMAT/UEL material method returns a tensor, prefer assigning
-`det(F)` to a scalar temporary before using it in the returned tensor expression:
-
-```python
-# Historically risky in finite-strain UMAT/UEL generation
-return G * (F - inv(F).T) + K * log(det(F)) * inv(F).T
-```
-
-This formula is mathematically correct. It historically exposed a
-component-wise tensor-return codegen bug that emitted invalid Fortran like:
-
-```fortran
-LOG(det33z(F(ii,jj)))
-```
-
-`det33z` needs the full `3x3` tensor, not a scalar component. The runtime symptom
-is often an all-NaN element residual/tangent even for a simple undeformed element.
-
-Use explicit scalar/tensor temporaries for readability and easier generated-code
-inspection:
-
-```python
-J = det(F)
-FinvT = inv(F).T
-return G * (F - FinvT) + K * log(J) * FinvT
-```
-
-Regression tests now cover the direct-return `det(F)` case
-(`tests/test_translator_guards.py` and `tests/test_runtime_guards.py`), and
-the same test scans every committed `.for` file for component-indexed
-`det33z` arguments. For a new model it is still worth grepping its `.for`
-file for impossible patterns such as `det33z(F(ii,jj))`. If any matrix helper receives a component-indexed
-tensor argument, treat that as a code-generation shape bug, not a mechanics or
-solver-convergence issue.
-
-## Local Return Maps and Nonlinear Hardening
-
-A local Newton / implicit return map *inside* the element is supported and is
-often the correct choice. Branch on `.real`, use a bounded `for k in range(N)`
-loop and an analytic Jacobian, and guard both real and imaginary residuals for
-non-finite values. The complex step can then differentiate through the
-converged iterate.
-
-- **Solve for a smooth, well-scaled unknown.** If the constitutive relation is
-  singular or extremely stiff in the obvious increment variable, reformulate
-  the local consistency equation using a standard computational-plasticity
-  unknown whose derivative remains finite. This is a formulation decision, not
-  a reason to add arbitrary damping.
-- **Case-insensitive Fortran bites local-Newton temporaries.** A residual named `g`
-  collides with shear modulus `G`; `dg` with anything `DG`. Name them `gres`/`dgres`.
-
-## Transcribing From The Paper
-
-These transcription errors recurred and no consistency test catches
-them. When porting equations and tables:
-
-- **A constraint is not a definition.** A paper inequality / restriction
-  (something that "must hold", `>= 0`, a dissipation condition) is not
-  the defining formula. Take each expression from its definition equation and
-  cite that equation at the code site.
-- **Cross-check every parameter against its specific table, digit and
-  unit.** When a paper has sibling mechanisms or materials, values migrate
-  from the wrong table or carry over from the
-  previously-coded sibling. Annotate each property with its source table and
-  unit.
-- **One symbol, one role.** Do not reuse a variable (e.g. an exponent)
-  for two distinct physical meanings.
-- **A quantity and its variational dual must be derived separately.**
-  Getting the stress sign right (derived from the energy) says nothing
-  about the dual gradient-flux sign — one case got the stress right and the
-  flux wrong. Derive both; check consistency.
-
-## Coupled Dummy Materials In Abaqus
-
-For a coupled temperature-displacement dummy element used alongside a UEL,
-Abaqus may require density and specific heat in addition to conductivity:
-
-```abaqus
-*Material, name=extra_material
-*Elastic
-1.0e-20, 0.3
-*Density
-1.0,
-*Conductivity
-0.25,
-*Specific Heat
-1.0,
-```
-
-Use `au.ensure_coupled_dummy_material(...)` when rebuilding coupled UEL decks
-through the input scaffold path.
-
-## Non-Abaqus Regression Runtimes
-
-- A non-Abaqus regression runtime is not Abaqus, and its nonlinear driver is
-  typically simpler.
-- Legacy UELs with approximate tangents can fail in a simpler runtime even if
-  Abaqus can stabilize them.
-- MUMPS/MPI-MUMPS helps large generated UEL/UMAT runs, but solver success is
-  not independent model verification.
-- Parse VTK connectivity; do not assume VTK point order equals input node-label
-  order.
-- Template a same-NDOFEL single-element deck and set the initial DOF at the
-  model's true equilibrium so "did it solve?" is unambiguous. Match the solver
-  symmetry treatment to the derived or measured assembled tangent.
-- An **independent** tangent check (a runtime that FDs the residual vs the
-  generated `AMATRX`) is a second confirmation beyond the Python complex-step
-  `verify()`. When such a check is printed **twice** — element-level *before* the
-  solve (authoritative) and *after* with BCs applied (constrained-DOF columns
-  zeroed, FD noise) — read the first block, and **parse the numbers in code** —
-  do not eyeball a multi-thousand-line output; you will read the wrong block or
-  the wrong column.
-- A non-Abaqus runtime does not call Abaqus `UVARM`. If a generated UEL exposes
-  Abaqus diagnostics through `UVARM`, mirror the same quantities into `SVARS` and
-  request them as field variables.
-- **The deck's `PROPERTIES` list is positional and silent.** When you change a
-  model's `props` (count OR order), UPDATE the deck — the runtime passes whatever
-  is in the deck, so a stale list reinterprets every prop by position. This
-  bites hard when a now-misaligned prop is a **denominator** (a rate constant,
-  a time scale): a stale `0` there gives `0/0 -> NaN` in the residual, which
-  surfaces as a tangent-check NaN, not an obvious "wrong value".
-- **Diagnosis order when verify()/compile pass but the runtime NaNs:** the
-  residual is NaN but the generated code is fine for *some* inputs. (1)
-  Instrument the UEL kernel to print the interpolated `F, p, mu, X_gp, TIME(2)`
-  per Gauss point. (2) Directly probe the generated material subroutine (compile
-  the `.for`, call it from a tiny Fortran main) at those *exact* inputs. (3) If
-  the probe is **finite but the runtime NaNs at identical `F/p/mu/X/time`**, the
-  only remaining difference is **`PROPS`** — the deck. This isolates stale-deck
-  bugs in minutes vs. spelunking the codegen. (Globals like `TIME`/`DTIME` are
-  now default-initialized so the pre-solve tangent check passes a valid time.)
-- A static Tecplot/state output that applies the projection solve is the
-  normalized field check. VTK may show the raw integrated projection unless the
-  lumped projection path is active; use VTK first as a finite/non-NaN
-  visualization check, not as the only scalar-value oracle.
-- For UELs, generated identifiers live in Fortran's case-insensitive namespace.
-  Do not name a scalar field `d` if the material also has `d_old` state or local
-  variables named `D`. Prefer explicit field names like `damage` and mirror into
-  compact STATEV labels only in documentation. Also watch generated temporaries
-  from tensor column slices (`V[:,0]`): declaration logic must treat `COL(ii)`
-  as an indexed use of `COL`, not a new symbol.
-
-## Driving a Generated Element in Python (reference_assembly)
-
-`core/reference_assembly.assemble_element(weakform, coords, U, DU, DTIME, PROPS,
-element=...)` runs the Python weak form through real element assembly. It is the
-right tool for a physics BVP / size-effect benchmark (it exercises the element +
-B matrix + quadrature — though the Python material, not the generated Fortran).
-
-- `coords` is shape `(ndim, n_nodes)` — transpose your `(n_node, 2)` node list.
-- Pass `element="Quad4"` (or the intended config). The default layout config is
-  **Quad8 geometry** (degree-1 fields give 12 DOFs but 8 geometric nodes), so a
-  4-node `coords`/`U` mismatches and indexes out of bounds.
-- DOF order is node-major, field-interleaved (`[ux, uy, p, ...]` per node).
-- **AMATRX is returned in the Abaqus convention `AMATRX = -d(RHS)/dU`.** A global
-  Newton step is therefore `K dU = +R`, NOT `-R`. An FD check on the assembled
-  tangent gives `fd == -K` exactly (relative error 2.0 on every column); the
-  wrong sign diverges and *looks like* a conditioning problem. Confirm the sign
-  with a one-column FD before trusting any hand-rolled solver.
-- A stiff coupled solve from rest (viscoplastic, `e_p/eps_eq`, damage) overshoots
-  a near-singular soft mode at the full Newton step; add a backtracking line
-  search (the descent direction is `solve(K, +R)`). Match `dt` to the viscoplastic
-  rate (`dt ~ gamma/(n_steps*edot0)`) or the overstress `(seq/sigflow)^(1/m)`
-  blows up.
-
-## Hard Paper Models
-
-- Do not jump to a final published figure. Build framework rungs first.
-- Missing parameters are common. Do not invent them from memory.
-- Preserve physics, not necessarily the paper's software implementation frame.
-- "Eulerian" in a paper may mean current-state variables and spatial fluxes,
-  not an Eulerian mesh. A total-Lagrangian UEL can pull current quantities back
-  with `J`, `F^{-1}`, and `C^{-1}`.
-- Use lower-order pressure for poromechanics until stability is demonstrated.
-- For swelling/plasticity papers, check whether "damage", "degradation", or
-  "swelling" is a real scalar damage law, eigenstrain, residual plastic strain,
-  or simply output terminology.
-
-## Debugging Order
-
-When something fails:
-
-1. Check generated `.for` compiles.
-2. Check Python reference at the exact state.
-3. Check generated Fortran through f2py if possible.
-4. Check sign convention and state layout.
-5. Check active DOF declaration, `UNSYMM`, `*Depvar`, property count, and dummy
-   thermal material blocks.
-6. Check time step, boundary conditions, hourglass control, and solver controls.
-7. Only then alter the constitutive theory.
-
-Do not skip ahead by guessing the cause. For each suspected culprit (eig
-degeneracy, a `.real` branch, the linear solver, the compiled-vs-Python path),
-**reproduce the exact failing state and test that hypothesis** before fixing it —
-cross-check the compiled element against `reference_assembly`, and isolate which
-sub-computation goes non-finite. A wall-clock timeout is not evidence of
-non-convergence (an f2py recompile alone is ~60 s; compile once per debug run).
-When the local solve itself diverges or NaNs, suspect the *formulation* (the wrong
-unknown — see "Local Return Maps and Nonlinear Hardening") before solver tuning.
-
-## Verification: the State and the Regime, Not Just the Method
-
-`verify()` (CS-vs-FD), generate+compile, and code-vs-itself f2py are
-**consistency** checks — they cannot see convention errors or untested branches.
-Add a **material-point or element regime sweep**:
-
-- **Verify every branch, not one state.** A default smooth state can leave a
-  whole branch untested.
-- **CS-vs-FD passes "wrong-but-consistent".** A branch mismatch, convention
-  error, or scrambled call-argument order can agree on both sides. Confirm
-  generator argument order by reading the emitted `.for`.
-- **Assert that the test entered its claimed regime.** A vacuous pass is worse
-  than a red test.
-- **Check branch-specific invariants.** For a gradient model, verify the
-  declared relationship between reaction and gradient coefficients on every
-  branch.
-- **Robustness is a separate gate.** Require finite stress/state/tangent and
-  time-step refinement of a relevant quantity where the integration is
-  step-size dependent.
-- For an open known bug, pin the CORRECT expected value with `xfail(strict)`.
-  Remove the marker as soon as the fix turns it into XPASS.
+# abaqus_ufl pitfalls
+
+A pitfall is a specific mistake, its observable symptom and the check that
+catches it. Explanations live in the linked lesson/API home. Start with the
+[task index](../../../docs/lessons/README.md) when the failure is not localized.
+Historical heading anchors are retained so existing links keep working.
+
+## Abaqus interface
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Treat RHS as the host residual without converting signs | Newton goes uphill; FD gives the negative of K | Check K=dR/dU after R=-RHS; [AMATRX convention](../../../docs/lessons/abaqus-and-fortran.md#amatrx-sign-convention) |
+| Ignore PNEWDT or nonfinite output | Zeroed work appears to be equilibrium | Assert PNEWDT>=1 and finite R/K/state before assembly or commit; [runtime contract](../../../abaqus_ufl/fe/README.md#exact-batches-and-material-state) |
+| Assume RHS is 1D or pre-zeroed | Extra RHS columns retain garbage on early exits | Exercise NRHS>1 and unsupported requests; [interface lessons](../../../docs/lessons/abaqus-and-fortran.md#rhs-is-a-2d-array) |
+| Recover old fields from U alone or silently use DU=U | Transient terms read zero history | Pass DU=U-U_previous, or explicitly declare a from-zero call; [old fields](../../../docs/lessons/abaqus-and-fortran.md#old-field-values-are-not-passed-to-the-uel) |
+| Freeze TIME or pass end-of-increment time | First-increment initialization is never exercised, or seeded state is replaced | Check KINC and beginning TIME at first/later increments; [host API](../../../abaqus_ufl/fe/README.md#api) |
+| Call the plane-strain UMAT with a 3D or plane-stress signature | PNEWDT requests a cutback | Verify NDI=3, NSHR=1, NTENS=4 and plane-strain F for ndim=2; [UMAT API](../../../docs/API_USAGE.md#generate_umat) |
+| Keep a stale positional PROPS list | Finite Python response but NaN or wrong compiled response | Compare deck count/order with instance properties and probe identical inputs; [property contracts](../../../docs/lessons/abaqus-and-fortran.md#constantsn-must-match-the-umat-contract) |
+| Use an unsupported scalar DOF/procedure or malformed deck block | Datacheck failure or an inactive scalar | Check active DOFs, procedure, trailing commas and keyword placement; [deck lessons](../../../docs/lessons/abaqus-and-fortran.md#abaqus-input-deck-compatibility) |
+
+## DOF and state layout
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Zero F in plane strain | detF=0 and a cutback at zero displacement | Require F33=1; [kinematics](../../../docs/lessons/finite-element.md#initialize-f-to-identity-not-zeros-plane-strain) |
+| Mix node-major, component-major or corner/midside field layouts | Wrong coupling or apparently singular rows | Assert the complete element DOF map, including mixed-degree midsides; [indexing](../../../docs/lessons/finite-element.md#element-local-dof-indexing-0-based-front-end-vs-1-based-arrays) |
+| Build a separate Jacobian from lower-order scalar nodes | Distorted mixed-element patch fails | Use the geometry map consistently for every field; [mapping](../../../docs/lessons/finite-element.md#one-jacobian-for-all-fields-mixed-degree-elements) |
+| Flatten tensor state in row-major order | A nonsymmetric old tensor returns transposed | Round-trip distinct scalar/vector/tensor values at multiple Gauss points; [state-order regression](../../../tests/test_reference_assembly_state_order.py) |
+| Hardcode a topology's Gauss/state count in an adapter | Correct kernel, wrong host state or coordinates | Pin the active layout and check every adapter separately; [adapter lesson](../../../docs/lessons/finite-element.md#adapter-layout-and-accepted-state-are-part-of-the-element-contract) |
+| Mutate committed state during a trial or failed commit | History advances after rejection | Seed nonzero old state, force failure and assert exact restoration; [state ownership](../../../docs/lessons/performance-and-parallel.md#exact-reuse-needs-complete-inputs-and-state-ownership) |
+| Upgrade connectivity but retain old boundary/MPC/contact sets | Unconstrained midsides or overconstraints despite clean completion | Check geometric set membership, incompatible overlaps and the solved boundary invariant; [mesh-order lesson](../../../docs/lessons/finite-element.md#mesh-order-changes-require-new-set-membership-checks) |
+
+## Material / WeakForm authoring
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Add a solved gradient field as local state | No transport coupling despite plausible constitutive values | Identify the field owner and global balance; [target/API guide](../../../docs/API_USAGE.md#choose-the-target) |
+| Guess canonical storage/flux method names | Generation calls a missing method | Construct the WeakForm and read its detected equations; [guard regression](../../../tests/test_equation_method_guard.py) |
+| Read class defaults instead of constructor overrides | Overrides have no effect in the compiled path | Compare PROPS with material-instance attributes; [adapter lesson](../../../docs/lessons/finite-element.md#adapter-layout-and-accepted-state-are-part-of-the-element-contract) |
+| Use dynamic Python or an unsupported tensor helper | Verification works but generation rejects syntax | Check supported operations before rewriting the law; [DSL rules](../../../docs/API_USAGE.md#tensor-dsl-rules) |
+| Hide a missing primitive with a second implementation | Reference and generated paths drift | Make the declaration express the model and compare the reached regime; [DSL lesson](../../../docs/lessons/codegen-and-testing.md#stop-and-surface-a-missing-primitive) |
+
+## Fortran generation
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Ignore fixed-form column 72 | Compiled expression differs or continuation fails | Compile the wrapped source; [fixed form](../../../docs/lessons/abaqus-and-fortran.md#column-72-truncation) |
+| Reuse case-insensitive names, or unpack into `_` | Duplicate declaration or invalid identifier | Inspect base names of indexed variables and compile; [namespace lesson](../../../docs/lessons/codegen-and-testing.md#single-letter-fortran-names-are-landmines) |
+| Emit a complex `.real` temporary, loop counter or bound | IF/DO compile failure or dropped perturbation | Inspect generated declarations and run the intended branch; [generator constructs](../../../docs/lessons/complex-step-and-matrix-functions.md#generator-inserted-constructs-can-break-cs-even-when-the-source-is-safe) |
+| Replay Python argument order after generation grouped state arguments | Compiles but tangent/Newton behavior is wrong | Compare call actuals to emitted dummies, especially history and dt; [history-order lesson](../../../docs/lessons/coupled-multiphysics.md#match-callercallee-ordering-for-multi-scalar-history-arguments) |
+| Use inclusive slices with one extra endpoint | Adjacent state slots change | Check length end-start+1 using distinct neighboring state values; [slice lesson](../../../docs/lessons/codegen-and-testing.md#fortran-array-slices-are-inclusive--off-by-one-is-silent) |
+| Trust compilation without a subroutine call | Runtime NaNs or an ABI mismatch remain invisible | Execute the generated boundary with nonzero outputs; [validation ladder](validation-ladder.md) |
+| Repair generated output without its declaration/generator | Regeneration silently loses the fix | Require reproducible regeneration; [workflow](../../../docs/lessons/agent-workflow.md#make-progress-observable-and-claims-reproducible) |
+
+## F-bar routing
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Force pure-mechanics F-bar onto a coupled formulation | Inconsistent swelling/storage coupling or rejected route | Select standard mixed/local-pressure theory explicitly; [coupled locking](../../../docs/lessons/coupled-multiphysics.md#f-bar-can-destabilize-coupled-problems-at-si-scale) |
+| Use 3D volumetric scaling or contractions in 2D | F-bar tangent/value error | Check dimension-dependent exponent and in-plane contractions; [F-bar lesson](../../../docs/lessons/finite-element.md#f-bar-the-volumetric-exponent-is-dimension-dependent) |
+| Leave auto-selected F-bar on in an intended locking control | The baseline is already stabilized | Inspect the generation summary and set formulation explicitly; [UEL API](../../../docs/API_USAGE.md#generate_uel) |
+
+## Complex-step and matrix functions
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Strip the imaginary part from differentiated algebra | CS tangent misses a term while values look right | Compare derivatives at a reached nontrivial branch; [real-cast leak](../../../docs/lessons/complex-step-and-matrix-functions.md#defensive-real-casts-are-a-cs-leak) |
+| Blame every real-part branch or repeated spectrum for a NaN | Solver tuning changes no root cause | Probe that exact state in Python and Fortran first; [branch rules](../../../docs/lessons/complex-step-and-matrix-functions.md#cs-safe-branching-rules) |
+| Use gauge-dependent eigenvectors to reconstruct a matrix function | Rotated/repeated-spectrum derivatives fail | Prefer invariant/iterative matrix functions and test spectra explicitly; [matrix-function lessons](../../../docs/lessons/complex-step-and-matrix-functions.md#cs-safe-matrix-functions) |
+| Reuse complex current fields between perturbations | Tangent depends on perturbation order | Reset current fields and keep old state real/frozen; [reset lesson](../../../docs/lessons/complex-step-and-matrix-functions.md#reset-all-complex-state-before-each-perturbation) |
+| Interpret finite-difference noise as a model defect | An extreme-state mismatch changes strongly with FD step | Sweep FD step against an independent derivative; [rate/limit lesson](../../../docs/lessons/verification.md#a-rate-does-not-establish-the-limit) |
+| Compare all nine columns with an intentionally in-plane tangent | Expected zero unused columns look like a bug | Compare active assembled columns and test the plane-strain contract; [active-work lesson](../../../docs/lessons/performance-and-parallel.md#perturb-only-active-columns) |
+
+## UEL weak-form signs
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Copy a flux sign from a field name or sibling equation | Anti-diffusive localization despite tangent agreement | Derive storage*test-flux.grad(test), then assemble a nonuniform operator and a flipped control; [sign lesson](../../../docs/lessons/coupled-multiphysics.md#derive-the-weak-form-tangent-checks-cannot-prove-the-pde-sign) |
+| Treat the scalar operator-sign screen as a proof for a mixed/anisotropic system | A legitimate mixed pair warns, or a cross-gradient error escapes | Inspect the full coupled block/dispersion spectrum; [sign conventions](../../../docs/lessons/coupled-multiphysics.md#the-flux-sign-depends-on-the-storage-convention-not-the-field-name) |
+| Recover a stress-gradient flux from incomplete bilinear curvature | Error plateaus under refinement | Compare an auxiliary-field or higher-order reference; [gradient consistency](../../../docs/lessons/finite-element.md#gradient-of-stress-consistency) |
+
+## Multiplicative-plasticity and finite-strain kinematics
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Reorder noncommuting plastic factors or pull back with stale state | Diagonal histories pass, rotated histories fail | Assert F=Fe Fp with the updated state and correct volume factors; [integration lesson](../../../docs/lessons/constitutive-integration.md#exploit-exact-regime-solutions-without-changing-the-law) |
+| Substitute V.T for inv(V) with unnormalized eigenvectors | Off-axis spectral reconstruction is wrong | Test conjugated principal bases and repeated spectra; [isotropy lesson](../../../docs/lessons/constitutive-integration.md#objectivity-and-material-isotropy-are-different-tests) |
+| Use spatial objectivity as the only isotropy check | Principal-basis errors stay hidden | Add the distinct QFQ.T test only when isotropy is claimed; [isotropy lesson](../../../docs/lessons/constitutive-integration.md#objectivity-and-material-isotropy-are-different-tests) |
+
+## Finite-strain tensor-return shape trap
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Tensorize a scalar matrix-helper argument componentwise | Source compiles but gives NaNs, such as det33z(F(ii,jj)) | Inspect helper argument rank and execute the direct return; [guard regressions](../../../tests/test_translator_guards.py), [runtime regressions](../../../tests/test_runtime_guards.py) |
+
+## Local return maps and nonlinear hardening
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Dampen a singular local unknown instead of reformulating it | Iteration stalls or drifts under refinement | Check the local consistency residual in a smooth, scaled unknown; [local integration](../../../docs/lessons/constitutive-integration.md#choose-a-smooth-local-unknown) |
+| Evaluate a stress-state criterion on the wrong time level | Return-map values and the reported criterion disagree | Recompute from the returned stress and state; [regime solution lesson](../../../docs/lessons/constitutive-integration.md#exploit-exact-regime-solutions-without-changing-the-law) |
+| Left-associate a monotone accumulator increment | An unchanged work value reduces the accumulator by an ulp | Check alpha_old+(W_new-W_old) near representable neighbors; [precision lesson](../../../docs/lessons/constitutive-integration.md#protect-accumulator-arithmetic-and-extreme-driving-forces) |
+
+## Transcribing from the paper
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Use a constraint as a definition, a sibling's parameter, or one symbol for two roles | Internally consistent but wrong constitutive response | Cite definition equations and specific table units; [theory-first lessons](../../../docs/lessons/codegen-and-testing.md#validation-envelopes-must-cover-the-branch-being-claimed) |
+| Call a tuned localization run a reproduction | Curves shift with loading model or missing setup | Match parameters, geometry, dead/follower loads, operating point and observable; [paper lessons](../../../docs/lessons/coupled-multiphysics.md#reproducing-multiphysics-papers) |
+
+## Coupled dummy materials in Abaqus
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Omit density/specific heat or make an overlay mechanically significant | Coupled procedure rejects the deck or modifies the solution | Check dummy material completeness and overlay nonintrusiveness; [input scaffold API](../../../docs/API_USAGE.md#abaqus-input-scaffolding) |
+| Assume the dummy/visualization field is the solved field | Plausible picture with the wrong scalar/history | Compare bridge values pointwise by stable identities; [output bridge](../../../docs/lessons/coupled-multiphysics.md#solver-completion-is-not-output-validation) |
+
+## Non-Abaqus regression runtimes
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Promote a license-free host result to Abaqus evidence | Production procedure/output behavior is untested | State the executed interface and separate the production gate; [validation ladder](validation-ladder.md) |
+| Pass a Fortran-order nonsymmetric tangent to a row-major consumer | Distributed Newton uses K.T | Check C-contiguity and solve a nonsymmetric control; [parallel lesson](../../../docs/lessons/performance-and-parallel.md#keep-replicated-batching-distinct-from-distributed-algebra) |
+| Skip a collective after a rank-local cache hit or failure | MPI hangs, often with empty partitions | Require unanimous hits/error votes and run rank-local failure probes; [MPI tests](../../../tests/mpi_fe_contract.py) |
+| Treat a KSP cap, exhausted line search or Newton cap as success | An unconverged state is committed | Force each failure path and assert no commit/unchanged state; [host API](../../../abaqus_ufl/fe/README.md#petsc-and-mpi) |
+| Infer scaling or ABI safety from one tiny rank count | Larger runs slow down or fail | Match launcher/library ABI, measure rank/thread budgets and test intended ranks; [environment lesson](../../../docs/lessons/performance-and-parallel.md#diagnose-the-mpi-environment-before-the-algorithm) |
+
+## Driving a generated element in Python (reference_assembly)
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Pass node-major coordinates where reference_assembly expects (ndim,nnode), or omit element config | Index error or wrong geometry | Match the API's coordinate orientation and active layout; [adapter lesson](../../../docs/lessons/finite-element.md#adapter-layout-and-accepted-state-are-part-of-the-element-contract) |
+| Confuse raw RHS with the public host's R=-RHS | Hand-written Newton uses the wrong sign | FD one assembled column at fixed old state, perturbing U and DU together; [sign lesson](../../../docs/lessons/abaqus-and-fortran.md#amatrx-sign-convention) |
+
+## Hard paper models
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Jump to the final figure or invent missing parameters | A large solve cannot localize the discrepancy | Build the smallest independent limit first and record unknown inputs; [framework rungs](../../../docs/lessons/coupled-multiphysics.md#hard-multiphysics-needs-framework-rungs-before-parameter-tuning) |
+| Condense a variable with a gradient/global balance for convenience | Missing coupling or no well-defined transport | Derive the field's ownership and variational role; [locking/formulation lessons](../../../docs/lessons/coupled-multiphysics.md#locking--element-choice) |
+
+## Debugging order
+
+Route a failure through the [validation ladder](validation-ladder.md). Reproduce
+the exact state and test a hypothesis before changing equations. Read existing
+capability/evidence records before declaring a framework limitation. No symptom
+alone uniquely identifies a physics, setup, generator or solver defect.
+
+## Verification: the state and the regime, not just the method
+
+| Mistake | Symptom | Check and explanation home |
+|---|---|---|
+| Assume c=0 is every model's stress-free reference | A valid swelling model fails only the reference gate | Supply c=c0 or a declared reference and read the failure assumption; [reference lesson](../../../docs/lessons/verification.md#state-the-reference-assumed-by-a-gate) |
+| Check a benign state while claiming a nonlinear branch | Green suite, untested evolution | Assert branch activation and a branch-specific invariant; [validation envelopes](../../../docs/lessons/codegen-and-testing.md#validation-envelopes-must-cover-the-branch-being-claimed) |
+| Trust a gate never observed to fail | Silence or a success string is accepted as evidence | Run a defect targeting that quantity and require rejection; [gate lesson](../../../docs/lessons/verification.md#prove-a-gate-ran-and-can-fail) |
+| Use more quadrature to repair incompatible swelling strain | Damage bias survives refinement and quadrature changes | Compare compatible mixed/enhanced interpolation independently; [gradient lesson](../../../docs/lessons/finite-element.md#gradient-of-stress-consistency) |
+| Compare lagged and implicit history at one coarse step size | Apparently different physics or fatigue life | Compare small-step limits and long histories; [time-level lesson](../../../docs/lessons/constitutive-integration.md#lagging-history-changes-temporal-accuracy) |
+| Score a prescribed maximum or singular tip value | Metric saturates or changes without meaningful convergence | Use resolved integral/excess measures and inspect metric support; [observable lesson](../../../docs/lessons/verification.md#compare-the-same-observable-at-matched-conditions) |
+| Clip the field and report unconstrained residual convergence | Bounds pass while constrained equilibrium fails | Recompute the appropriate projected/KKT certificate; [clipping pivot](../../../docs/pivots.md#p6-clipping-is-not-constrained-equilibrium) |
