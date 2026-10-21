@@ -63,9 +63,33 @@ def assemble(nodes, elems, dof_per_node, element_fn, U, DU=None, *, du_is_total=
     return residual, tangent
 
 
+def assemble_batched(nodes, elems, dof_per_node, batch_fn, U, DU=None, *, du_is_total=False):
+    """Assemble one full element batch, with the same history/sign contract."""
+    nodes, elems, size = _mesh_inputs(nodes, elems, dof_per_node)
+    U = _vector(U, size, "U")
+    if DU is None and not du_is_total:
+        raise ValueError("pass DU=U-U_previous, or du_is_total=True for a from-zero evaluation")
+    if DU is not None and du_is_total:
+        raise ValueError("specify DU or du_is_total, not both")
+    DU = U if DU is None else _vector(DU, size, "DU")
+    gm = (elems[:, :, None] * dof_per_node + np.arange(dof_per_node)).reshape(len(elems), -1)
+    local_r, local_k = (np.asarray(a) for a in batch_fn(nodes[elems], U[gm], DU[gm]))
+    ne, nd = gm.shape
+    if local_r.shape != (ne, nd) or local_k.shape != (ne, nd, nd):
+        raise ValueError("batch output shapes disagree with the DOF layout")
+    if not np.isfinite(local_r).all() or not np.isfinite(local_k).all():
+        raise RuntimeError("nonfinite element residual or tangent")
+    residual = np.zeros(size)
+    np.add.at(residual, gm.ravel(), local_r.ravel())
+    rows = np.broadcast_to(gm[:, :, None], local_k.shape).ravel()
+    cols = np.broadcast_to(gm[:, None, :], local_k.shape).ravel()
+    tangent = coo_matrix((local_k.ravel(), (rows, cols)), shape=(size, size)).tocsr()
+    return residual, tangent
+
+
 def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
                  U0=None, U_previous=None, max_iter=25, tol=1e-9,
-                 record_iteration=None):
+                 record_iteration=None, *, batch_fn=None, linear_solve=None):
     """Solve free-DOF equilibrium with prescribed global DOF values.
 
     Returns U only on convergence. Previous nodal history is fixed throughout
@@ -75,6 +99,8 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
     ``tol`` is relative to the larger of 1 and the largest residual entry, reactions included.
     ``record_iteration`` optionally receives the accepted iterate's iteration
     number, free residual norm, and relative residual, including convergence.
+    ``batch_fn`` opts into batched assembly; ``linear_solve(K,b)`` opts into
+    an alternative sparse solver, such as ``make_petsc_solver`` on COMM_SELF.
     """
     nodes, elems, size = _mesh_inputs(nodes, elems, dof_per_node)
     if not np.isfinite(tol) or tol <= 0:
@@ -91,8 +117,23 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
         U[dof] = value
         free_mask[dof] = False
     free = np.flatnonzero(free_mask)
+    def evaluate(values):
+        if batch_fn is not None:
+            return assemble_batched(nodes, elems, dof_per_node, batch_fn, values, values - previous)
+        return assemble(nodes, elems, dof_per_node, element_fn, values, values - previous)
+
+    def reject():
+        for fn in (element_fn, batch_fn):
+            owner = getattr(fn, '__self__', None)
+            if hasattr(owner, 'reject_step'):
+                owner.reject_step()
+
     for iteration in range(max_iter + 1):
-        residual, tangent = assemble(nodes, elems, dof_per_node, element_fn, U, U - previous)
+        try:
+            residual, tangent = evaluate(U)
+        except Exception:
+            reject()
+            raise
         norm = np.linalg.norm(residual[free], ord=np.inf) if len(free) else 0.0
         residual_scale = max(1.0, np.linalg.norm(residual, ord=np.inf))
         if record_iteration is not None:
@@ -106,17 +147,19 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
         try:
             with warnings.catch_warnings():
                 warnings.simplefilter("error", MatrixRankWarning)
-                delta = spsolve(tangent[free][:, free], -residual[free])
+                solve = spsolve if linear_solve is None else linear_solve
+                delta = np.asarray(solve(tangent[free][:, free], -residual[free]), dtype=float)
         except (MatrixRankWarning, RuntimeError) as error:
+            reject()
             raise RuntimeError("serial FE linear solve failed") from error
-        if not np.isfinite(delta).all():
+        if delta.shape != (len(free),) or not np.isfinite(delta).all():
+            reject()
             raise RuntimeError("serial FE linear solve returned a nonfinite increment")
         for search in range(12):
             trial = U.copy()
             trial[free] += (0.5 ** search) * delta
             try:
-                trial_r, _ = assemble(nodes, elems, dof_per_node, element_fn,
-                                      trial, trial - previous)
+                trial_r, _ = evaluate(trial)
             except RuntimeError:
                 continue
             trial_norm = np.linalg.norm(trial_r[free], ord=np.inf)
@@ -124,5 +167,7 @@ def newton_solve(nodes, elems, dof_per_node, element_fn, dirichlet,
                 U = trial
                 break
         else:
+            reject()
             raise RuntimeError("serial FE line search failed to reduce the free residual")
+    reject()
     raise RuntimeError("serial FE Newton solve did not converge in {} iterations".format(max_iter))

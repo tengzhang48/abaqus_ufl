@@ -64,3 +64,47 @@ subroutine drive_uel(rhs, amatrx, svars, coords, u, du, props, jprops, &
     rhs(i) = rhs2(i, 1)
   end do
 end subroutine drive_uel
+
+! One f2py boundary for a whole batch. Element IDs are global and explicit.
+subroutine drive_uel_batch(rhs, amatrx, svars, coords, u, du, props, jprops, &
+                           time, dtime, pnewdt, lflags, params, jtype, &
+                           kstep, kinc, period, elem_ids, ndofel, nsvars, &
+                           mcrd, nnode, nprops, njprop, nelem)
+  use, intrinsic :: ieee_arithmetic, only: ieee_is_finite
+  implicit none
+  integer, intent(in) :: ndofel, nsvars, mcrd, nnode, nprops, njprop, nelem
+  integer, intent(in) :: jtype, kstep, kinc, lflags(6), jprops(njprop)
+  integer, intent(in) :: elem_ids(nelem)
+  double precision, intent(out) :: rhs(ndofel, nelem)
+  double precision, intent(out) :: amatrx(ndofel, ndofel, nelem)
+  double precision, intent(inout) :: svars(nsvars, nelem)
+  double precision, intent(in) :: coords(mcrd, nnode, nelem)
+  double precision, intent(in) :: u(ndofel, nelem), du(ndofel, nelem)
+  double precision, intent(in) :: props(nprops), time(2), dtime, params(3), period
+  double precision, intent(inout) :: pnewdt
+  double precision :: pn
+  integer :: e
+!f2py intent(out) :: rhs, amatrx
+!f2py intent(in,out) :: svars, pnewdt
+!f2py intent(in) :: coords, u, du, props, jprops, time, dtime, lflags, params
+!f2py intent(in) :: jtype, kstep, kinc, period, elem_ids
+!f2py integer intent(hide), depend(u) :: ndofel = shape(u,0)
+!f2py integer intent(hide), depend(u) :: nelem = shape(u,1)
+!f2py integer intent(hide), depend(svars) :: nsvars = shape(svars,0)
+!f2py integer intent(hide), depend(coords) :: mcrd = shape(coords,0)
+!f2py integer intent(hide), depend(coords) :: nnode = shape(coords,1)
+!f2py integer intent(hide), depend(props) :: nprops = shape(props,0)
+!f2py integer intent(hide), depend(jprops) :: njprop = shape(jprops,0)
+  do e = 1, nelem
+    pn = pnewdt
+    call drive_uel(rhs(:,e), amatrx(:,:,e), svars(:,e), coords(:,:,e), &
+                   u(:,e), du(:,e), props, jprops, time, dtime, pn, &
+                   lflags, params, jtype, kstep, kinc, elem_ids(e), period, &
+                   ndofel, nsvars, mcrd, nnode, nprops, njprop)
+    if (.not. ieee_is_finite(pn)) then
+      pnewdt = 0.0d0
+    else
+      pnewdt = min(pnewdt, pn)
+    end if
+  end do
+end subroutine drive_uel_batch

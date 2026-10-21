@@ -53,6 +53,7 @@ def test_metric_precision_is_retained_and_nan_is_rejected(tmp_path, monkeypatch)
 
 
 def test_response_data_is_recorded_during_the_same_check(tmp_path, monkeypatch):
+    pytest.importorskip("matplotlib", reason="livebench figure rendering requires the optional dev dependency")
     output = _case(tmp_path, monkeypatch,
                    "calls = 0\ndef check(*, record=None):\n"
                    "    global calls\n    calls += 1\n"

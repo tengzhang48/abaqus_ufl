@@ -13,6 +13,11 @@ import pytest
 
 
 def _fail_skip(report):
+    # Optional PETSc/MPI gates must also skip in the base (MPI-free) CI job.
+    # Keep compiler/backend skips fatal: they protect the core package contract.
+    reason = report.longrepr[2] if isinstance(report.longrepr, tuple) else str(report.longrepr)
+    if report.skipped and 'Skipped: optional runtime:' in reason:
+        return
     if report.skipped and not hasattr(report, 'wasxfail') \
             and os.environ.get('ABAQUS_UFL_FAIL_ON_SKIP') == '1':
         reason = report.longrepr[2] if isinstance(report.longrepr, tuple) else report.longrepr

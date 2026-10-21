@@ -42,3 +42,4 @@ examples/**/abaqus/*_report.json
 # Generated livebench reports and website copies
 /benchmark-results/
 /web/public/livebench/
+.parallel-build/
