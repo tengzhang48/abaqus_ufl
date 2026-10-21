@@ -363,8 +363,9 @@ C     Convert history variables (real, not perturbed)
       CALL real2complex33(F_old, F_old_z)
 
 C     === dPK1_dF: d(stress_PK1)/d(F) ===
-      DO k = 1, 3
-        DO l = 1, 3
+      dPK1_dF = 0.0d0
+      DO k = 1, 2
+        DO l = 1, 2
           CALL real2complex33(F, Fz)
           Fz(k,l) = Fz(k,l) + DCMPLX(0.0d0, CS_H)
           CALL ogdenoneterm_stress_PK1(Fz, props, PKz)

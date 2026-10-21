@@ -153,12 +153,37 @@ excluded. [`LIVEBENCH.md`](LIVEBENCH.md) describes the executable public gates.
 
 ```python
 au.generate_umat(material, output_path, mat_prefix=None,
-                 matrix_backend="iterative")
+                 matrix_backend="iterative", verify=True, ndim=3)
 ```
 
 Use this for finite-strain `Material` classes that define `stress_PK1(self, F)`.
 The generated UMAT computes Cauchy stress and Abaqus `DDSDDE` from the PK1
 stress and the complex-step `dP/dF` tangent.
+
+`ndim=3` preserves the full nine-perturbation generator output. Opt into
+`ndim=2` for plane strain: `NDI=3`, `NSHR=1`, `NTENS=4`, `F33=1` and zero
+out-of-plane shears. Only four in-plane F entries are perturbed. Stress and
+the active tangent columns agree with the full 3D constitutive calculation;
+the unused out-of-plane derivative columns are zero. This option does not
+implement plane stress. Unsupported call shapes or kinematics request a cutback.
+
+Standard 2D UELs and the pure-mechanics F-bar path select in-plane
+perturbations automatically from the element dimension. They also omit
+unused out-of-plane gradient perturbations. In 2D, stateful stress methods
+may get a tangent-only variant that removes pure, straight-line assignments
+used solely by discarded state outputs. Updates needed by stress remain;
+methods with control flow, mutation or opaque/helper calls retain the full
+method. Residual evaluations and committed state always use the full update.
+
+The reproducible public Ogden Quad4 timing command is:
+
+```bash
+python tools/benchmark_2d_tangents.py --batches 100
+```
+
+One measurement (64 elements per uncached batch, median of five samples,
+compilation excluded) gave 56.55 to 31.59 microseconds per element, a 1.79x
+speedup, with identical R/K. This is a kernel measurement for that example.
 
 `matrix_backend` controls generated Fortran matrix functions:
 
@@ -374,6 +399,15 @@ it does not assemble a UEL residual/tangent. Neither proves that the equations
 match the paper, that all branches were entered, or that a gradient coefficient
 matches the corresponding reaction coefficient. For branchy models, add tests
 that assert the regime was reached and measure branch-specific invariants.
+
+The stress-free gate uses `verify(state=...)` values with F set to identity,
+including concentrations, temperature and old state. For example, a swelling
+law stress-free at `c0` can use `model.verify(state={"c": model.c0})`.
+To probe a hot or loaded tangent state separately, pass
+`reference_state={"T": 0.0}` or declare `reference_state` on the material.
+The explicit argument takes precedence over the declaration. With no supplied
+state or declaration, the historical default F=I, p=mu=0 reference is retained.
+Failures report the reference assumption even with `verbose=False`.
 
 Do not interpret a failed solver run before the earlier rungs pass. Solver
 nonconvergence can come from the material law, load step, tangent symmetry,

@@ -29,7 +29,7 @@ from .umat_gen import (FortranTranslator, _get_source_body,
                        _nonfinite_cutback_lines,
                        _state_var_info, _nstate_per_gp,
                        _fortran_dims, _fortran_init_value,
-                       _fortran_call)
+                       _fortran_call, _stress_tangent_name)
 
 
 def _compute_ndofel(cfg, fields):
@@ -223,7 +223,7 @@ def _material_method_for_equation(eq_name, binfo=None):
 
 
 def _generate_material_subroutine(material, method_name, mat_prefix,
-                                  helper_ctx=None):
+                                  helper_ctx=None, stress_only=False):
     """
     Generate one COMPLEX*16 Fortran subroutine from a Material method.
 
@@ -244,7 +244,7 @@ def _generate_material_subroutine(material, method_name, mat_prefix,
     has_state = bool(sv_info) and method_name == 'stress_PK1'
     state_old_names_all = {f'{name}_old' for name in sv_info}
 
-    sub_name = f'{mat_prefix}_{method_name}'
+    sub_name = f'{mat_prefix}_{method_name}' + ('_tangent' if stress_only else '')
     ret_type, ret_decl = _RETURN_FORTRAN.get(method_name,
                                               ('DOUBLE COMPLEX', 'result_out'))
     ret_shape = _RETURN_SHAPE.get(method_name, 'scalar')
@@ -288,7 +288,7 @@ def _generate_material_subroutine(material, method_name, mat_prefix,
             else:
                 translator._var_kinds[name + '_old'] = 'scalar'
 
-    decls, stmts, return_expr, return_kind = translator.translate_stress(method)
+    decls, stmts, return_expr, return_kind = translator.translate_stress(method, stress_only=stress_only)
     tensor_vars = {n for n, k in translator._var_kinds.items() if k == 'tensor'}
 
     lines = []
@@ -506,6 +506,11 @@ def _generate_all_material_subs(weakform, mat_prefix):
         parts.append(_generate_material_subroutine(
             mat, method_name, mat_prefix, helper_ctx=helper_ctx))
         parts.append('')
+        if (method_name == 'stress_PK1'
+                and _stress_tangent_name(mat, mat_prefix, weakform.ndim).endswith('_tangent')):
+            parts.append(_generate_material_subroutine(
+                mat, method_name, mat_prefix, helper_ctx=helper_ctx, stress_only=True))
+            parts.append('')
 
     # Emit any self._helper() subroutines collected during translation (once).
     for src in helper_ctx['helper_sources']:
@@ -519,9 +524,10 @@ def _generate_all_material_subs(weakform, mat_prefix):
 # Section 3: CS tangent engine generation
 # =====================================================================
 
-def _generate_cs_engine(weakform, mat_prefix):
+def _generate_cs_engine(weakform, mat_prefix, ndim=None):
     """Generate the complex-step tangent engine subroutine."""
     mat = weakform._mat
+    ndim = weakform.ndim if ndim is None else ndim
     blocks = weakform.tangent_blocks()
     field_args = _field_args_for(weakform)
     nprops = len(mat.props_names)
@@ -720,7 +726,8 @@ def _generate_cs_engine(weakform, mat_prefix):
         wrt_kind = spec['wrt_kind']
         mat_meth = spec['mat_method']
         ret_shape = spec['ret_shape']
-        sub_name = f'{mat_prefix}_{mat_meth}'
+        sub_name = (_stress_tangent_name(mat, mat_prefix, ndim)
+                    if mat_meth == 'stress_PK1' else f'{mat_prefix}_{mat_meth}')
 
         # Build the material call argument list
         minfo = mat._methods[mat_meth]
@@ -771,9 +778,11 @@ def _generate_cs_engine(weakform, mat_prefix):
         lines.append(f'C     === {tname}: d({mat_meth})/d({wrt}) ===')
 
         if wrt_kind == 'matrix':
-            # 9 perturbations of F(k,l)
-            lines.append('      DO k = 1, 3')
-            lines.append('        DO l = 1, 3')
+            # Only in-plane columns are assembled in a 2D element.
+            if ndim == 2:
+                lines.append(f'      {tname} = 0.0d0')
+            lines.append(f'      DO k = 1, {ndim}')
+            lines.append(f'        DO l = 1, {ndim}')
             lines.append('          CALL real2complex33(F, Fz)')
             for sf in scalar_fields:
                 lines.append(f'          {sf}z = DCMPLX({sf}, 0.0d0)')
@@ -801,8 +810,9 @@ def _generate_cs_engine(weakform, mat_prefix):
             _emit_extract(lines, tname, out_var, ret_shape, 'scalar')
 
         elif wrt_kind == 'vector':
-            # 3 perturbations of grad_mu(k)
-            lines.append('      DO k = 1, 3')
+            if ndim == 2:
+                lines.append(f'      {tname} = 0.0d0')
+            lines.append(f'      DO k = 1, {ndim}')
             lines.append('        CALL real2complex33(F, Fz)')
             for sf in scalar_fields:
                 lines.append(f'        {sf}z = DCMPLX({sf}, 0.0d0)')
@@ -2274,11 +2284,12 @@ C     --- Complex temps for material evaluation ---
     return '\n'.join(lines)
 
 
-def _generate_cs_tangent_dPdF(weakform, mat_prefix):
+def _generate_cs_tangent_dPdF(weakform, mat_prefix, ndim=None):
     """Generate a simple CS tangent subroutine for dP/dF only (F-bar use)."""
     nprops = len(weakform._mat.props_names)
+    ndim = weakform.ndim if ndim is None else ndim
     sub_name = f'{mat_prefix}_cs_tangent_dPdF'
-    stress_sub = f'{mat_prefix}_stress_PK1'
+    stress_sub = _stress_tangent_name(weakform._mat, mat_prefix, ndim)
     sv_info = _state_var_info(weakform._mat)
     state_old_names = {f'{name}_old' for name in sv_info}
 
@@ -2314,8 +2325,10 @@ def _generate_cs_tangent_dPdF(weakform, mat_prefix):
         lines.append(f'      DOUBLE COMPLEX :: {name}_new_z{dims}')
     lines.append('      INTEGER :: i, j, k, l')
     lines.append('')
-    lines.append('      DO k = 1, 3')
-    lines.append('        DO l = 1, 3')
+    if ndim == 2:
+        lines.append('      dPdF = 0.0d0')
+    lines.append(f'      DO k = 1, {ndim}')
+    lines.append(f'        DO l = 1, {ndim}')
     lines.append('          CALL real2complex33(F, Fz)')
     _append_state_old_to_complex(lines, sv_info, indent='          ')
     lines.append('          Fz(k,l) = Fz(k,l)')
