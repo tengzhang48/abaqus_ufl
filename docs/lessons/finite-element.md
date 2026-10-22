@@ -252,9 +252,15 @@ owns the optimization rationale and parity checks; the
 
 ## Gradient-of-stress consistency
 
-A bilinear displacement on an affine Q4 cell has no element-interior normal
-second derivative. Recovering a stress-gradient flux from those incomplete
-second derivatives can omit terms and retain a bias under refinement.
+A bilinear displacement has zero pure second derivatives in its natural
+coordinates, but its mixed derivative can be nonzero. The pure Cartesian
+second derivatives also vanish when the cell edges align with those axes;
+a skewed or rotated affine map can make them nonzero. For example,
+`x=xi+a*eta`, `y=eta` and `u=xi*eta` give `u=x*y-a*y^2`, so `u_yy=-2*a`.
+All physical Hessian components on an affine Q4 derive from that one bilinear
+cross mode. Recovering a stress-gradient flux from this restricted space can
+omit terms; check the coupling and refinement behavior against an independent
+reference rather than inferring accuracy from the derivative identities alone.
 A continuous auxiliary field, such as q=g*p_eff tied by an L2 projection,
 provides a defined gradient; a suitable higher-order displacement field is
 another formulation choice. Derive its coupling and consistent tangent rather

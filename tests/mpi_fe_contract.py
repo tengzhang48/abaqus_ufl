@@ -11,7 +11,8 @@ from petsc4py import PETSc
 from scipy.sparse import eye as sparse_eye
 
 from abaqus_ufl.fe import (IncrementTooLarge, make_petsc_solver,
-                           partition_structured_quad, solve_steps_mpi_local)
+                           partition_structured_quad, solve_steps_mpi_local,
+                           structured_quad_mesh)
 from abaqus_ufl.fe.mpi_batch import MPIBatchedElement, build_module, gather
 from test_fe_batch_cache import AccumulatorProblem, Kernel
 
@@ -122,6 +123,52 @@ def check_batch_cache():
     adapter.element_rk_batch(coords, U, DU)
     assert adapter.batch_calls == 5
     assert adapter.batch_cache_hits == 2
+
+    # Input conversion/preparation must vote before cache consensus, even on
+    # the rank with no owned elements, with caching enabled or disabled.
+    for cache in (False, True):
+        adapter.cache_batches = cache
+        for commit in (False, True):
+            for argument in range(3):
+                adapter.element_rk_batch(coords, U, DU)
+                previous = adapter.svars.copy()
+                invalid = [coords, U, DU]
+                if rank == argument % size:
+                    invalid[argument] = invalid[argument].astype(object)
+                    invalid[argument].flat[0] = 'invalid-number'
+                call = adapter.commit_group if commit else adapter.element_rk_batch
+                collective_failure(lambda: call(*invalid), match='MPI operation failed')
+                assert adapter._batch_cache is None
+                assert np.array_equal(adapter.svars, previous)
+            invalid_u = np.array(0.) if rank == 0 else U
+            collective_failure(lambda: adapter.element_rk_batch(coords, invalid_u, DU),
+                               match='MPI operation failed')
+            invalid_u = U.copy()
+            if rank == 1:
+                invalid_u[0, 0] = np.nan
+            collective_failure(lambda: adapter.element_rk_batch(coords, invalid_u, DU),
+                               match='MPI operation failed')
+        nodes, elems = structured_quad_mesh(1, 1)
+        values = np.zeros(8)
+        for failure in ('coords', 'U', 'layout'):
+            adapter.element_rk_batch(coords, U, DU)
+            previous = adapter.svars.copy()
+            commit_nodes, commit_u, dpn = nodes, values, 2
+            if rank == 0:
+                if failure == 'coords':
+                    commit_nodes = nodes.astype(object)
+                    commit_nodes[0, 0] = 'invalid-number'
+                elif failure == 'U':
+                    commit_u = values.astype(object)
+                    commit_u[0] = 'invalid-number'
+                else:
+                    dpn = 3
+            collective_failure(lambda: adapter.commit_step(commit_nodes, elems, dpn, commit_u, values),
+                               match='MPI operation failed')
+            assert adapter._batch_cache is None
+            assert np.array_equal(adapter.svars, previous)
+    adapter.cache_batches = True
+    adapter.element_rk_batch(coords, U, DU)  # recover after the rejected inputs
 
     U += 1
     if rank == 1:
