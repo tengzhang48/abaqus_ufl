@@ -614,7 +614,9 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
 
     Either way the clip is followed by a fresh, scaled projected-residual
     certificate, so projection cannot silently invalidate the converged state
-    or commit a non-KKT bound state.
+    or commit a non-KKT bound state.  On every bounded route a prescribed
+    value outside the bounds (by more than 1e-12) raises ``ValueError``, and
+    neither clipping nor snapping ever changes a prescribed value.
 
     Adaptive stepping (``max_cutbacks > 0``) snapshots ``U`` and ``state``
     (SVARS and the increment clock) before each trial, restores both on
@@ -752,10 +754,13 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
             return box.arrays(ndof, dof_per_node, U_start)
         return static_lo, static_hi
 
-    def _clamp(Uv, lo, hi):
+    def _clamp(Uv, lo, hi, prescribed):
+        """Commit-time clip of the unprescribed DOFs; prescribed values stay."""
         if not bounded:
             return Uv
-        return np.clip(Uv, lo, hi)
+        out = np.clip(Uv, lo, hi)
+        out[prescribed] = Uv[prescribed]
+        return out
 
     def _assemble_free(Uv, U_prev, is_con, context=None, where=""):
         """Assemble with constrained rows zeroed.  An element cutback or a
@@ -817,13 +822,10 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                 f"{g // dof_per_node}, component {g % dof_per_node}) belongs "
                 "to no field group; every DOF that is not prescribed must be "
                 "solved by one group")
-        # Validate prescribed values whenever trials are projected onto the
-        # bounds (a BoxSpec, static field_bounds with feasible_trials, or the
-        # bounded monolithic method): the projection would otherwise clip an
-        # incompatible Dirichlet value and solve a different boundary-value
-        # problem without saying so.
-        if (box is not None or feasible_trials
-                or newton_method == "bounded_monolithic") and bc_con.size:
+        # Validate prescribed values on every bounded route: a bounded solve
+        # cannot satisfy an incompatible Dirichlet value, and accepting it
+        # would solve a different boundary-value problem without saying so.
+        if (bounded or newton_method == "bounded_monolithic") and bc_con.size:
             bad = bc_con[(U_work[bc_con] < lo_arr[bc_con] - 1e-12)
                          | (U_work[bc_con] > hi_arr[bc_con] + 1e-12)]
             if bad.size:
@@ -909,7 +911,8 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                             context=(f"solve_steps_staggered: step {step} "
                                      f"field {i_f}"),
                             cutback_on_element_rejection=(
-                                cutback_on_element_rejection))
+                                cutback_on_element_rejection),
+                            prescribed=is_bc)
                     except NonfiniteElementOutput as exc:
                         raise _StaggeredAttemptFailed(
                             "non-finite residual/tangent", extra=where) from exc
@@ -1018,7 +1021,7 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                 component_residuals=_component_residual_norms(R, dof_per_node),
                 accepted=(eta_R < 1.0 and eta_U < 1.0))
             if last_sweep.accepted:
-                U_clamped = _clamp(U_work, lo_arr, hi_arr)
+                U_clamped = _clamp(U_work, lo_arr, hi_arr, is_bc)
                 activated = U_clamped != U_work
                 U_work = U_clamped
                 R, _ = _assemble_free(U_work, U_prev, is_bc)

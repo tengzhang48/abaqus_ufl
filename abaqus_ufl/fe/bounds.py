@@ -391,11 +391,23 @@ def activity_equivalent_vi_certificate(step_asm, U, U_prev, is_con, lo, hi,
                 at_lo=at_lo, at_hi=at_hi)
 
 
+def _project(V, lo, hi, at_tol, movable, snap):
+    """Clip the movable DOFs into the box; with ``snap``, also move those within
+    ``at_tol`` of a finite bound onto it.  Other DOFs are returned unchanged."""
+    out = np.array(V, dtype=float, copy=True)
+    moved = np.clip(out, lo, hi)
+    if snap:
+        moved = np.where((moved <= lo + at_tol) & np.isfinite(lo), lo, moved)
+        moved = np.where((moved >= hi - at_tol) & np.isfinite(hi), hi, moved)
+    out[movable] = moved[movable]
+    return out
+
+
 def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
                     max_newton, tol, linear_solve, line_search, context,
                     damping=1.0, levenberg=0.0,
                     activity_vi_certificate=False, verbose=False,
-                    cutback_on_element_rejection=False):
+                    cutback_on_element_rejection=False, prescribed=None):
     """Projected semismooth-Newton / PDAS solve of one increment.
 
     Up to ``max_newton`` projected updates are applied; the state each update
@@ -429,7 +441,11 @@ def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
     ``cutback_on_element_rejection=True`` rejects the increment immediately
     when an element requests a smaller increment at a line-search trial.
     The default treats that trial as inadmissible and continues backtracking.
-    A rejected return leaves rollback/subdivision to the caller.  A nonfinite
+    A rejected return leaves rollback/subdivision to the caller.
+
+    ``prescribed`` (default ``is_con``) marks Dirichlet DOFs: projection and
+    snapping never change them, so a prescribed value near or (within the
+    callers' validation slack) beyond a bound is kept exactly.  A nonfinite
     line-search trial is always an infinite residual; a nonfinite residual or
     tangent at an iterate raises
     :class:`~abaqus_ufl.fe.compiled_element.NonfiniteElementOutput`.
@@ -437,13 +453,13 @@ def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
     ``U`` is modified only through the returned value; the caller owns rollback.
     """
     U_initial = np.asarray(U, dtype=float)
-    U = np.clip(U_initial, lo, hi)     # feasible start
-    # A bound-adjacent initial/restart value can satisfy the projected KKT
-    # test on the very first assembly.  Snap it before that early return, not
-    # only after a Newton update, so downstream checks with ``at_tol=0`` see
-    # the same active point rather than a numerically interior slack state.
-    U = np.where((U <= lo + at_tol) & np.isfinite(lo), lo, U)
-    U = np.where((U >= hi - at_tol) & np.isfinite(hi), hi, U)
+    movable = ~np.asarray(is_con if prescribed is None else prescribed, dtype=bool)
+    # Feasible start.  A bound-adjacent initial/restart value can satisfy the
+    # projected KKT test on the very first assembly.  Snap it before that
+    # early return, not only after a Newton update, so downstream checks with
+    # ``at_tol=0`` see the same active point rather than a numerically
+    # interior slack state.
+    U = _project(U_initial, lo, hi, at_tol, movable, snap=True)
     last_update = U - U_initial
     seen: Dict[bytes, float] = {}
     locked = np.zeros_like(is_con)
@@ -523,7 +539,7 @@ def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
         ls_exhausted = False
         if line_search:
             for _ls in range(30):
-                Ut = np.clip(U + alpha * du, lo, hi)
+                Ut = _project(U + alpha * du, lo, hi, at_tol, movable, snap=False)
                 try:
                     trial_norm = _kkt_norm(
                         step_asm, Ut, U_prev, is_con, lo, hi, w_res, at_tol,
@@ -560,16 +576,15 @@ def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
         # projected point, so a converged solve is a KKT point of the assembled
         # system rather than a clipped copy of an unconstrained one.
         U_before_update = U
-        U = np.clip(U + alpha * du, lo, hi)
         # SNAP to the bound inside the activity tolerance.  A DOF can
         # otherwise land a few ulps short of its bound and be judged "at the
         # bound" here (tolerance ``at_tol``) but "interior, with a large
         # residual" by any downstream check that uses a tighter tolerance --
         # i.e. convergence would rest on the slack rather than on the KKT
         # condition.  Snapping moves ``U`` by at most ``at_tol`` and makes the
-        # accepted state exactly feasible and exactly active.
-        U = np.where((U <= lo + at_tol) & np.isfinite(lo), lo, U)
-        U = np.where((U >= hi - at_tol) & np.isfinite(hi), hi, U)
+        # accepted state exactly feasible and exactly active.  Prescribed DOFs
+        # are not moved.
+        U = _project(U + alpha * du, lo, hi, at_tol, movable, snap=True)
         last_update = U - U_before_update
 
     return dict(U=U, converged=False, iterations=iterations, residual=rnorm,

@@ -699,3 +699,57 @@ def test_degenerate_touching_bound_still_terminates():
         external_fn=_external(_load_vector(nodes, elems)), tol=1e-10, max_newton=25)
     assert report.attempts[-1].converged
     assert U.max() <= F_SOURCE / 8.0 + 1e-12
+
+
+# --------------------------------------------------------------------------
+# 7. prescribed values on bounded routes
+# --------------------------------------------------------------------------
+
+def _coupled_to_prescribed(ei, coords, U_e, DU_e):
+    """Component 1 must equal 1e13 times the prescribed component 0, so any
+    change of the prescribed value is magnified into an O(1) error."""
+    return (np.array([0.0, U_e[1] - 1e13 * U_e[0]]),
+            np.array([[1.0, 0.0], [-1e13, 1.0]]))
+
+
+def _bounded_route(route, element_fn, dirichlet, dpn=2, **kw):
+    nodes, elems = np.zeros((1, 2)), np.array([[0]])
+    box = BoxSpec({0: (0.0, 1.0)})
+    if route == "bounded":
+        return solve_steps_bounded(nodes, elems, dpn, element_fn, lambda f: dirichlet, 1,
+                                   box, tol=1e-10, **kw)[0]
+    options = {"feasible": dict(box=box, feasible_trials=True),
+               "bounded_monolithic": dict(box=box, newton_method="bounded_monolithic"),
+               "static_clip": dict(field_bounds={0: (0.0, 1.0)}),
+               "box_clip": dict(box=box)}[route]
+    return solve_steps_staggered(nodes, elems, dpn, element_fn, lambda f: dirichlet,
+                                 [list(range(dpn))], 1, tol=1e-10, **options, **kw)
+
+
+@pytest.mark.parametrize("route", ["bounded", "feasible", "bounded_monolithic",
+                                   "static_clip", "box_clip"])
+@pytest.mark.parametrize("value", [5e-13, 1.0 + 5e-13])
+def test_bounded_routes_keep_prescribed_values_exactly(route, value):
+    """A prescribed DOF is never snapped or clipped onto a bound: a value
+    within the activity tolerance of a bound, or inside the 1e-12 validation
+    slack above it, is kept bit for bit."""
+    U = _bounded_route(route, _coupled_to_prescribed, {0: value})
+    assert U[0] == value
+    assert U[1] == pytest.approx(1e13 * value, rel=1e-15)
+
+
+@pytest.mark.parametrize("route", ["bounded", "feasible"])
+def test_prescribed_value_inside_a_large_activity_tolerance_is_kept(route):
+    linear = lambda ei, c, u, du: (u - 2.0, np.eye(len(u)))
+    U = _bounded_route(route, linear, {0: 0.05}, dpn=1, bound_atol=0.1)
+    assert U[0] == 0.05
+
+
+@pytest.mark.parametrize("route", ["bounded", "feasible", "bounded_monolithic",
+                                   "static_clip", "box_clip"])
+def test_incompatible_prescribed_value_is_rejected_on_every_bounded_route(route):
+    """Prescribing 2 inside the bounds [0, 1] must raise; the default static
+    clip used to return an accepted 1."""
+    linear = lambda ei, c, u, du: (u - 2.0, np.eye(len(u)))
+    with pytest.raises(ValueError, match="outside the box"):
+        _bounded_route(route, linear, {0: 2.0}, dpn=1)
