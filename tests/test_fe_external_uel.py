@@ -231,3 +231,83 @@ def test_build_external_uel_reports_a_compiler_error(tmp_path):
     with pytest.raises(RuntimeError, match="gfortran failed on"):
         build_external_uel(source, workdir=tmp_path / "build")
     assert "broken.f90" in (tmp_path / "build" / "compile.log").read_text()
+
+
+# --------------------------------------------------------------------------
+# multi-source builds, includes and rebuilds
+# --------------------------------------------------------------------------
+
+_UEL_USING_A_MODULE_AND_AN_INCLUDE = """\
+subroutine uel(rhs, amatrx, svars, energy, ndofel, nrhs, nsvars, props, nprops, &
+               coords, mcrd, nnode, u, du, v, a, jtype, time, dtime, kstep, kinc, &
+               jelem, params, ndload, jdltyp, adlmag, predef, npredf, lflags, &
+               mlvarx, ddlmag, mdload, pnewdt, jprops, njprop, period)
+  use uel_constants, only: scale
+  implicit none
+  include 'factor.inc'
+  integer :: ndofel, nrhs, nsvars, nprops, mcrd, nnode, jtype, kstep, kinc, jelem
+  integer :: ndload, npredf, mlvarx, mdload, njprop
+  integer :: jdltyp(mdload, *), lflags(*), jprops(*)
+  double precision :: rhs(mlvarx, *), amatrx(ndofel, ndofel), svars(*), energy(8)
+  double precision :: props(*), coords(mcrd, nnode), u(ndofel), du(mlvarx, *)
+  double precision :: v(ndofel), a(ndofel), time(2), dtime, params(*)
+  double precision :: adlmag(mdload, *), predef(2, npredf, nnode), ddlmag(mdload, *)
+  double precision :: pnewdt, period
+  integer :: i
+  amatrx = 0d0
+  do i = 1, ndofel
+    rhs(i, 1) = -scale * factor * props(1) * u(i)
+    amatrx(i, i) = scale * factor * props(1)
+  end do
+  svars(1) = svars(1) + dtime
+end subroutine uel
+"""
+
+
+def _write_external_uel(folder, scale, factor):
+    """Two sources: a Fortran module (compiled first) and the UEL using it;
+    the UEL includes inc/factor.inc, found through the relative flag -Iinc."""
+    (folder / "inc").mkdir(parents=True, exist_ok=True)
+    (folder / "constants.f90").write_text(
+        "module uel_constants\n  implicit none\n"
+        f"  double precision, parameter :: scale = {scale}d0\nend module uel_constants\n")
+    (folder / "inc" / "factor.inc").write_text(
+        f"  double precision, parameter :: factor = {factor}d0\n")
+    (folder / "uel.f90").write_text(_UEL_USING_A_MODULE_AND_AN_INCLUDE)
+    return [folder / "constants.f90", folder / "uel.f90"]
+
+
+def _gain(module):
+    element = CompiledAbaqusElement.from_module(module, dof_per_node=1, props=[3.0],
+                                                n_elem=1, nsvars=1, dt=0.5)
+    r, k = element.element_rk(0, np.array([[0, 0], [1, 0], [1, 1], [0, 1.0]]),
+                              np.ones(4), np.zeros(4))
+    assert np.array_equal(r, k @ np.ones(4))
+    return r[0] / 3.0
+
+
+def test_multi_source_build_with_a_module_and_a_relative_include(tmp_path):
+    sources = _write_external_uel(tmp_path / "src", scale=2.0, factor=5.0)
+    module = build_external_uel(sources, workdir=tmp_path / "build", compile_flags=["-Iinc"])
+    assert _gain(module) == 10.0
+    log = (tmp_path / "build" / "compile.log").read_text()
+    assert log.index("constants.f90") < log.index("uel.f90")
+
+
+def test_a_rebuild_with_the_same_name_and_workdir_runs_the_new_kernel(tmp_path):
+    """Rebuilding must never reuse native code already loaded under that name
+    or path, and must not replace an unrelated sys.modules entry."""
+    import sys
+    sentinel = object()
+    sys.modules["external_kernel"] = sentinel
+    try:
+        build = dict(workdir=tmp_path / "build", compile_flags=["-Iinc"],
+                     module_name="external_kernel")
+        first = build_external_uel(_write_external_uel(tmp_path / "src", 2.0, 5.0), **build)
+        second = build_external_uel(_write_external_uel(tmp_path / "src", 7.0, 5.0), **build)
+        assert _gain(second) == 35.0, "the rebuild ran the previously loaded kernel"
+        assert _gain(first) == 10.0, "the first module changed under its user"
+        assert first is not second and first.__name__ != second.__name__
+        assert sys.modules["external_kernel"] is sentinel
+    finally:
+        sys.modules.pop("external_kernel", None)

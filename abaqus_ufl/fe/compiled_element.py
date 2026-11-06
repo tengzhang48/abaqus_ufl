@@ -111,9 +111,12 @@ def build_external_uel(sources, workdir=None, *, compile_flags=(), module_name=N
     ``("-ffixed-line-length-none",)`` adjust the defaults).  The objects are
     linked with the packaged ``drive_uel.f90`` through numpy.f2py, so the
     subroutine must be named ``UEL`` and have the standard Abaqus argument
-    list.  ``workdir`` and the unique default ``module_name`` behave as in
-    :func:`build_compiled_uel`; the compiler log is ``compile.log``.  Use the
-    module with :meth:`CompiledAbaqusElement.from_module`.
+    list.  ``workdir`` behaves as in :func:`build_compiled_uel`; the
+    compiler log is ``compile.log``.  ``module_name`` is a readable prefix:
+    every build appends a unique suffix, so a rebuild (even into the same
+    ``workdir``) never reuses native code already loaded under an earlier
+    name or path, and never replaces another entry of ``sys.modules``.  Use
+    the module with :meth:`CompiledAbaqusElement.from_module`.
     """
     if isinstance(sources, (str, os.PathLike)):
         sources = [sources]
@@ -126,9 +129,10 @@ def build_external_uel(sources, workdir=None, *, compile_flags=(), module_name=N
     if isinstance(compile_flags, str) or not all(isinstance(flag, str) for flag in compile_flags):
         raise ValueError("compile_flags must be a sequence of strings")
     if module_name is None:
-        module_name = "_abaqus_ufl_ext_" + uuid.uuid4().hex
+        module_name = "_abaqus_ufl_ext"
     elif not (isinstance(module_name, str) and module_name.isidentifier()):
         raise ValueError("module_name must be a valid Python identifier")
+    module_name = module_name + "_" + uuid.uuid4().hex     # unique per build
     temporary, build = _build_directory(workdir, "abaqus_ufl_ext_")
     objects, log = [], ""
     for index, source in enumerate(sources):
