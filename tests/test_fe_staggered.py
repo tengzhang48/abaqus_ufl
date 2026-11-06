@@ -251,6 +251,36 @@ def _two_component_linear(ei, coords, U_e, DU_e):
     return np.asarray(U_e, dtype=float) - 2.0, np.eye(len(U_e))
 
 
+@pytest.mark.parametrize("method", ["staggered", "bounded_monolithic"])
+def test_a_free_dof_outside_every_field_group_is_rejected(method):
+    """Defect regression: omitting a component used to 'converge' with that
+    component's residual untouched (norm 2 per DOF here)."""
+    nodes, elems = structured_quad_mesh(1, 1)
+    with pytest.raises(ValueError, match="belongs to no field group"):
+        solve_steps_staggered(nodes, elems, 2, _two_component_linear, lambda f: {},
+                              [[0]], 1, tol=1e-10, newton_method=method)
+    # A component that is prescribed at every node needs no group.
+    U = solve_steps_staggered(nodes, elems, 2, _two_component_linear,
+                              lambda f: {2 * n + 1: 2.0 for n in range(4)},
+                              [[0]], 1, tol=1e-10, newton_method=method)
+    np.testing.assert_allclose(U, 2.0)
+
+
+@pytest.mark.parametrize("groups, message", [
+    ([[0], [0, 1]], "more than one field group"),
+    ([[0, 0], [1]], "more than one field group"),
+    ([[0], []], "empty"),
+    ([[0], [2]], "not a component index"),
+    ([[0], [True]], "not a component index"),
+    ([], "at least one"),
+])
+def test_invalid_or_overlapping_field_groups_are_rejected(groups, message):
+    nodes, elems = structured_quad_mesh(1, 1)
+    with pytest.raises(ValueError, match=message):
+        solve_steps_staggered(nodes, elems, 2, _two_component_linear, lambda f: {},
+                              groups, 1)
+
+
 def test_static_box_heals_broken_control():
     """BROKEN CONTROL: the static ``field_bounds`` route lets a third of the
     nodes heal, exactly to the closed-form unconstrained equilibrium."""

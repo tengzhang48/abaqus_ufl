@@ -390,6 +390,32 @@ def _component_weights(scale, ndof, dof_per_node, name):
     return w
 
 
+def _field_groups(field_components, dof_per_node):
+    """Validate per-node component groups: nonempty, in range, disjoint."""
+    try:
+        groups = [list(g) for g in field_components]
+    except TypeError as exc:
+        raise ValueError("field_components must be a list of component lists") from exc
+    if not groups:
+        raise ValueError("field_components needs at least one field group")
+    seen = set()
+    for g in groups:
+        if not g:
+            raise ValueError("field_components: a field group is empty")
+        for c in g:
+            if (isinstance(c, bool) or not isinstance(c, (int, np.integer))
+                    or not 0 <= c < dof_per_node):
+                raise ValueError(
+                    f"field_components: {c!r} is not a component index in "
+                    f"[0, {dof_per_node})")
+            if int(c) in seen:
+                raise ValueError(
+                    f"field_components: component {int(c)} belongs to more "
+                    "than one field group")
+            seen.add(int(c))
+    return [[int(c) for c in g] for g in groups], sorted(seen)
+
+
 def _field_dofs(field_components, n_node, dof_per_node):
     node = np.arange(n_node)
     return [np.sort(np.concatenate([node * dof_per_node + c for c in comps]))
@@ -522,8 +548,10 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     e.g. ``[[0,1],[2]]`` for u, phi) is solved in turn with the **other fields
     held fixed**, and the sweep is iterated to convergence.  This is robust
     through softening branches (for example phase-field fracture) where the
-    monolithic Newton tangent is indefinite.  A single group of all
-    components is one monolithic Newton per increment.
+    monolithic Newton tangent is indefinite.  The groups must be disjoint,
+    nonempty and in range, and every DOF that is not prescribed must belong to
+    a group (otherwise ``ValueError``); a single group of all components is
+    one monolithic Newton per increment.
 
     A field's sub-solve is the full system with every *other* DOF added to the
     Dirichlet set (frozen), so the Newton increment is nonzero only on that
@@ -663,7 +691,9 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     nodes, elems, ndof = _stepping_mesh(nodes, elems, dof_per_node)
     n_steps = _check_positive_int(n_steps, "n_steps")
     n_node = len(nodes)
+    field_components, covered = _field_groups(field_components, dof_per_node)
     fdofs = _field_dofs(field_components, n_node, dof_per_node)
+    in_some_field = np.isin(np.arange(ndof) % dof_per_node, covered)
     asm = _make_assembler(nodes, elems, dof_per_node, element_fn, batch_fn)
     if restart is not None and U0 is not None:
         raise ValueError("U0 and restart are mutually exclusive")
@@ -778,6 +808,14 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
             bc, ndof, f"solve_steps_staggered: step {step}")
         for g, v in bc.items():
             U_work[g] = v
+        uncovered = np.flatnonzero(~is_bc & ~in_some_field)
+        if uncovered.size:
+            g = int(uncovered[0])
+            raise ValueError(
+                f"solve_steps_staggered: step {step}: free DOF {g} (node "
+                f"{g // dof_per_node}, component {g % dof_per_node}) belongs "
+                "to no field group; every DOF that is not prescribed must be "
+                "solved by one group")
         # Validate prescribed values whenever trials are projected onto the
         # bounds (a BoxSpec, static field_bounds with feasible_trials, or the
         # bounded monolithic method): the projection would otherwise clip an
