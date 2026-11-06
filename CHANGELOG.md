@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Add serial stepping drivers (`solve_steps`, `solve_steps_staggered`,
+  `solve_steps_multimaterial`, `assemble_groups`) and a bounded KKT solver
+  (`solve_steps_bounded`, `BoxSpec`, `CompiledElementState`) with transactional
+  cutbacks and restart dictionaries. A step is committed only below `tol`.
+  Compiled elements receive beginning-of-increment `TIME`, each attempt's
+  `DTIME`, and `KINC` that advances on acceptance. Nonfinite element output
+  raises `NonfiniteElementOutput`, a `RuntimeError` subclass.
 - Add opt-in exact compiled batch caching, batched assembly and explicit
   material-state commits for the standard Quad4 host. Cached trial outputs
   cannot alias callers, and commit/rejection invalidates reuse.

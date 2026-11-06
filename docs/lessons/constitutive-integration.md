@@ -75,5 +75,5 @@ time step and inspect both local bounds and integral observables.
 Clipping a converged unconstrained field is a safeguard, not a constrained
 equilibrium certificate. A genuinely bounded/irreversible formulation needs
 an appropriate projected/KKT residual and a transaction that restores old
-state after rejection. This is a formulation lesson; the public FE hosts do
-not supply bounded or staggered solves.
+state after rejection. The serial stepping drivers provide both
+([bounded tests](../../tests/test_fe_bounds.py)); the MPI hosts do not.
