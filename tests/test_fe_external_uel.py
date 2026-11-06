@@ -49,6 +49,20 @@ def builds(tmp_path_factory):
     return out
 
 
+def _assert_same_attributes(a, b):
+    """Every attribute but the module has the same value, dtype and shape."""
+    assert sorted(vars(a)) == sorted(vars(b))
+    for name in sorted(vars(a)):
+        if name == "module":
+            continue
+        x, y = getattr(a, name), getattr(b, name)
+        if isinstance(x, np.ndarray) or isinstance(y, np.ndarray):
+            assert (isinstance(x, np.ndarray) and isinstance(y, np.ndarray)
+                    and x.dtype == y.dtype and np.array_equal(x, y)), name
+        else:
+            assert type(x) is type(y) and x == y, name
+
+
 def _adapters(build, n_elem, dt=0.2):
     problem, generated, external = build
     gen = CompiledAbaqusElement(generated, problem, dt=dt, n_elem=n_elem)
@@ -63,7 +77,7 @@ def _adapters(build, n_elem, dt=0.2):
 def test_external_build_matches_the_generated_adapter_bit_for_bit(builds, model):
     nodes, elems = structured_quad_mesh(2, 2)
     gen, ext = _adapters(builds[model], len(elems))
-    assert sorted(vars(gen)) == sorted(vars(ext))          # one shared setup
+    _assert_same_attributes(gen, ext)                      # one shared setup
     dpn = gen.dof_per_node
     gm = (elems[:, :, None] * dpn + np.arange(dpn)).reshape(len(elems), -1)
     rng = np.random.default_rng(7)
@@ -114,28 +128,50 @@ def test_external_adapter_drives_solve_steps_staggered(builds):
 # --------------------------------------------------------------------------
 
 def _capture_module():
-    calls = []
+    calls = {"scalar": [], "batch": []}
 
     def drive_uel(*args):
-        calls.append(args)
+        calls["scalar"].append(args)
         return np.zeros(8), np.eye(8), np.array(args[0], copy=True), 1.0
 
-    return SimpleNamespace(drive_uel=drive_uel, drive_uel_batch=lambda *a: None), calls
+    def drive_uel_batch(*args):
+        calls["batch"].append(args)
+        n = args[2].shape[1]
+        return np.zeros((8, n)), np.zeros((8, 8, n)), np.array(args[0], copy=True), 1.0
+
+    return SimpleNamespace(drive_uel=drive_uel, drive_uel_batch=drive_uel_batch), calls
 
 
-def test_from_module_passes_props_jprops_lflags_and_the_beginning_time():
+_SQUARE = np.array([[0, 0], [1, 0], [1, 1], [0, 1.0]])
+
+
+def test_from_module_stores_and_passes_every_supplied_value():
+    """Nondefault props, jprops, lflags, SVARS and clock reach both the
+    attributes and the scalar and batch UEL calls unchanged."""
     module, calls = _capture_module()
     element = CompiledAbaqusElement.from_module(
-        module, dof_per_node=2, props=[3.5, 1.0], jprops=[7, 8],
-        lflags=(1, 0, 1, 0, 0, 0), dt=0.25, time=1.0)
-    element.element_rk(0, np.array([[0, 0], [1, 0], [1, 1], [0, 1.0]]), np.zeros(8), np.zeros(8))
-    (sv, coords, u, du, props, jprops, time, dtime, pnewdt, lflags, params,
-     jtype, kstep, kinc, jelem, period) = calls[0]
-    assert props.tolist() == [3.5, 1.0]
-    assert jprops.dtype == np.int32 and jprops.tolist() == [7, 8]
-    assert lflags.dtype == np.int32 and lflags.tolist() == [1, 0, 1, 0, 0, 0]
-    assert time.tolist() == [1.0, 1.0] and dtime == 0.25 and (kstep, kinc) == (1, 1)
-    assert element.svars is None and element.svars_size == 1
+        module, dof_per_node=2, props=[3.5, -1.0, 7], n_elem=2, nsvars=3,
+        svars_initial=[0.5, -2.0, 4.0], jprops=[7, -8], lflags=(2, 1, 5, 0, 0, 1),
+        dt=0.25, time=1.0, cache_batches=True)
+    assert (element.dof_per_node, element.ndofel, element.svars_size) == (2, 8, 3)
+    assert element.props.dtype == np.float64 and element.props.tolist() == [3.5, -1.0, 7.0]
+    np.testing.assert_array_equal(element.svars, [[0.5, -2.0, 4.0]] * 2)
+    assert element._jprops.dtype == np.int32 and element._jprops.tolist() == [7, -8]
+    assert element._lflags.dtype == np.int32 and element._lflags.tolist() == [2, 1, 5, 0, 0, 1]
+    assert (element.time, element.dt, element.kinc) == (1.0, 0.25, 1)
+    assert element.cache_batches is True and element.elem_ids is None
+    element.begin_increment(4, time_begin=1.5, dt=0.125)
+    element.element_rk(1, _SQUARE, np.arange(8.0), np.ones(8))
+    element.element_rk_batch(np.stack([_SQUARE, _SQUARE]), np.zeros((2, 8)), np.zeros((2, 8)))
+    scalar, batch = calls["scalar"][-1], calls["batch"][-1]
+    for args in (scalar, batch):
+        props, jprops, time, dtime, pnewdt, lflags = args[4:10]
+        assert props.tolist() == [3.5, -1.0, 7.0] and jprops.tolist() == [7, -8]
+        assert lflags.tolist() == [2, 1, 5, 0, 0, 1]
+        assert time.tolist() == [1.5, 1.5] and dtime == 0.125 and pnewdt == 1.0
+        assert (args[11], args[12], args[13]) == (1, 1, 4)        # JTYPE, KSTEP, KINC
+    assert scalar[0].tolist() == [0.5, -2.0, 4.0] and scalar[14] == 2   # SVARS, JELEM
+    assert np.array_equal(batch[0], element.svars.T) and batch[15].tolist() == [1, 2]
 
 
 def test_from_module_stateless_and_stateful_elements():
@@ -168,8 +204,10 @@ def test_a_subclass_may_override_the_time_convention():
     element = EndOfIncrement.from_module(module, dof_per_node=2, props=[1.0], dt=0.25)
     assert isinstance(element, EndOfIncrement) and element.time == 0.25
     element.begin_increment(3, time_begin=0.5, dt=0.25)
-    element.element_rk(0, np.array([[0, 0], [1, 0], [1, 1], [0, 1.0]]), np.zeros(8), np.zeros(8))
-    assert calls[-1][6].tolist() == [0.75, 0.75] and calls[-1][13] == 3
+    element.element_rk(0, _SQUARE, np.zeros(8), np.zeros(8))
+    element.element_rk_batch(_SQUARE[None], np.zeros((1, 8)), np.zeros((1, 8)))
+    for args in (calls["scalar"][-1], calls["batch"][-1]):
+        assert args[6].tolist() == [0.75, 0.75] and args[13] == 3
 
 
 _FAKE = SimpleNamespace(drive_uel=lambda *a: None, drive_uel_batch=lambda *a: None)
