@@ -869,6 +869,27 @@ def test_feasible_trials_never_evaluates_outside_the_box():
     assert report.attempts[-1].converged
 
 
+def test_feasible_trial_reports_carry_the_real_raw_residual(monkeypatch):
+    """Each feasible block reports the unprojected residual of its free DOFs
+    (here the bound reaction of the d block), not a placeholder NaN."""
+    import abaqus_ufl.fe.stepping as stepping
+    captured = []
+    original = stepping.StaggeredFieldReport
+
+    def capture(**kw):
+        captured.append(original(**kw))
+        return captured[-1]
+
+    monkeypatch.setattr(stepping, "StaggeredFieldReport", capture)
+    U, _ = _feasible_solve(RecordingToy(), feasible_trials=True)
+    nodes, elems = structured_quad_mesh(2, 2)
+    R, _ = assemble(nodes, elems, DPN_F, RecordingToy(), U, U - U)
+    assert captured and all(np.isfinite(r.raw_residual) for r in captured)
+    final_d = [r for r in captured if r.field == 1][-1]
+    assert final_d.raw_residual == pytest.approx(np.linalg.norm(R[D_F::DPN_F]), rel=1e-12)
+    assert final_d.raw_residual > 1.0 and final_d.scaled_residual < 1e-10
+
+
 def test_default_staggered_solve_still_evaluates_outside_the_box():
     """Broken control: without feasible trials the iterates leave the box."""
     element = RecordingToy()

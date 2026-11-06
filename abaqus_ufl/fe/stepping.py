@@ -653,7 +653,8 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     the final certificate use the projected residual.  ``bound_atol`` scales
     ``field_scale`` into the activity tolerance of these blocks, as in
     :func:`~abaqus_ufl.fe.bounds.solve_steps_bounded`.  Requires ``box`` or
-    ``field_bounds``.
+    ``field_bounds``.  The field reports of these blocks give the
+    unprojected residual of the block's free DOFs as ``raw_residual``.
 
     ``newton_method="bounded_monolithic"`` instead solves all components
     together using the projected Newton/active-set method. It shares this
@@ -922,9 +923,11 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                             R=R_fail, extra=f"{where} after "
                             f"{res['iterations']} iterations")
                     U_work = res["U"]
+                    R_block = res.get("residual_vector")
                     field_reps.append(StaggeredFieldReport(
                         field=i_f, iterations=int(res["iterations"]),
-                        raw_residual=float("nan"),
+                        raw_residual=(float(np.linalg.norm(R_block[free]))
+                                      if R_block is not None else float("nan")),
                         scaled_residual=float(res["residual"]),
                         scaled_update=_masked_scaled_norm(
                             U_work - U_block0, w_upd, free),
