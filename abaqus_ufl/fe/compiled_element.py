@@ -236,7 +236,8 @@ class CompiledAbaqusElement:
         requests residual and tangent).  ``nsvars`` is NSVARS per element:
         with ``nsvars > 0`` committed SVARS need ``n_elem`` and start from
         ``svars_initial`` (zeros by default) in every element; with 0 the
-        element is stateless.  ``dt``, ``time`` and ``cache_batches`` are as
+        element is stateless: NSVARS=1 is passed with fresh zero scratch
+        storage on every call, and nothing persists.  ``dt``, ``time`` and ``cache_batches`` are as
         in the constructor.  The adapter passes beginning-of-increment TIME;
         a subclass may override :meth:`begin_increment` for another
         convention, and ``from_module`` then returns that subclass.

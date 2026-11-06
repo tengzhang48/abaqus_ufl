@@ -112,13 +112,23 @@ element = CompiledAbaqusElement.from_module(
 `build_external_uel` compiles the sources in order with
 `gfortran -c -O2 -fPIC` followed by `compile_flags` (later flags take
 precedence), links the objects with the packaged `drive_uel.f90` and imports
-the module. The subroutine must be named `UEL`, have the standard Abaqus
-argument list and serve four counterclockwise nodes with two coordinates and
-NDOFEL = 4 x `dof_per_node` in node-major order. `from_module` validates its
-arguments: a positive `dof_per_node`, finite 1-D `props`, int32 `jprops`, six
-integer `lflags`, a positive finite `dt`, and `nsvars` SVARS per element,
-which need `n_elem` and start from `svars_initial` (zeros by default). It
-returns the adapter the WeakForm constructor builds, for every driver above.
+the module. Each source is compiled in its own folder, so its includes and
+relative `-I` paths resolve there; objects, Fortran module files and
+`compile.log` go to `workdir`. The flags apply to compilation only: options
+that need the link step (`-fopenmp`, `-fopenacc`, `-l`, `-L`, `-Wl,`) are
+rejected. `module_name` is a readable prefix; every build appends a unique
+suffix, so a rebuild never reuses native code loaded earlier.
+
+The subroutine must be named `UEL`, have the standard Abaqus argument list
+and serve four counterclockwise nodes with two coordinates and NDOFEL =
+4 x `dof_per_node` in node-major order. `from_module` validates its
+arguments: a positive `dof_per_node`, finite real 1-D `props`, int32
+`jprops`, six integer `lflags`, a positive finite real `dt`, and `nsvars`
+SVARS per element, which need `n_elem` and start from `svars_initial` (zeros
+by default). With `nsvars=0` the element is stateless: the adapter still
+passes NSVARS=1, with fresh zero scratch storage on every call, and keeps
+nothing. It returns the adapter the WeakForm constructor builds, for every
+driver above.
 
 | UEL argument | What the adapter passes |
 |---|---|
