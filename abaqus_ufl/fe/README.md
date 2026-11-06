@@ -120,6 +120,11 @@ no looser fallback, and a line search that cannot reduce the residual in 30
 bisections fails the step instead of applying a vanishing update. A clip
 or projection is followed by a fresh projected-residual certificate.
 
+**Bounds.** `BoxSpec` and `field_bounds` must name existing components
+(integer indices below `dof_per_node`), or the solve raises `ValueError`. On
+every bounded route a prescribed value outside the bounds by more than 1e-12
+raises `ValueError`; clipping and snapping never change a prescribed value.
+
 **Time.** Pass `state=CompiledElementState([element])`. Before each attempt
 the cutback drivers call `state.begin_increment(kinc, time_begin=t, dt=dt_sub)`:
 `TIME` is the beginning of the attempted increment (accumulated accepted time,
@@ -139,10 +144,13 @@ blocks; projected solves backtrack past it unless
 `cutback_on_element_rejection=True` (staggered driver). A nonfinite
 line-search trial counts as an infinite residual. `NonfiniteElementOutput` at
 an iterate rejects a staggered attempt and stops `solve_steps_bounded`. Any
-other exception from an element propagates.
-`accepted_callback` receives a restart dictionary (`U`, state snapshot, step
-cursor, `time_end`, `next_kinc`, report) to pass back as `restart=`. File
-checkpoints are not provided.
+other exception from an element or commit propagates, after SVARS and the
+clock have been restored.
+
+**Restart** (`solve_steps_staggered` only). Its `accepted_callback` receives a
+restart dictionary (`U`, state snapshot, step cursor, `time_end`, `next_kinc`,
+report) to pass back as `restart=`. `solve_steps_bounded` and the other
+drivers have no restart parameters, and file checkpoints are not provided.
 
 The stepping assembler accepts repeated node indices in an element, such as a
 collapsed Quad4 at a polar centre, and scatter-adds them; the element must

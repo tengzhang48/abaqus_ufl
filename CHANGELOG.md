@@ -5,7 +5,8 @@
 - Add serial stepping drivers (`solve_steps`, `solve_steps_staggered`,
   `solve_steps_multimaterial`, `assemble_groups`) and a bounded KKT solver
   (`solve_steps_bounded`, `BoxSpec`, `CompiledElementState`) with transactional
-  cutbacks and restart dictionaries. A step is committed only below `tol`.
+  cutbacks; `solve_steps_staggered` also takes restart dictionaries. A step is
+  committed only below `tol`, and bounded routes keep prescribed values exactly.
   Compiled elements receive beginning-of-increment `TIME`, each attempt's
   `DTIME`, and `KINC` that advances on acceptance. Nonfinite element output
   raises `NonfiniteElementOutput`, a `RuntimeError` subclass.
