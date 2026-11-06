@@ -69,6 +69,11 @@ __all__ = [
 ]
 
 
+def _is_component(c, dof_per_node):
+    return (not isinstance(c, (bool, np.bool_)) and isinstance(c, (int, np.integer))
+            and 0 <= c < dof_per_node)
+
+
 @dataclass(frozen=True)
 class BoxSpec:
     """Feasible set for a bounded solve, declared per per-node component.
@@ -87,6 +92,10 @@ class BoxSpec:
     U_prev_i)``), for fields that may only decrease (e.g. a remaining-capacity
     variable).  It exists so an irreversibility direction is always an explicit
     declaration rather than an implicit convention.
+
+    Every named component must be an integer index in ``[0, dof_per_node)``;
+    :meth:`arrays` raises ``ValueError`` otherwise, so a misnamed component
+    cannot silently drop its constraint.
     """
 
     bounds: Mapping[int, Tuple[float, float]]
@@ -111,6 +120,14 @@ class BoxSpec:
         monotone component is declared; passing the *current iterate* instead
         would ratchet the bound during the solve and freeze the field.
         """
+        named = ([("bounds", c) for c in dict(self.bounds)]
+                 + [("irreversible", c) for c in self.irreversible]
+                 + [("monotone_decreasing", c) for c in self.monotone_decreasing])
+        for where, c in named:
+            if not _is_component(c, dof_per_node):
+                raise ValueError(
+                    f"BoxSpec: {where} component {c!r} is not a component "
+                    f"index in [0, {dof_per_node})")
         comp = np.arange(ndof) % dof_per_node
         lo = np.full(ndof, -np.inf)
         hi = np.full(ndof, np.inf)

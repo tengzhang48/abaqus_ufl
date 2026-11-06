@@ -833,3 +833,38 @@ def test_an_invalid_dirichlet_value_is_raised_after_rollback(route):
         _drive(route, element, dirichlet={**bc, 10 ** 6: 0.0} if route == "staggered"
                else {**bc, 0: 20.0})
     _assert_untouched(element)
+
+
+# --------------------------------------------------------------------------
+# 9. bound declarations name existing components
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("box", [
+    BoxSpec({1: (0.0, 1.0)}),                                # static, unknown
+    BoxSpec({0: (0.0, 5.0)}, irreversible=(1,)),             # dynamic, unknown
+    BoxSpec({0: (0.0, 5.0)}, monotone_decreasing=(-1,)),     # dynamic, negative
+    BoxSpec({0.0: (0.0, 1.0)}),                              # not an integer index
+], ids=["static", "irreversible", "monotone", "float"])
+@pytest.mark.parametrize("route", ["bounded", "staggered"])
+def test_box_components_must_exist(box, route):
+    """An unknown component silently dropped its constraint: a one-component
+    solve accepted U = 2 with BoxSpec({1: (0, 1)})."""
+    nodes, elems = np.zeros((1, 2)), np.array([[0]])
+    linear = lambda ei, c, u, du: (u - 2.0, np.eye(len(u)))
+    with pytest.raises(ValueError, match="component"):
+        if route == "bounded":
+            solve_steps_bounded(nodes, elems, 1, linear, lambda f: {}, 1, box)
+        else:
+            solve_steps_staggered(nodes, elems, 1, linear, lambda f: {}, [[0]], 1, box=box)
+    with pytest.raises(ValueError, match="component"):
+        box.arrays(4, 1, np.zeros(4))
+
+
+@pytest.mark.parametrize("field_bounds", [{1: (0.0, 1.0)}, {-1: (0.0, 1.0)},
+                                          {True: (0.0, 1.0)}, {0: (1.0, 0.0)}])
+def test_field_bounds_must_name_existing_components_with_a_nonempty_range(field_bounds):
+    nodes, elems = np.zeros((1, 2)), np.array([[0]])
+    linear = lambda ei, c, u, du: (u - 2.0, np.eye(len(u)))
+    with pytest.raises(ValueError, match="field_bounds"):
+        solve_steps_staggered(nodes, elems, 1, linear, lambda f: {}, [[0]], 1,
+                              field_bounds=field_bounds)

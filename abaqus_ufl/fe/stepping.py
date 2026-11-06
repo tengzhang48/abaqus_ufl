@@ -600,7 +600,8 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
 
     **Feasible set.**  Two mutually exclusive declarations are accepted:
 
-    ``field_bounds``   STATIC ``{component: (lo, hi)}`` commit-time clip.
+    ``field_bounds``   STATIC ``{component: (lo, hi)}`` commit-time clip;
+                       components must exist and ranges be nonempty.
     ``box``            a :class:`~abaqus_ufl.fe.bounds.BoxSpec`, which adds the
                        dynamic ``irreversible`` / ``monotone_decreasing``
                        components.  The per-DOF bounds are derived ONCE from
@@ -686,8 +687,9 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     ``return_report``.  Raises :class:`StaggeredSolveFailed` when an
     increment fails after ``max_cutbacks`` cutbacks or falls below ``min_dt``.
     """
-    from .bounds import (BoxSpec, _bounded_newton, _restore_element_state,
-                         _snapshot_element_state, projected_residual)
+    from .bounds import (BoxSpec, _bounded_newton, _is_component,
+                         _restore_element_state, _snapshot_element_state,
+                         projected_residual)
 
     if newton_method not in ("staggered", "bounded_monolithic"):
         raise ValueError("newton_method must be 'staggered' or 'bounded_monolithic'")
@@ -741,6 +743,12 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     static_hi = np.full(ndof, np.inf)
     if field_bounds:
         for c, (c_lo, c_hi) in field_bounds.items():
+            if not _is_component(c, dof_per_node):
+                raise ValueError(f"field_bounds: {c!r} is not a component index "
+                                 f"in [0, {dof_per_node})")
+            if not c_lo <= c_hi:
+                raise ValueError(f"field_bounds: component {c} has an empty "
+                                 f"range ({c_lo}, {c_hi})")
             static_lo[comp_of == c] = c_lo
             static_hi[comp_of == c] = c_hi
     bounded = bool(field_bounds) or box is not None
