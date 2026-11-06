@@ -77,5 +77,6 @@ Return to the [four-kind index](lessons/README.md) to choose an item by task.
 - **Replacement:** distinguish a numerical safeguard from a bounded or
   irreversible formulation certified by its own projected/KKT residual.
 - **Check and limits:** recompute the appropriate residual after any projection
-  and verify rollback of genuinely mutated state. No bounded/staggered driver
-  is added by this update. See [the lesson](lessons/constitutive-integration.md#protect-accumulator-arithmetic-and-extreme-driving-forces).
+  and verify rollback of genuinely mutated state. The serial bounded and
+  staggered drivers accept only a certified projected residual
+  ([bounded tests](../tests/test_fe_bounds.py)). See [the lesson](lessons/constitutive-integration.md#protect-accumulator-arithmetic-and-extreme-driving-forces).

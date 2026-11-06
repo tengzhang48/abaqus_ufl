@@ -13,9 +13,10 @@ The supported compiled path is **2D standard Quad4**, uniform degree-one
 nodal fields, and interleaved node/component DOFs. Previous nodal values are
 passed through `DU`; transient transport and explicit material `SVARS`
 commits are supported. Condensed local fields, mixed interpolation, F-bar,
-other topologies, contact, dynamics, external force assembly and automatic
-time cutbacks are outside this API. PETSc and MPI are optional hosts for
-this same element contract.
+other topologies, contact and dynamics are outside this API. `newton_solve`
+solves one increment; the serial [stepping drivers](#stepping-drivers-and-bounded-solves)
+add external loads, automatic time cutbacks, staggered and bounded solves.
+PETSc and MPI are optional hosts for this same element contract.
 Unsupported layouts are rejected before compilation.
 
 ## API
@@ -95,6 +96,85 @@ For a manually seeded state, use the appropriate nonzero beginning time so
 that initialization does not replace it. Retain the accepted nodal solution
 separately and set the beginning-of-increment clock before each step.
 
+## Stepping drivers and bounded solves
+
+`abaqus_ufl.fe.stepping` and `abaqus_ufl.fe.bounds` advance many increments
+serially. They take the same element callables (`element.element_rk`, optional
+`batch_fn=element.element_rk_batch`, `commit_fn=element.commit_step`) and
+`dirichlet_fn(frac)`, which returns prescribed global DOF values at the load
+fraction `frac`.
+
+| Function | What it does |
+|---|---|
+| `solve_steps` | One monolithic Newton with line search per load step; optional `external_fn` load and `step_callback`; no cutback |
+| `solve_steps_staggered` | Alternating Newton over disjoint per-node component groups (one group of all components is monolithic), with per-field scaled residual and update gates, adaptive cutbacks (`max_cutbacks`), restart dictionaries and a `StaggeredReport`; optional `field_bounds` clip or `BoxSpec`, `feasible_trials` and `newton_method="bounded_monolithic"` |
+| `assemble_groups`, `solve_steps_multimaterial` | Element groups that touch different components of one uniform per-node layout |
+| `solve_steps_bounded` | Projected Newton (primal-dual active set) inside a `BoxSpec` box, with optional `irreversible` or `monotone_decreasing` components, cutbacks and a `BoundedReport` |
+
+**A step is committed only below `tol`.** The test is the free-DOF residual
+2-norm (`solve_steps`, multimaterial), the per-field scaled residual and update
+norms (staggered), or the weighted projected (KKT) residual (bounded). Weights
+come from `residual_scale`; tolerances are not relative to the first residual.
+The state produced by the last permitted Newton update is assessed. There is
+no looser fallback, and a line search that cannot reduce the residual in 30
+bisections fails the step instead of applying a vanishing update. A clip
+or projection is followed by a fresh projected-residual certificate.
+
+**Bounds.** `BoxSpec` and `field_bounds` must name existing components
+(integer indices below `dof_per_node`), or the solve raises `ValueError`.
+Every bounded route uses one bound tolerance per DOF: `bound_atol *
+field_scale` (default `1e-12` times the declared scale, 1 if none), never
+below four ulps of the larger finite static bound magnitude, so roundoff
+alone never violates it. It is computed once from the static bounds and used
+in every step, also when a history bound has narrowed the box. A prescribed value outside the bounds by more than this tolerance raises
+`ValueError`. One within it is kept exactly; clipping and snapping never
+change a prescribed value. When such an accepted value becomes the start of
+the next step, its `irreversible` or `monotone_decreasing` history bound
+rests on the crossed static bound rather than forming an empty box.
+
+**Time.** Pass `state=CompiledElementState([element])`. Before each attempt
+the cutback drivers call `state.begin_increment(kinc, time_begin=t, dt=dt_sub)`:
+`TIME` is the beginning of the attempted increment (accumulated accepted time,
+starting at 0), `DTIME` is that attempt's own length, reduced on a cutback, and
+`KINC` counts accepted increments from 1; a retry keeps its `KINC`.
+`solve_steps` and `solve_steps_multimaterial` call
+`state.begin_increment(kinc=step)`, so `TIME = (step - 1) * element.dt`. At
+`TIME(2) = 0` a generated UEL initializes its SVARS from the declaration.
+
+**Transactions.** SVARS and the element clock are saved before each attempt.
+A rejected attempt restores both and discards any cached trial batch before
+`attempt_callback` sees its record. An attempt is rejected by
+`IncrementTooLarge` (`PNEWDT < 1`) at an iterate or during commit, by an
+exhausted Newton or line search, or by a failed certificate. At a line-search
+trial, `IncrementTooLarge` also rejects the attempt in unprojected staggered
+blocks; projected solves backtrack past it unless
+`cutback_on_element_rejection=True` (staggered driver). A nonfinite
+line-search trial counts as an infinite residual. `NonfiniteElementOutput` at
+an iterate rejects a staggered attempt and stops `solve_steps_bounded`. Any
+other exception from an element or commit propagates, after SVARS and the
+clock have been restored.
+
+**Restart** (`solve_steps_staggered` only). Its `accepted_callback` receives a
+restart dictionary (`U`, state snapshot, step cursor, `time_end`, `next_kinc`,
+report) to pass back as `restart=`. `solve_steps_bounded` and the other
+drivers have no restart parameters, and file checkpoints are not provided.
+
+The stepping assembler accepts repeated node indices in an element, such as a
+collapsed Quad4 at a polar centre, and scatter-adds them; the element must
+still be admissible. Public `assemble` keeps rejecting such connectivity.
+`newton_method="bounded_monolithic"` classifies bound activity exactly; there
+`bound_atol` sets only the tolerance for prescribed values and history bounds.
+
+```python
+from abaqus_ufl.fe import CompiledElementState, solve_steps_staggered
+
+U, report = solve_steps_staggered(
+    nodes, elems, element.dof_per_node, element.element_rk, dirichlet_fn,
+    [[0, 1], [2]], n_steps, batch_fn=element.element_rk_batch,
+    commit_fn=element.commit_step, state=CompiledElementState([element]),
+    dt=dt, tol=1e-8, max_cutbacks=4, return_report=True)
+```
+
 ## PETSc and MPI
 
 The package and MPI modules import without `petsc4py` or `mpi4py`. PETSc is
@@ -156,8 +236,8 @@ The distributed host checks KSP convergence, line search, finite output and
 Newton convergence before commit. Errors and cutbacks are voted collectively
 before data gathers. Bound compiled adapters' SVARS are restored if any rank
 rejects a commit; arbitrary external side effects in custom callbacks require
-their own transaction. There is no adaptive cutback, bounded/staggered solve
-or restart service here. Mesh convenience inputs, final output, and full-mesh
+their own transaction. The distributed host has no adaptive cutback,
+bounded/staggered solve or restart service; those are serial only. Mesh convenience inputs, final output, and full-mesh
 commit callbacks are replicated; this is not an end-to-end scaling claim.
 
 ## Verification
