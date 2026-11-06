@@ -648,7 +648,9 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     an exhausted line search, or Newton exhaustion is a cutback; a rejected or
     nonfinite line-search trial is backtracked past.  A nonfinite residual or
     tangent at an iterate raises
-    :class:`~abaqus_ufl.fe.compiled_element.NonfiniteElementOutput`.
+    :class:`~abaqus_ufl.fe.compiled_element.NonfiniteElementOutput`.  Any
+    exception that escapes an attempt is raised after SVARS and the element
+    clock are restored.
     Returns ``(U, report)`` with ``report`` a :class:`BoundedReport`.
     Raises ``RuntimeError`` if a step cannot be completed within
     ``max_cutbacks``.
@@ -687,40 +689,47 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
             # silently ratchet the constraint.
             lo, hi = box.arrays(ndof, dof_per_node, U_attempt_start)
             snap = _snapshot_element_state(state)
-            if state is not None and hasattr(state, "begin_increment"):
-                state.begin_increment(kinc, time_begin=time_end, dt=dt_sub)
+            try:
+                if state is not None and hasattr(state, "begin_increment"):
+                    state.begin_increment(kinc, time_begin=time_end, dt=dt_sub)
 
-            dirichlet = dirichlet_fn(frac_try)
-            con, is_con = _dirichlet_masks(
-                dirichlet, ndof, f"solve_steps_bounded: step {step}")
-            Ui = U.copy()
-            for g, v in dirichlet.items():
-                Ui[g] = v
-            bad = np.nonzero(is_con & ((Ui < lo - 1e-12) | (Ui > hi + 1e-12)))[0]
-            if bad.size:
-                raise ValueError(
-                    f"solve_steps_bounded: step {step}: prescribed value at "
-                    f"dof {int(bad[0])} lies outside the box "
-                    f"[{lo[bad[0]]:.6g}, {hi[bad[0]]:.6g}] -- an infeasible "
-                    "Dirichlet value cannot be satisfied by a bounded solve")
+                dirichlet = dirichlet_fn(frac_try)
+                con, is_con = _dirichlet_masks(
+                    dirichlet, ndof, f"solve_steps_bounded: step {step}")
+                Ui = U.copy()
+                for g, v in dirichlet.items():
+                    Ui[g] = v
+                bad = np.nonzero(is_con & ((Ui < lo - 1e-12) | (Ui > hi + 1e-12)))[0]
+                if bad.size:
+                    raise ValueError(
+                        f"solve_steps_bounded: step {step}: prescribed value at "
+                        f"dof {int(bad[0])} lies outside the box "
+                        f"[{lo[bad[0]]:.6g}, {hi[bad[0]]:.6g}] -- an infeasible "
+                        "Dirichlet value cannot be satisfied by a bounded solve")
 
-            step_asm = _make_step_assembler(
-                asm, external_fn, step, frac_try, U_attempt_start)
-            res = _bounded_newton(
-                step_asm, Ui, U_attempt_start, con, is_con, lo, hi,
-                w_res=w_res, at_tol=at_tol, max_newton=max_newton, tol=tol,
-                linear_solve=linear_solve, line_search=line_search,
-                context=f"solve_steps_bounded: step {step}", verbose=verbose)
+                step_asm = _make_step_assembler(
+                    asm, external_fn, step, frac_try, U_attempt_start)
+                res = _bounded_newton(
+                    step_asm, Ui, U_attempt_start, con, is_con, lo, hi,
+                    w_res=w_res, at_tol=at_tol, max_newton=max_newton, tol=tol,
+                    linear_solve=linear_solve, line_search=line_search,
+                    context=f"solve_steps_bounded: step {step}", verbose=verbose)
 
-            if res["converged"] and commit_fn is not None:
-                # A compiled element can request PNEWDT < 1 when evaluated
-                # again during commit. Keep that evaluation in the attempt
-                # transaction, before advancing U or recording acceptance.
-                try:
-                    commit_fn(nodes, elems, dof_per_node, res["U"], U_attempt_start)
-                except IncrementTooLarge as exc:
-                    res["converged"] = False
-                    res["reason"] = f"element requested a smaller increment during commit: {exc}"
+                if res["converged"] and commit_fn is not None:
+                    # A compiled element can request PNEWDT < 1 when evaluated
+                    # again during commit. Keep that evaluation in the attempt
+                    # transaction, before advancing U or recording acceptance.
+                    try:
+                        commit_fn(nodes, elems, dof_per_node, res["U"], U_attempt_start)
+                    except IncrementTooLarge as exc:
+                        res["converged"] = False
+                        res["reason"] = f"element requested a smaller increment during commit: {exc}"
+            except BaseException:
+                # Any other exception (an invalid boundary condition, a
+                # nonfinite iterate, an element or commit error) propagates,
+                # but only after the attempt's state changes are undone.
+                _restore_element_state(state, snap)
+                raise
 
             if not res["converged"]:
                 # ROLLBACK: U, SVARS and the element clock return to the

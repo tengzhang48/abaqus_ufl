@@ -627,7 +627,8 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     element that raises :class:`~abaqus_ufl.fe.compiled_element.IncrementTooLarge`
     (the ``PNEWDT < 1`` signal) from assembly OR from ``commit_fn`` rejects
     the whole attempt transactionally, as does a nonfinite element output at
-    an assembled iterate.
+    an assembled iterate.  Any other exception that escapes an attempt
+    propagates after ``U``, SVARS and the element clock are restored.
 
     ``max_projection_rounds`` (default 0) bounds the semi-smooth repair of a
     failed post-clamp certificate: when the clamped state fails the projected-
@@ -1132,10 +1133,9 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
             # not silently ratchet the constraint.
             lo_arr, hi_arr = _attempt_bounds(U_attempt_start)
             snap = _snapshot_element_state(state)
-            if state is not None and hasattr(state, "begin_increment"):
-                state.begin_increment(kinc, time_begin=time_end, dt=dt_sub)
-
             try:
+                if state is not None and hasattr(state, "begin_increment"):
+                    state.begin_increment(kinc, time_begin=time_end, dt=dt_sub)
                 U_new, R, last_sweep, rfinal, n_rounds = _try_increment(
                     U.copy(), U_attempt_start, frac_try, step, lo_arr, hi_arr)
                 if commit_fn is not None:
@@ -1179,6 +1179,12 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                     print(f"  step {step:04d}: cutback {cutbacks_this_step} "
                           f"({exc.reason}); new span={span:.3e}", flush=True)
                 continue
+            except BaseException:
+                # Any other exception (an invalid boundary condition or field
+                # group, an element or commit error) propagates, but only
+                # after the attempt's state changes are undone.
+                _restore_element_state(state, snap)
+                raise
 
             rec = StaggeredAttempt(
                 step=step, frac_start=frac_done, frac_end=frac_try,

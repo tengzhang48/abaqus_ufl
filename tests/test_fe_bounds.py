@@ -753,3 +753,83 @@ def test_incompatible_prescribed_value_is_rejected_on_every_bounded_route(route)
     linear = lambda ei, c, u, du: (u - 2.0, np.eye(len(u)))
     with pytest.raises(ValueError, match="outside the box"):
         _bounded_route(route, linear, {0: 2.0}, dpn=1)
+
+
+# --------------------------------------------------------------------------
+# 8. an exception that escapes an attempt is raised after the rollback
+# --------------------------------------------------------------------------
+
+def _clocked_element():
+    """Public adapter with committed SVARS 0.25 and a clock no attempt uses."""
+    nodes, elems, _ = strip(2)
+    element, kernel = recording_element(len(elems), dt=0.3, time=7.0)
+    element.begin_increment(5, time_begin=7.0, dt=0.3)
+    element.svars[:] = 0.25
+    return element, kernel
+
+
+def _assert_untouched(element):
+    np.testing.assert_array_equal(element.svars, 0.25)
+    assert (element.time, element.dt, element.kinc) == (7.0, 0.3, 5)
+
+
+def _drive(route, element, dirichlet=None, **kw):
+    nodes, elems, bc = strip(2)
+    bc = bc if dirichlet is None else dirichlet
+    options = dict(state=CompiledElementState([element]),
+                   batch_fn=kw.pop("batch_fn", element.element_rk_batch), dt=1.0, tol=1e-10)
+    options.update(kw)
+    if route == "bounded":
+        return solve_steps_bounded(nodes, elems, 1, element.element_rk, lambda f: bc, 1,
+                                   BoxSpec({0: (-np.inf, 10.0)}), **options)
+    return solve_steps_staggered(nodes, elems, 1, element.element_rk, lambda f: bc, [[0]], 1,
+                                 **options)
+
+
+@pytest.mark.parametrize("route", ["bounded", "staggered"])
+@pytest.mark.parametrize("error", ["NonfiniteElementOutput", "ValueError"])
+def test_an_exception_escaping_a_commit_is_raised_after_rollback(route, error):
+    from abaqus_ufl.fe import NonfiniteElementOutput
+    error = {"NonfiniteElementOutput": NonfiniteElementOutput, "ValueError": ValueError}[error]
+    element, _ = _clocked_element()
+
+    def commit(*args):
+        element.svars[:] = 999.0            # a partial write, then a failure
+        raise error("commit failure")
+
+    with pytest.raises(error, match="commit failure"):
+        _drive(route, element, commit_fn=commit)
+    _assert_untouched(element)
+
+
+@pytest.mark.parametrize("route", ["bounded", "staggered"])
+def test_an_element_error_escaping_a_trial_is_raised_after_rollback(route):
+    element, _ = _clocked_element()
+
+    def batch(coords, U, DU):
+        if np.max(np.abs(DU)) > 0.0:
+            raise RuntimeError("element bug")
+        return element.element_rk_batch(coords, U, DU)
+
+    with pytest.raises(RuntimeError, match="element bug"):
+        _drive(route, element, batch_fn=batch)
+    _assert_untouched(element)
+
+
+def test_a_bounded_nonfinite_iterate_is_raised_after_rollback():
+    from abaqus_ufl.fe import NonfiniteElementOutput
+    element, kernel = _clocked_element()
+    kernel.nonfinite = lambda *args: True
+    with pytest.raises(NonfiniteElementOutput):
+        _drive("bounded", element)
+    _assert_untouched(element)
+
+
+@pytest.mark.parametrize("route", ["bounded", "staggered"])
+def test_an_invalid_dirichlet_value_is_raised_after_rollback(route):
+    element, _ = _clocked_element()
+    nodes, _, bc = strip(2)
+    with pytest.raises(ValueError, match="outside the box|out of range"):
+        _drive(route, element, dirichlet={**bc, 10 ** 6: 0.0} if route == "staggered"
+               else {**bc, 0: 20.0})
+    _assert_untouched(element)
