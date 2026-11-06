@@ -617,6 +617,9 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                        state at the reduced ``dt``.
     ``dt``             step time increment (the full step; sub-increments scale
                        it), reported in the attempt records.
+    ``attempt_callback`` optional callable receiving every
+                       :class:`BoundedAttempt`, after a rejected attempt has
+                       been rolled back.
     ``early_stop``     optional callable ``(U, frac, state) -> bool`` evaluated
                        once per accepted step, after ``step_callback``; a
                        truthy return ends the stepping loop and sets
@@ -701,6 +704,12 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                     res["converged"] = False
                     res["reason"] = f"element requested a smaller increment during commit: {exc}"
 
+            if not res["converged"]:
+                # ROLLBACK: U, SVARS and the element clock return to the
+                # accepted state before the attempt is reported.
+                U = U_attempt_start
+                _restore_element_state(state, snap)
+
             rec = BoundedAttempt(
                 step=step, frac_start=frac_done, frac_end=frac_try, dt=dt_sub,
                 cutback=cutback, iterations=res["iterations"],
@@ -714,10 +723,6 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                 attempt_callback(rec)
 
             if not res["converged"]:
-                # ROLLBACK: U, SVARS and the element clock return to the
-                # accepted state.
-                U = U_attempt_start
-                _restore_element_state(state, snap)
                 cutback += 1
                 report.cutbacks += 1
                 if cutback > max_cutbacks:

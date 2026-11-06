@@ -402,6 +402,31 @@ def test_commit_time_pnewdt_rejects_and_restores_the_bounded_attempt():
     assert sum(a.dt for a in accepted) == pytest.approx(1.0)
 
 
+def test_rejected_attempt_is_rolled_back_before_its_record_is_reported():
+    """``attempt_callback`` sees the restored state, as in the staggered driver:
+    a commit that writes 999 and then requests a cutback is already undone."""
+    class CommitCutback(_FlakyStatefulElement):
+        def element_rk(self, ei, coords, U_e, DU_e):
+            return self.inner(ei, coords, U_e, DU_e)
+
+        def commit(self, nodes, elems, dof_per_node, U, U_prev):
+            if np.max(np.abs(U - U_prev)) > self.du_max:
+                self.state[:] = 999.0
+                raise IncrementTooLarge("commit-side discriminator")
+            super().commit(nodes, elems, dof_per_node, U, U_prev)
+
+    el = CommitCutback(du_max=0.30)
+    seen = []
+    _flaky_solve(el, attempt_callback=lambda rec: seen.append((rec.converged,
+                                                               el.state.copy())))
+    assert any(not ok for ok, _ in seen), "no attempt was rejected; gate is vacuous"
+    committed = 0.0
+    for ok, state in seen:
+        if not ok:
+            np.testing.assert_allclose(state, committed)
+        committed = state[0]
+
+
 class _TrialMutatingElement(_FlakyStatefulElement):
     """Writes its state during ASSEMBLY, the failure mode the transaction is
     for: ``state`` is the largest increment ever evaluated (a max-history)."""
@@ -452,6 +477,34 @@ def test_compiled_element_state_snapshot_restore_clock_and_python_elements():
     assert (element.time, element.dt, element.kinc) == (0.0, 0.5, 1)
     with pytest.raises(ValueError, match="element count"):
         tx.restore(snap[:1])
+
+
+def test_bounded_rollback_restores_svars_and_clock_of_the_public_adapter():
+    """A PNEWDT rejection at dt = 1 is retried at dt = 0.5 from the same clock."""
+    nodes, elems, dirichlet = strip(4)
+    element, kernel = recording_element(len(elems), dt=1.0, mass=1.0)
+    kernel.reject = lambda time, dtime, u, du: dtime > 0.6
+    element.begin_increment(5, time_begin=7.0, dt=0.3)   # a clock no attempt uses
+    before = (element.time, element.dt, element.kinc, element.svars.copy())
+    rolled_back = []
+
+    def on_attempt(rec):
+        if not rec.converged:
+            rolled_back.append((element.time, element.dt, element.kinc,
+                                element.svars.copy()))
+
+    U, report = solve_steps_bounded(
+        nodes, elems, 1, element.element_rk, lambda frac: dirichlet, 1,
+        BoxSpec(bounds={0: (-np.inf, 10.0)}), batch_fn=element.element_rk_batch,
+        commit_fn=element.commit_step, state=CompiledElementState([element]),
+        dt=1.0, tol=1e-10, attempt_callback=on_attempt)
+    assert [a.converged for a in report.attempts] == [False, True, True]
+    assert len(rolled_back) == 1
+    assert rolled_back[0][:3] == before[:3]
+    np.testing.assert_array_equal(rolled_back[0][3], before[3])
+    clocks = sorted({(c[0], c[2], c[4]) for c in kernel.calls})
+    assert clocks == [(0.0, 0.5, 1), (0.0, 1.0, 1), (0.5, 0.5, 2)]
+    np.testing.assert_allclose(element.svars, 1.0)      # committed DTIME 0.5 + 0.5
 
 
 # --------------------------------------------------------------------------
