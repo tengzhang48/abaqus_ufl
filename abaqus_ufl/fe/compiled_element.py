@@ -54,10 +54,12 @@ def _build_directory(workdir, prefix):
     return temporary, build
 
 
-def _link_with_wrapper(build, inputs, module_name, temporary, prior_log=""):
-    """Link Fortran sources or objects with the packaged wrapper and import it."""
+def _link_with_wrapper(build, inputs, module_name, temporary, prior_log="",
+                       link_options=()):
+    """Link Fortran sources (and f2py library options) with the packaged wrapper
+    and import the module."""
     command = [sys.executable, "-m", "numpy.f2py", "-c", str(_DRIVE_UEL),
-               *(str(item) for item in inputs),
+               *(str(item) for item in inputs), *link_options,
                "-m", module_name, "only:", "drive_uel", "drive_uel_batch", ":"]
     if np.lib.NumpyVersion(np.__version__) >= "1.26.0":
         command.extend(["--backend", "meson"])
@@ -113,8 +115,9 @@ def build_external_uel(sources, workdir=None, *, compile_flags=(), module_name=N
     compiled in its own folder, so its local includes and relative ``-I``
     paths resolve there.  The flags apply to compilation only; options that
     need the link step (``-fopenmp``, ``-fopenacc``, ``-l``, ``-L``,
-    ``-Wl,``) are rejected.  The objects are
-    linked with the packaged ``drive_uel.f90`` through numpy.f2py, so the
+    ``-Wl,``) are rejected.  The objects are partially linked into one
+    object, archived, and linked with the packaged ``drive_uel.f90`` through
+    numpy.f2py (a library link works with every f2py meson backend), so the
     subroutine must be named ``UEL`` and have the standard Abaqus argument
     list.  ``workdir`` behaves as in :func:`build_compiled_uel`; the
     compiler log is ``compile.log``.  ``module_name`` is a readable prefix:
@@ -162,7 +165,27 @@ def build_external_uel(sources, workdir=None, *, compile_flags=(), module_name=N
             (build / "compile.log").write_text(log, encoding="utf-8")
             raise RuntimeError("gfortran failed on {}:\n{}".format(source, result.stderr))
         objects.append(target)
-    return _link_with_wrapper(build, objects, module_name, temporary, prior_log=log)
+    # f2py's meson backend in NumPy 1.26 and 2.2 accepts object files but never
+    # writes them into its meson.build, so the extension lacks the UEL
+    # (undefined symbol uel_ at import).  Library options work in every
+    # version: partially link all objects into one relocatable object (so
+    # every object is linked, as a direct object link would) and archive it.
+    if shutil.which("ar") is None:
+        raise RuntimeError("ar (binutils) is required to link an external UEL")
+    library = module_name + "_uel"
+    combined = build / (library + ".o")
+    archive = build / ("lib" + library + ".a")
+    for command in (["gfortran", "-r", "-nostdlib", "-o", str(combined), *map(str, objects)],
+                    ["ar", "rcs", str(archive), str(combined)]):
+        result = subprocess.run(command, cwd=str(build), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", check=False)
+        log += " ".join(command) + "\n" + result.stdout + result.stderr + "\n"
+        if result.returncode:
+            (build / "compile.log").write_text(log, encoding="utf-8")
+            raise RuntimeError("{} failed while linking the UEL objects:\n{}".format(
+                command[0], result.stderr))
+    return _link_with_wrapper(build, [], module_name, temporary, prior_log=log,
+                              link_options=["-L" + str(build), "-l" + library])
 
 
 def _is_count(value):

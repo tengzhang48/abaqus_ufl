@@ -112,7 +112,9 @@ element = CompiledAbaqusElement.from_module(
 `build_external_uel` compiles the sources in order with
 `gfortran -c -O2 -fPIC` followed by `compile_flags` (later flags take
 precedence), links the objects with the packaged `drive_uel.f90` and imports
-the module. Each source is compiled in its own folder, so its includes and
+the module. The objects reach f2py as one archived object (binutils `ar` is
+required), because the f2py meson backend of NumPy 1.26 and 2.2 ignores
+object files. Each source is compiled in its own folder, so its includes and
 relative `-I` paths resolve there; objects, Fortran module files and
 `compile.log` go to `workdir`. The flags apply to compilation only: options
 that need the link step (`-fopenmp`, `-fopenacc`, `-l`, `-L`, `-Wl,`) are
