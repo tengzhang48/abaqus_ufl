@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add `build_external_uel` and `CompiledAbaqusElement.from_module` for a
+  standard Quad4 `UEL` compiled outside abaqus_ufl: validated arguments, the
+  same adapter and drivers, and a documented TIME convention that a subclass
+  may override through `begin_increment`.
 - Add serial stepping drivers (`solve_steps`, `solve_steps_staggered`,
   `solve_steps_multimaterial`, `assemble_groups`) and a bounded KKT solver
   (`solve_steps_bounded`, `BoxSpec`, `CompiledElementState`) with transactional
