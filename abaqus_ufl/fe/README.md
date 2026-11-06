@@ -132,10 +132,14 @@ starting at 0), `DTIME` is that attempt's own length, reduced on a cutback, and
 **Transactions.** SVARS and the element clock are saved before each attempt.
 A rejected attempt restores both and discards any cached trial batch before
 `attempt_callback` sees its record. An attempt is rejected by
-`IncrementTooLarge` (`PNEWDT < 1`) from assembly or commit, by
-`NonfiniteElementOutput` at an iterate, by an exhausted Newton or line search,
-or by a failed certificate. A nonfinite line-search trial counts as an infinite
-residual. Any other exception from an element propagates.
+`IncrementTooLarge` (`PNEWDT < 1`) at an iterate or during commit, by an
+exhausted Newton or line search, or by a failed certificate. At a line-search
+trial, `IncrementTooLarge` also rejects the attempt in unprojected staggered
+blocks; projected solves backtrack past it unless
+`cutback_on_element_rejection=True` (staggered driver). A nonfinite
+line-search trial counts as an infinite residual. `NonfiniteElementOutput` at
+an iterate rejects a staggered attempt and stops `solve_steps_bounded`. Any
+other exception from an element propagates.
 `accepted_callback` receives a restart dictionary (`U`, state snapshot, step
 cursor, `time_end`, `next_kinc`, report) to pass back as `restart=`. File
 checkpoints are not provided.

@@ -629,9 +629,12 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                        :func:`~abaqus_ufl.fe.stepping.solve_steps_staggered`.
 
     A step is committed only when its weighted KKT residual is below ``tol``.
-    An element cutback (``IncrementTooLarge``) at an iterate, a line-search or
-    commit evaluation, an exhausted line search, or Newton exhaustion is a
-    cutback.  Returns ``(U, report)`` with ``report`` a :class:`BoundedReport`.
+    An element cutback (``IncrementTooLarge``) at an iterate or during commit,
+    an exhausted line search, or Newton exhaustion is a cutback; a rejected or
+    nonfinite line-search trial is backtracked past.  A nonfinite residual or
+    tangent at an iterate raises
+    :class:`~abaqus_ufl.fe.compiled_element.NonfiniteElementOutput`.
+    Returns ``(U, report)`` with ``report`` a :class:`BoundedReport`.
     Raises ``RuntimeError`` if a step cannot be completed within
     ``max_cutbacks``.
     """
