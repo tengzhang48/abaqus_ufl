@@ -1330,6 +1330,12 @@ def solve_steps_multimaterial(nodes, n_node, dof_per_node, groups, dirichlet_fn,
     converged step to commit that element type's state variables.  ``state``
     (optional) as in :func:`solve_steps`: ``state.begin_increment(kinc=step)``
     before each step.
+
+    The acceptance rule is that of :func:`solve_steps`: a step is committed
+    only when the free-DOF residual 2-norm is below ``tol`` within
+    ``max_newton`` updates (the final update's state is assessed), and an
+    exhausted 30-bisection line search raises instead of applying a vanishing
+    update.
     """
     nodes, ndof, prepared = _prepare_groups(nodes, n_node, dof_per_node, groups)
     n_steps = _check_positive_int(n_steps, "n_steps")
@@ -1348,37 +1354,10 @@ def solve_steps_multimaterial(nodes, n_node, dof_per_node, groups, dirichlet_fn,
             dirichlet, ndof, f"solve_steps_multimaterial: step {step}")
         for g, v in dirichlet.items():
             U[g] = v
-        converged = False
-        for _ in range(max_newton):
-            R, K = asm(U, U - U_prev)
-            R[is_con] = 0.0
-            _assert_finite_system(f"solve_steps_multimaterial: step {step}", R, K)
-            rnorm = np.linalg.norm(R)
-            if rnorm < tol:
-                converged = True
-                break
-            Kc, Rc = _apply_dirichlet_rows(K, R, con)
-            du = linear_solve(Kc, -Rc)
-            if not np.all(np.isfinite(du)):
-                raise RuntimeError(
-                    f"solve_steps_multimaterial: step {step}: "
-                    "non-finite linear solve update")
-            alpha = 1.0
-            if line_search:
-                for _ls in range(30):
-                    Ut = U + alpha * du
-                    if _trial_residual_norm(asm, Ut, U_prev, is_con) < rnorm:
-                        break
-                    alpha *= 0.5
-            U = U + alpha * du
-        if not converged:
-            R, _ = asm(U, U - U_prev)
-            R[is_con] = 0.0
-            rfinal = np.linalg.norm(R)
-            if not np.isfinite(rfinal) or rfinal >= 1e-6:
-                raise RuntimeError(
-                    f"solve_steps_multimaterial: step {step} did not converge "
-                    f"(residual {rfinal:.2e})")
+        U, _, _ = _monolithic_newton(
+            asm, U, U_prev, con, is_con, max_newton=max_newton, tol=tol,
+            line_search=line_search, linear_solve=linear_solve,
+            context=f"solve_steps_multimaterial: step {step}")
         for g in groups:
             if g.get("commit") is not None:
                 g["commit"](U, U_prev)

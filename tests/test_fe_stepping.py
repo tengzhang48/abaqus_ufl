@@ -323,6 +323,35 @@ def test_assemble_groups_batch_matches_scalar_and_refuses_implicit_du():
         assemble_groups(nodes, len(nodes), 2, [{**groups[0], "comps": [0, 0]}], U, U)
 
 
+def test_multimaterial_commits_only_below_tol():
+    """Defect regression: the solve used to accept a residual up to 1e-6
+    whatever ``tol`` was, and to apply a 2^-30 update after an exhausted line
+    search.  Both must now raise, as in ``solve_steps``."""
+    def cubic(ei, coords, U_e, DU_e):
+        R, K = _cubic_spring(U_e[0])
+        return R - 0.002, K
+
+    groups = [{"elems": ONE_ELEM, "comps": [0], "element_fn": cubic}]
+    with pytest.raises(RuntimeError, match=r"did not converge in 1 Newton"):
+        solve_steps_multimaterial(ONE_NODE, 1, 1, groups, lambda f: {}, 1,
+                                  max_newton=1, tol=1e-12)
+    U = solve_steps_multimaterial(ONE_NODE, 1, 1, groups, lambda f: {}, 1,
+                                  max_newton=5, tol=1e-12)
+    assert abs(U[0] ** 3 + U[0] - 0.002) < 1e-12
+
+    calls = []
+
+    def ascent(ei, coords, U_e, DU_e):
+        calls.append(U_e[0])
+        return np.array([4.0 * U_e[0] - 1.0]), np.array([[-4.0]])
+
+    with pytest.raises(RuntimeError, match="line search exhausted"):
+        solve_steps_multimaterial(ONE_NODE, 1, 1, [{"elems": ONE_ELEM, "comps": [0],
+                                                     "element_fn": ascent}],
+                                  lambda f: {}, 1, max_newton=40)
+    assert len(calls) == 31
+
+
 def test_multimaterial_final_update_commit_hook_and_state():
     commits, kincs = [], []
 
