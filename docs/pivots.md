@@ -29,7 +29,8 @@ Return to the [four-kind index](lessons/README.md) to choose an item by task.
 - **Check and limits:** compare integrals and fields under mesh/time refinement
   with an independent higher-order solution. These are formulation choices,
   not interchangeable generator switches or new public enhanced-mode support.
-  See [the lesson](lessons/finite-element.md#gradient-of-stress-consistency).
+  See the lessons [Gradient consistency](lessons/finite-element.md#gradient-of-stress-consistency)
+  and [FE1](lessons/finite-element.md#fe1-a-scalar-driven-eigenstrain-on-equal-order-low-order-elements-can-introduce-parasitic-stress).
 
 ## P3 One agent with an independent oracle
 

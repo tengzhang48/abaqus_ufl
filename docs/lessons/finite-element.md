@@ -266,20 +266,48 @@ provides a defined gradient; a suitable higher-order displacement field is
 another formulation choice. Derive its coupling and consistent tangent rather
 than treating stress recovery as postprocessing.
 
-Swelling also exposes interpolation compatibility: bilinear concentration can
-prescribe a strain that bilinear displacement cannot represent. Parasitic
-stress then contaminates the damage driving force even when Newton converges.
-An internal benchmark distinguished that error from quadrature by comparing
-mixed order and condensed enhanced strain modes. More Gauss points alone did
-not cure the incompatible displacement space.
-
 Use an independent higher-order reference, mesh/time refinement and integral
 observables. Prefer displacement one order higher for the relevant coupling
-when supported by the formulation. With fixed four-node topology, enhanced
-local modes require a separate derivation, condensation and tangent check;
-they are not a newly supported generator option. The
+when supported by the formulation. A swelling or thermal strain on the same
+low-order element is a different failure with an overlapping remedy; see
+[FE1](#fe1-a-scalar-driven-eigenstrain-on-equal-order-low-order-elements-can-introduce-parasitic-stress). The
 [pivot record](../pivots.md#p2-compatible-interpolation-for-stress-gradient-coupling)
-separates that decision from its motivation.
+separates these decisions from their motivation.
+
+## FE1 A scalar-driven eigenstrain on equal-order low-order elements can introduce parasitic stress
+
+Also: swelling, thermal expansion, moisture or chemical strain, eigenstrain,
+false stress, incompatible strain.
+
+- **When:** a scalar (concentration, temperature, moisture) drives an
+  eigenstrain that varies inside elements, and the displacement has the same
+  low order as the scalar (Quad4, Hex8). It matters most when damage, fatigue
+  history or a stress-driven flux accumulates. Read this before choosing the
+  element.
+- **Symptom:** stress or damage is too high on coarse meshes while Newton
+  converges; it falls with refinement but stays large on the meshes in use.
+  Your own finer mesh agrees; an independent higher-order solution does not.
+  More Gauss points do not help.
+- **Do:** raise the displacement one order above the scalar
+  ([`thermo_mechanics_quad8`](../../examples/thermo_mechanics_quad8/)), or,
+  with a fixed four-node topology, add element-local enhanced displacement
+  modes (their own derivation, condensation and tangent check; not a generator
+  option). Both reduce the error without guaranteeing it is gone. **Why:** on
+  a bilinear element `du/dxi = b + d*eta` cannot vary along `xi`, so an
+  eigenstrain varying in that direction is only approximated and the misfit
+  appears as stress. In a free body a scalar linear in x is exactly
+  stress-free, yet aligned Quad4 elements carry stress of order E·α·g·h
+  (g the gradient, h the element size); quadratic displacement represents it
+  exactly.
+- **Check:** [V1](verification.md#v1-a-falling-error-establishes-neither-the-limit-nor-an-acceptable-error)
+  against an independent higher-order solution of the whole problem; a varying
+  eigenstrain can also cause real stress.
+- **Evidence and limits:** the derivation and example above; an internal
+  small-strain swelling and fatigue benchmark on Quad4 separated this error
+  from quadrature and solver error. Not shown: finite strain, enhanced modes on
+  Hex8. The [local-pressure condensation](coupled-multiphysics.md#local-pressure-condensation-is-an-effective-low-order-coupled-path)
+  targets volumetric locking, a different failure.
+- **Checked:** d0fed1e; derivation and source inspected, no test executed.
 
 ## Mesh-order changes require new set-membership checks
 

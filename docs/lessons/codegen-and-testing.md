@@ -77,6 +77,9 @@ a residual can be internally tangent-consistent yet encode the wrong equation.
 Those need an independent quantitative benchmark. An optional Abaqus
 integration check supplies production-interface, convention, and output-bridge
 evidence; it is not automatically a physics oracle (see the pipeline below).
+A mismatch only at an extreme state can be finite-difference noise rather
+than a model defect: sweep the perturbation size against an analytic or
+independent derivative before editing the law.
 
 ```python
 for col in range(NDOFEL):

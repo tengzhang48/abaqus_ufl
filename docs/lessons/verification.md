@@ -44,16 +44,36 @@ Regressions prevent known defects from recurring; they do not discover every
 new defect. An independent reference solution or analytic identity contributes
 different evidence from another reading of the same implementation.
 
-## A rate does not establish the limit
+<a id="a-rate-does-not-establish-the-limit"></a>
 
-An error decreasing at the expected order can still converge to the wrong
-limit if the reference shares a sign error, if a critical operator vanishes in
-the manufactured state, or if the measured quantity ignores that operator.
-Choose nonuniform manufactured fields that activate the disputed terms, and
-pair rate tests with an independently derived value, conservation/direction
-identity or exact limit. Refine space and time separately. A failure at an
-extreme state can also be finite-difference noise: sweep perturbation size
-against an analytic or independent derivative before editing the law.
+## V1 A falling error establishes neither the limit nor an acceptable error
+
+Also: convergence rate, self-convergence, mesh refinement study, extrapolation.
+
+- **When:** an accuracy claim rests on refinement of the mesh, the time step or
+  a tolerance.
+- **Symptom:** the error against your own finer solution falls at the expected
+  order, so the result looks converged; or a gap between your own meshes is
+  left unexplained.
+- **Do:** pair the rate with an independently derived value or an exact
+  limit, and judge the size of
+  the remaining difference at the mesh and step you will report. **Why:** the
+  limit itself can be wrong if the reference shares a sign error, if a
+  critical operator vanishes in the manufactured state, or if the measured
+  quantity ignores that operator; and a correct limit can still be far away at
+  the resolution in use.
+- **Check:** choose nonuniform manufactured fields that activate the disputed
+  terms and refine space and time separately. For an accuracy claim, state the
+  observable, the error measure and the tolerance, and compare at the
+  production mesh and step with an independent reference. On a coupled
+  problem that reference must solve the whole problem, with the coupling, the
+  observable and the loading history being claimed; closed-form checks of
+  parts support only claims about those parts.
+- **Evidence and limits:** in an internal benchmark a run stopped on a falling
+  trend while its error at the reported mesh exceeded the tolerance; see
+  [FE1](finite-element.md#fe1-a-scalar-driven-eigenstrain-on-equal-order-low-order-elements-can-introduce-parasitic-stress)
+  for that failure. No public regression exercises this rule yet.
+- **Checked:** d0fed1e; text revised, no test executed.
 
 ## Compare the same observable at matched conditions
 

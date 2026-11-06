@@ -34,7 +34,9 @@ Then read the nearby example README/tests and only the relevant references:
   `ndim=2` is an explicit plane-strain specialization; the default is full 3D.
 - Use a small-strain UMAT for `SmallStrainMaterial.stress_update` and local state.
 - Use a UEL for extra solved nodal fields, gradient terms or mixed interpolation.
-  Choose the formulation explicitly when comparing element behavior.
+  Choose the formulation explicitly when comparing element behavior. When a
+  scalar field drives swelling or thermal strain, read
+  [FE1](../../docs/lessons/finite-element.md#fe1-a-scalar-driven-eigenstrain-on-equal-order-low-order-elements-can-introduce-parasitic-stress) before choosing the element order.
 - Use f2py for point/element interface checks, a small FE host for mesh/solve
   checks, and genuine Abaqus for its production call environment.
 
@@ -49,7 +51,8 @@ make generation succeed. Update the authoritative declaration/generator,
 then regenerate; preserve dated submitted artifacts as evidence.
 
 Default to one agent. Independence means a separately derived oracle or
-reference solution; a team review is not a substitute. The rationale and
+reference solution; a team review is not a substitute. For an accuracy
+claim, follow [V1](../../docs/lessons/verification.md#v1-a-falling-error-establishes-neither-the-limit-nor-an-acceptable-error). The rationale and
 conditional delegation advice live in [agent workflow lessons](../../docs/lessons/agent-workflow.md).
 
 Use a nondegenerate state that enters the claimed branch. Keep tangent
