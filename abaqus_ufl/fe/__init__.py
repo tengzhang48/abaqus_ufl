@@ -14,7 +14,8 @@ cut back rejected increments transactionally with ``CompiledElementState``.
 """
 
 from .compiled_element import (CompiledAbaqusElement, IncrementTooLarge,
-                               NonfiniteElementOutput, build_compiled_uel)
+                               NonfiniteElementOutput, build_compiled_uel,
+                               build_external_uel)
 from .driver import assemble, assemble_batched, newton_solve
 from .mesh import boundary_nodes, structured_quad_mesh
 from .stepping import (StaggeredAttempt, StaggeredFieldReport, StaggeredReport,
@@ -30,7 +31,7 @@ from .petsc_mpi import (partition_structured_quad, partition_rcb, partition_unst
                         solve_steps_mpi, solve_steps_mpi_ghost, solve_steps_mpi_local)
 
 __all__ = ["CompiledAbaqusElement", "IncrementTooLarge", "NonfiniteElementOutput",
-           "build_compiled_uel", "assemble", "assemble_batched",
+           "build_compiled_uel", "build_external_uel", "assemble", "assemble_batched",
            "newton_solve", "boundary_nodes", "structured_quad_mesh",
            "solve_steps", "solve_steps_staggered", "solve_steps_multimaterial",
            "assemble_groups", "global_dof", "StaggeredSolveFailed",

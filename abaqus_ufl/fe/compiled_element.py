@@ -43,6 +43,42 @@ def _signature(weakform):
                   _state_var_info(weakform._mat).items()))
 
 
+def _build_directory(workdir, prefix):
+    """A retained ``workdir`` or a temporary directory owned by the module."""
+    if shutil.which("gfortran") is None:
+        raise RuntimeError("gfortran is required to build a compiled UEL")
+    temporary = tempfile.TemporaryDirectory(prefix=prefix) if workdir is None else None
+    build = Path(temporary.name if temporary else workdir).resolve()
+    build.mkdir(parents=True, exist_ok=True)
+    return temporary, build
+
+
+def _link_with_wrapper(build, inputs, module_name, temporary, prior_log=""):
+    """Link Fortran sources or objects with the packaged wrapper and import it."""
+    command = [sys.executable, "-m", "numpy.f2py", "-c", str(_DRIVE_UEL),
+               *(str(item) for item in inputs),
+               "-m", module_name, "only:", "drive_uel", "drive_uel_batch", ":"]
+    if np.lib.NumpyVersion(np.__version__) >= "1.26.0":
+        command.extend(["--backend", "meson"])
+    result = subprocess.run(command, cwd=str(build), capture_output=True,
+                            text=True, encoding="utf-8", errors="replace",
+                            env={**os.environ, "PYTHONUTF8": "1"}, check=False)
+    log = prior_log + result.stdout + "\n" + result.stderr
+    (build / "compile.log").write_text(log, encoding="utf-8")
+    if result.returncode:
+        raise RuntimeError("f2py UEL build failed:\n" + log)
+    from importlib.machinery import EXTENSION_SUFFIXES
+    extension = next((build / (module_name + suffix) for suffix in EXTENSION_SUFFIXES
+                      if (build / (module_name + suffix)).is_file()), None)
+    if extension is None:
+        raise RuntimeError("f2py did not produce the requested extension:\n" + log)
+    spec = importlib.util.spec_from_file_location(module_name, str(extension))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module._abaqus_ufl_build_directory = temporary
+    return module
+
+
 def build_compiled_uel(weakform, workdir=None, verify=True):
     """Generate a standard Quad4 UEL and return its compiled f2py module.
 
@@ -56,38 +92,73 @@ def build_compiled_uel(weakform, workdir=None, verify=True):
     """
     signature = _signature(weakform)
     verify_before_generation(weakform, verify)
-    if shutil.which("gfortran") is None:
-        raise RuntimeError("gfortran is required to build a compiled UEL")
-    temporary = tempfile.TemporaryDirectory(prefix="abaqus_ufl_fe_") if workdir is None else None
-    build = Path(temporary.name if temporary else workdir).resolve()
-    build.mkdir(parents=True, exist_ok=True)
+    temporary, build = _build_directory(workdir, "abaqus_ufl_fe_")
     source = build / "element.for"
     generate_uel(weakform, str(source), element="Quad4", formulation="standard",
                  verify=False)
-    wrapper = _DRIVE_UEL
-    module_name = "_abaqus_ufl_fe_" + uuid.uuid4().hex
-    command = [sys.executable, "-m", "numpy.f2py", "-c", str(wrapper), str(source),
-               "-m", module_name, "only:", "drive_uel", "drive_uel_batch", ":"]
-    if np.lib.NumpyVersion(np.__version__) >= "1.26.0":
-        command.extend(["--backend", "meson"])
-    result = subprocess.run(command, cwd=str(build), capture_output=True,
-                            text=True, encoding="utf-8", errors="replace",
-                            env={**os.environ, "PYTHONUTF8": "1"}, check=False)
-    log = result.stdout + "\n" + result.stderr
-    (build / "compile.log").write_text(log, encoding="utf-8")
-    if result.returncode:
-        raise RuntimeError("f2py UEL build failed:\n" + log)
-    from importlib.machinery import EXTENSION_SUFFIXES
-    extension = next((build / (module_name + suffix) for suffix in EXTENSION_SUFFIXES
-                      if (build / (module_name + suffix)).is_file()), None)
-    if extension is None:
-        raise RuntimeError("f2py did not produce the requested extension:\n" + log)
-    spec = importlib.util.spec_from_file_location(module_name, str(extension))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _link_with_wrapper(build, [source], "_abaqus_ufl_fe_" + uuid.uuid4().hex,
+                                temporary)
     module._abaqus_ufl_signature = signature
-    module._abaqus_ufl_build_directory = temporary
     return module
+
+
+def build_external_uel(sources, workdir=None, *, compile_flags=(), module_name=None):
+    """Compile a standard Quad4 UEL written outside abaqus_ufl; return its module.
+
+    ``sources`` is one Fortran file or a sequence of them, compiled in the
+    given order by ``gfortran -c -O2 -fPIC -J <build directory>`` followed by
+    ``compile_flags`` (later flags take precedence, so ``("-O3",)`` or
+    ``("-ffixed-line-length-none",)`` adjust the defaults).  The objects are
+    linked with the packaged ``drive_uel.f90`` through numpy.f2py, so the
+    subroutine must be named ``UEL`` and have the standard Abaqus argument
+    list.  ``workdir`` and the unique default ``module_name`` behave as in
+    :func:`build_compiled_uel`; the compiler log is ``compile.log``.  Use the
+    module with :meth:`CompiledAbaqusElement.from_module`.
+    """
+    if isinstance(sources, (str, os.PathLike)):
+        sources = [sources]
+    sources = [Path(item).resolve() for item in sources]
+    if not sources:
+        raise ValueError("sources must name at least one Fortran file")
+    missing = [str(item) for item in sources if not item.is_file()]
+    if missing:
+        raise FileNotFoundError("UEL source files not found: " + ", ".join(missing))
+    if isinstance(compile_flags, str) or not all(isinstance(flag, str) for flag in compile_flags):
+        raise ValueError("compile_flags must be a sequence of strings")
+    if module_name is None:
+        module_name = "_abaqus_ufl_ext_" + uuid.uuid4().hex
+    elif not (isinstance(module_name, str) and module_name.isidentifier()):
+        raise ValueError("module_name must be a valid Python identifier")
+    temporary, build = _build_directory(workdir, "abaqus_ufl_ext_")
+    objects, log = [], ""
+    for index, source in enumerate(sources):
+        target = build / "external_{}.o".format(index)
+        command = ["gfortran", "-c", "-O2", "-fPIC", "-J", str(build), *compile_flags,
+                   str(source), "-o", str(target)]
+        result = subprocess.run(command, cwd=str(source.parent), capture_output=True,
+                                text=True, encoding="utf-8", errors="replace", check=False)
+        log += " ".join(command) + "\n" + result.stdout + result.stderr + "\n"
+        if result.returncode:
+            (build / "compile.log").write_text(log, encoding="utf-8")
+            raise RuntimeError("gfortran failed on {}:\n{}".format(source, result.stderr))
+        objects.append(target)
+    return _link_with_wrapper(build, objects, module_name, temporary, prior_log=log)
+
+
+def _is_count(value):
+    """A nonnegative Python or NumPy integer, not a bool."""
+    return (not isinstance(value, (bool, np.bool_))
+            and isinstance(value, (int, np.integer)) and value >= 0)
+
+
+def _int32_vector(values, name):
+    values = np.asarray(values)
+    if values.size == 0 and values.ndim == 1:
+        return np.zeros(0, dtype=np.int32)
+    if (values.ndim != 1 or not np.issubdtype(values.dtype, np.integer)
+            or values.min() < np.iinfo(np.int32).min or values.max() > np.iinfo(np.int32).max):
+        raise ValueError(name + " must be a one-dimensional sequence of int32 integers")
+    return values.astype(np.int32)
 
 
 class CompiledAbaqusElement:
@@ -106,25 +177,89 @@ class CompiledAbaqusElement:
                  cache_batches=False):
         if getattr(module, "_abaqus_ufl_signature", None) != _signature(weakform):
             raise ValueError("compile this weak-form type with build_compiled_uel first")
+        self._setup(
+            module,
+            dof_per_node=sum(2 if isinstance(field, VectorField) else 1
+                             for field in weakform.fields.values()),
+            props=np.array([getattr(weakform._mat, name)
+                            for name in weakform._mat.props_names], dtype=float),
+            nstate=4 * _nstate_per_gp(_state_var_info(weakform._mat)),
+            n_elem=n_elem, svars_initial=None,
+            jprops=np.array([0], dtype=np.int32),
+            lflags=np.array([1, 0, 1, 0, 0, 0], dtype=np.int32),
+            dt=dt, time=time, cache_batches=cache_batches)
+
+    @classmethod
+    def from_module(cls, module, *, dof_per_node, props, n_elem=None, nsvars=0,
+                    svars_initial=None, jprops=(), lflags=(1, 0, 1, 0, 0, 0),
+                    dt=1.0, time=None, cache_batches=False):
+        """Adapter for a standard Quad4 UEL compiled outside abaqus_ufl.
+
+        ``module`` must expose ``drive_uel`` and ``drive_uel_batch`` of the
+        packaged ``drive_uel.f90``; :func:`build_external_uel` builds one.
+        ``dof_per_node`` gives NDOFEL = 4 * dof_per_node in interleaved
+        node/component order.  ``props`` (PROPS) and ``jprops`` (JPROPS,
+        int32) are passed unchanged; ``lflags`` are six integers (the default
+        requests residual and tangent).  ``nsvars`` is NSVARS per element:
+        with ``nsvars > 0`` committed SVARS need ``n_elem`` and start from
+        ``svars_initial`` (zeros by default) in every element; with 0 the
+        element is stateless.  ``dt``, ``time`` and ``cache_batches`` are as
+        in the constructor.  The adapter passes beginning-of-increment TIME;
+        a subclass may override :meth:`begin_increment` for another
+        convention, and ``from_module`` then returns that subclass.
+        """
+        for name in ("drive_uel", "drive_uel_batch"):
+            if not callable(getattr(module, name, None)):
+                raise ValueError("module must expose drive_uel and drive_uel_batch "
+                                 "(build it with build_external_uel)")
+        if not _is_count(dof_per_node) or dof_per_node < 1:
+            raise ValueError("dof_per_node must be a positive integer")
+        props = np.array(props, dtype=float)
+        if props.ndim != 1 or not np.isfinite(props).all():
+            raise ValueError("props must be a finite one-dimensional sequence")
+        if not _is_count(nsvars):
+            raise ValueError("nsvars must be a nonnegative integer")
+        if svars_initial is not None:
+            svars_initial = np.array(svars_initial, dtype=float)
+            if svars_initial.shape != (nsvars,) or not np.isfinite(svars_initial).all():
+                raise ValueError("svars_initial must hold nsvars finite values")
+        jprops = _int32_vector(jprops, "jprops")
+        lflags = _int32_vector(lflags, "lflags")
+        if lflags.shape != (6,):
+            raise ValueError("lflags must hold six integers")
+        if (isinstance(dt, (bool, np.bool_)) or not isinstance(dt, (int, float, np.number))
+                or not np.isfinite(dt) or dt <= 0):
+            raise ValueError("dt must be positive and finite")
+        element = object.__new__(cls)
+        element._setup(module, dof_per_node=int(dof_per_node), props=props,
+                       nstate=int(nsvars), n_elem=n_elem, svars_initial=svars_initial,
+                       jprops=jprops, lflags=lflags, dt=dt, time=time,
+                       cache_batches=cache_batches)
+        return element
+
+    def _setup(self, module, *, dof_per_node, props, nstate, n_elem, svars_initial,
+               jprops, lflags, dt, time, cache_batches):
+        """Attribute setup shared by the constructor and :meth:`from_module`."""
         self.module = module
-        self.dof_per_node = sum(2 if isinstance(field, VectorField) else 1
-                                for field in weakform.fields.values())
-        self.props = np.array([getattr(weakform._mat, name)
-                              for name in weakform._mat.props_names], dtype=float)
+        self.dof_per_node = dof_per_node
+        self.props = props
         if not np.isfinite(self.props).all():
             raise ValueError("material properties must be finite")
         self.ndofel = 4 * self.dof_per_node
-        nstate = 4 * _nstate_per_gp(_state_var_info(weakform._mat))
         self.svars_size = max(1, nstate)
-        if n_elem is not None and (isinstance(n_elem, bool)
-                or not isinstance(n_elem, (int, np.integer)) or n_elem < 0):
+        if n_elem is not None and not _is_count(n_elem):
             raise ValueError("n_elem must be a nonnegative integer")
         if nstate and n_elem is None:
             raise ValueError("stateful elements require n_elem for committed SVARS")
-        self.svars = np.zeros((n_elem, nstate)) if nstate else None
+        if not nstate:
+            self.svars = None
+        elif svars_initial is None:
+            self.svars = np.zeros((n_elem, nstate))
+        else:
+            self.svars = np.tile(svars_initial, (n_elem, 1))
         self.elem_ids = None
-        self._jprops = np.array([0], dtype=np.int32)
-        self._lflags = np.array([1, 0, 1, 0, 0, 0], dtype=np.int32)
+        self._jprops = jprops
+        self._lflags = lflags
         self._params = np.zeros(3)
         self.cache_batches = bool(cache_batches)
         self._batch_cache = None
