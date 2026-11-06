@@ -17,7 +17,9 @@ install it in an environment with a writable skills directory, copy:
 ai_skills/abaqus-ufl/
 ```
 
-into that environment's skills directory.
+into that environment's skills directory. The skill links into this
+repository's `docs/`, so a copied skill alone leaves those links unresolved.
+Prefer pointing the agent at this checkout and recording its revision.
 
 Agents can also read `ai_skills/abaqus-ufl/SKILL.md` directly when working in
 this repository.

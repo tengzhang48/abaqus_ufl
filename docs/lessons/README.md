@@ -6,7 +6,7 @@ other pages link to it. The package is a **formulation framework**.
 | Kind | Question it answers | Canonical home |
 |---|---|---|
 | Lessons | What did we learn, and why does it matter? | The themed pages in [this directory](#lesson-homes) |
-| Pitfalls | What specific mistake causes this symptom, and which check catches it? | [Pitfall catalog](../../ai_skills/abaqus-ufl/references/pitfalls.md) |
+| Pitfalls | What specific mistake causes this symptom, and which check catches it? | [Pitfall catalog](../../ai_skills/abaqus-ufl/references/pitfalls.md): one row per symptom, linking to the entry that explains it |
 | Pivots | What triggered a change of approach, what was the evidence, and what replaced it? | [Pivot records](../pivots.md) |
 | Skills | When should an agent use which resource or workflow? | [Skill entry point](../../ai_skills/abaqus-ufl/SKILL.md) and its [references](../../ai_skills/abaqus-ufl/references/validation-ladder.md) |
 
@@ -23,6 +23,8 @@ supports a more specific claim.
 | Writing a 2D UEL or plane-strain UMAT | [Active dimensions](finite-element.md#active-dimensions) | [In-plane pivot](../pivots.md#p1-in-plane-complex-step), [compiled parity](../../tests/test_2d_tangents.py) |
 | A swelling model fails the stress-free check | [Reference assumptions](verification.md#state-the-reference-assumed-by-a-gate) | [Pitfalls](../../ai_skills/abaqus-ufl/references/pitfalls.md#verification-the-state-and-the-regime-not-just-the-method) |
 | Choosing element order for a stress-gradient term | [Gradient consistency](finite-element.md#gradient-of-stress-consistency) | [Interpolation pivot](../pivots.md#p2-compatible-interpolation-for-stress-gradient-coupling) |
+| Choosing element order when a scalar drives swelling or thermal strain | [FE1 Eigenstrain on equal-order elements](finite-element.md#fe1-a-scalar-driven-eigenstrain-on-equal-order-low-order-elements-can-introduce-parasitic-stress) | [Interpolation pivot](../pivots.md#p2-compatible-interpolation-for-stress-gradient-coupling), [mixed-order example](../../examples/thermo_mechanics_quad8/) |
+| Stress, damage or history too high on coarse meshes although Newton converges | [FE1 Eigenstrain on equal-order elements](finite-element.md#fe1-a-scalar-driven-eigenstrain-on-equal-order-low-order-elements-can-introduce-parasitic-stress) | [V1 Error size, not only its trend](verification.md#v1-a-falling-error-establishes-neither-the-limit-nor-an-acceptable-error) |
 | A global Newton step goes uphill | [AMATRX sign](abaqus-and-fortran.md#amatrx-sign-convention) | [Host/interface pitfalls](../../ai_skills/abaqus-ufl/references/pitfalls.md#abaqus-interface) |
 | Cache safety, hits or state commit | [Exact reuse](performance-and-parallel.md#exact-reuse-needs-complete-inputs-and-state-ownership) | [Cache pivot](../pivots.md#p5-exact-batch-reuse), [cache tests](../../tests/test_fe_batch_cache.py) |
 | MPI disagrees with serial or hangs | [Distribution and error handling](performance-and-parallel.md#keep-replicated-batching-distinct-from-distributed-algebra) | [MPI probes](../../tests/mpi_fe_contract.py), [runtime command](../../abaqus_ufl/fe/README.md#petsc-and-mpi) |
@@ -36,6 +38,33 @@ supports a more specific claim.
 | Solver output or a figure seems inconsistent | [Output bridge](coupled-multiphysics.md#solver-completion-is-not-output-validation) | [Retained artifact evidence](verification.md#a-claim-belongs-to-its-retained-artifact) |
 | Starting a paper reproduction | [Build smaller rungs](coupled-multiphysics.md#hard-multiphysics-needs-framework-rungs-before-parameter-tuning) | [Validation ladder](../../ai_skills/abaqus-ufl/references/validation-ladder.md) |
 | Choosing an agent workflow or finding the right copy | [One agent and an oracle](agent-workflow.md) | [Workflow/canonical-copy pivots](../pivots.md#p3-one-agent-with-an-independent-oracle) |
+
+## Entry format
+
+New and rewritten entries use this form; other entries move to it when they
+are next edited. Aim for 80 to 200 words, but never drop a limit to save space.
+
+```markdown
+## <ID> <the rule or the failure, as one sentence>
+
+Also: <other words an agent may search for>
+
+- **When:** the problem class and assumptions in which it applies.
+- **Symptom:** what an agent or user observes, including results that look like success.
+- **Do:** the action. **Why:** the reason it works.
+- **Check:** the decisive check: quantity, reference, conditions and acceptance.
+- **Evidence and limits:** a named test, example or derivation; what was shown and what was not.
+- **Checked:** the commit, and whether the source was inspected or a test was executed.
+```
+
+An ID is a page prefix and a number (FE1 in finite-element.md, V1 in
+verification.md) and is never reused. When a heading changes, keep its old
+anchor with `<a id="..."></a>` so existing links still work. A pitfall row
+names the mistake and its symptom and links to the entry; it does not repeat
+the explanation. Merge two entries only when they guard the same decision
+(the same *when* and the same *do*), not because they share words.
+`python tools/check_guidance.py` checks links, anchors and named tests, and
+the test suite runs it.
 
 ## Lesson homes
 

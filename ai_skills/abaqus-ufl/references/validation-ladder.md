@@ -36,7 +36,8 @@ must not affect the result. Read the relevant
 ## Acceptance and scope
 
 Use an independent observable or identity and a broken control that the same
-acceptance rule rejects. Compilation, Python/Fortran parity and Newton
+acceptance rule rejects. Match the evidence to the claim, and judge the size
+of an error, not only its trend ([V1](../../../docs/lessons/verification.md#v1-a-falling-error-establishes-neither-the-limit-nor-an-acceptable-error)). Compilation, Python/Fortran parity and Newton
 convergence answer different questions. None alone proves the intended PDE,
 branch coverage, physical accuracy or production output meaning. An absent
 check is an explicit skip; a timeout, NaN or iteration cap is a failure, not a
