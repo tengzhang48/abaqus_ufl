@@ -398,6 +398,11 @@ def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
                     cutback_on_element_rejection=False):
     """Projected semismooth-Newton / PDAS solve of one increment.
 
+    Up to ``max_newton`` projected updates are applied; the state each update
+    produces, including the last one, is assembled and accepted when its
+    weighted KKT residual is below ``tol``.  ``iterations`` counts the
+    assemblies that were assessed (updates + 1 on convergence).
+
     ``damping`` scales the Newton update before projection (``U += damping*du``).
     It is the lever for projected-map 2-cycles / frozen plateaus at a stable
     active set, where the anti-cycling lock is powerless because the cycling
@@ -447,8 +452,12 @@ def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
     iterations = 0
     at_lo = at_hi = np.zeros_like(is_con)
 
-    for iteration in range(1, max_newton + 1):
-        iterations = iteration
+    # Pass ``max_newton + 1`` only assesses the state produced by the last
+    # permitted update; it never computes another update.
+    for iteration in range(1, max_newton + 2):
+        final = iteration > max_newton
+        if not final:
+            iterations = iteration
         try:
             R, K = step_asm(U, U - U_prev)
         except IncrementTooLarge as exc:
@@ -484,6 +493,8 @@ def _bounded_newton(step_asm, U, U_prev, con, is_con, lo, hi, *, w_res, at_tol,
                     certified_update_norm=float(np.max(
                         np.abs(certificate["update"]), initial=0.0)),
                     reason="activity-equivalent box-VI certificate")
+        if final:
+            break
 
         act = active_set(R, U, lo, hi, at_tol) & ~is_con
         # Anti-cycling: a repeated active set that did not improve the KKT

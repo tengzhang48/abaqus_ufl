@@ -528,6 +528,46 @@ def test_exhausted_line_search_rejects_iteration_instead_of_crawling():
     assert len(n_assemblies) == 31
 
 
+def test_bounded_newton_assesses_the_state_of_its_final_update():
+    """Defect regression: the last permitted update reached the exact root of
+    a linear problem and was returned as a failure without being evaluated."""
+    calls = []
+
+    def asm(U, DU):
+        calls.append(U[0])
+        return np.array([2.0 * U[0] - 1.0]), sp.csr_matrix([[2.0]])
+
+    result = _bounded_newton(
+        asm, np.array([0.0]), np.array([0.0]), np.array([], dtype=int),
+        np.array([False]), np.array([-np.inf]), np.array([np.inf]), w_res=np.ones(1),
+        at_tol=0.0, max_newton=1, tol=1e-12, linear_solve=_scipy_solve,
+        line_search=True, context="final update")
+    assert result["converged"] and result["U"][0] == 0.5
+    assert result["iterations"] == 2 and result["residual"] == 0.0
+    np.testing.assert_array_equal(result["last_update"], [0.5])
+    # Still no extra update: one iterate, one trial, one final assessment.
+    assert calls == [0.0, 0.5, 0.5]
+
+    def nonlinear(U, DU):
+        return np.array([U[0] ** 3 + U[0] - 0.5]), sp.csr_matrix([[3 * U[0] ** 2 + 1]])
+
+    failed = _bounded_newton(
+        nonlinear, np.array([0.0]), np.array([0.0]), np.array([], dtype=int),
+        np.array([False]), np.array([-np.inf]), np.array([np.inf]), w_res=np.ones(1),
+        at_tol=0.0, max_newton=1, tol=1e-12, linear_solve=_scipy_solve,
+        line_search=True, context="final update")
+    assert not failed["converged"] and failed["iterations"] == 1
+    assert failed["residual"] == pytest.approx(0.125, rel=1e-12)  # assessed at u = 0.5
+
+
+def test_solve_steps_bounded_accepts_a_step_converged_by_its_last_update():
+    """Through the driver: a linear solve with max_newton=1 needs no cutback."""
+    nodes, elems, U, report = _solve_bounded(8, box=BoxSpec(bounds={0: (-np.inf, 10.0)}),
+                                             max_newton=1)
+    assert report.cutbacks == 0 and report.attempts[-1].iterations == 2
+    assert report.attempts[-1].kkt_residual < 1e-10
+
+
 @pytest.mark.parametrize("cutback", [None, False, True])
 def test_element_rejection_during_line_search_is_an_opt_in_cutback(cutback):
     """Default backtracking recovers; the opt-in returns the material reason."""

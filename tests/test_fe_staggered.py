@@ -559,6 +559,17 @@ def test_bounded_monolithic_reports_fresh_residual_and_actual_last_update():
     assert 0.0 <= rec.scaled_residual < 1e-10
 
 
+def test_bounded_monolithic_converges_on_its_final_update():
+    """Defect regression through the driver: one permitted coupled update of
+    a linear problem is converged, not a cutback."""
+    nodes, elems, dirichlet = strip(8)
+    U, report = solve_steps_staggered(
+        nodes, elems, 1, poisson_element(lambda xy: F_SOURCE), lambda frac: dirichlet,
+        [[0]], 1, tol=1e-10, max_field_newton=1, newton_method="bounded_monolithic",
+        return_report=True)
+    assert report.cutbacks == 0 and report.attempts[-1].newton_iterations == 2
+
+
 @pytest.mark.parametrize("bad_update", ["zero", "nonfinite"])
 def test_bounded_monolithic_rejects_without_finite_kkt_certificate(bad_update):
     nodes, elems, dirichlet = strip(4)
