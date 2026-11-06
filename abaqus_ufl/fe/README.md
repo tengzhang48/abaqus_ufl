@@ -96,6 +96,54 @@ For a manually seeded state, use the appropriate nonzero beginning time so
 that initialization does not replace it. Retain the accepted nodal solution
 separately and set the beginning-of-increment clock before each step.
 
+## A UEL compiled outside abaqus_ufl
+
+A hand-written or third-party standard Quad4 `UEL` uses the same adapter:
+
+```python
+from abaqus_ufl.fe import CompiledAbaqusElement, build_external_uel
+
+module = build_external_uel(["kernel.for", "uel.f90"],
+                            compile_flags=["-ffixed-line-length-none"])
+element = CompiledAbaqusElement.from_module(
+    module, dof_per_node=4, props=props, n_elem=len(elems), nsvars=12, dt=dt)
+```
+
+`build_external_uel` compiles the sources in order with
+`gfortran -c -O2 -fPIC` followed by `compile_flags` (later flags take
+precedence), links the objects with the packaged `drive_uel.f90` and imports
+the module. The subroutine must be named `UEL`, have the standard Abaqus
+argument list and serve four counterclockwise nodes with two coordinates and
+NDOFEL = 4 x `dof_per_node` in node-major order. `from_module` validates its
+arguments: a positive `dof_per_node`, finite 1-D `props`, int32 `jprops`, six
+integer `lflags`, a positive finite `dt`, and `nsvars` SVARS per element,
+which need `n_elem` and start from `svars_initial` (zeros by default). It
+returns the adapter the WeakForm constructor builds, for every driver above.
+
+| UEL argument | What the adapter passes |
+|---|---|
+| COORDS, U, DU | Node coordinates; current nodal values; DU = U - U_previous |
+| SVARS | Committed start-of-increment values; trial updates are kept only through `commit_step` |
+| PROPS, JPROPS, LFLAGS | As given; default LFLAGS (1, 0, 1, 0, 0, 0) requests residual and tangent |
+| TIME(1), TIME(2) | Both `element.time`, the **beginning** of the increment |
+| DTIME, KSTEP, KINC | `element.dt`, 1, `element.kinc` |
+| JELEM, JTYPE | One-based element number (or `elem_ids`), 1 |
+| PNEWDT | 1 on entry; a returned value below 1 raises `IncrementTooLarge` (a cutback in the stepping drivers) |
+| RHS, AMATRX | R = -RHS and K = AMATRX = dR/dU |
+| ENERGY, V, A, PREDEF, PARAMS, loads | Zero arrays and no distributed loads |
+
+`begin_increment(kinc, time_begin, dt)` sets TIME, DTIME and KINC, and the
+cutback drivers call it before every attempt. An element written for another
+TIME convention can override it in a subclass, for example the end of the
+increment; `from_module` called on the subclass returns the subclass:
+
+```python
+class EndOfIncrement(CompiledAbaqusElement):
+    def begin_increment(self, kinc, time_begin=None, dt=None):
+        super().begin_increment(kinc, time_begin=time_begin, dt=dt)
+        self.time = self.time + self.dt
+```
+
 ## Stepping drivers and bounded solves
 
 `abaqus_ufl.fe.stepping` and `abaqus_ufl.fe.bounds` advance many increments

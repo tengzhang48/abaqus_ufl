@@ -11,6 +11,8 @@ MPI library.
 and the bounded solver (``solve_steps_bounded``, with ``BoxSpec``) advance
 many increments, commit a step only below its tolerance, and, where stated,
 cut back rejected increments transactionally with ``CompiledElementState``.
+``build_external_uel`` and ``CompiledAbaqusElement.from_module`` adapt a
+standard Quad4 UEL compiled outside abaqus_ufl.
 """
 
 from .compiled_element import (CompiledAbaqusElement, IncrementTooLarge,
