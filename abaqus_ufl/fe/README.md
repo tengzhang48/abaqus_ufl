@@ -121,9 +121,16 @@ bisections fails the step instead of applying a vanishing update. A clip
 or projection is followed by a fresh projected-residual certificate.
 
 **Bounds.** `BoxSpec` and `field_bounds` must name existing components
-(integer indices below `dof_per_node`), or the solve raises `ValueError`. On
-every bounded route a prescribed value outside the bounds by more than 1e-12
-raises `ValueError`; clipping and snapping never change a prescribed value.
+(integer indices below `dof_per_node`), or the solve raises `ValueError`.
+Every bounded route uses one bound tolerance per DOF: `bound_atol *
+field_scale` (default `1e-12` times the declared scale, 1 if none), never
+below four ulps of the larger finite static bound magnitude, so roundoff
+alone never violates it. It is computed once from the static bounds and used
+in every step, also when a history bound has narrowed the box. A prescribed value outside the bounds by more than this tolerance raises
+`ValueError`. One within it is kept exactly; clipping and snapping never
+change a prescribed value. When such an accepted value becomes the start of
+the next step, its `irreversible` or `monotone_decreasing` history bound
+rests on the crossed static bound rather than forming an empty box.
 
 **Time.** Pass `state=CompiledElementState([element])`. Before each attempt
 the cutback drivers call `state.begin_increment(kinc, time_begin=t, dt=dt_sub)`:
@@ -155,8 +162,8 @@ drivers have no restart parameters, and file checkpoints are not provided.
 The stepping assembler accepts repeated node indices in an element, such as a
 collapsed Quad4 at a polar centre, and scatter-adds them; the element must
 still be admissible. Public `assemble` keeps rejecting such connectivity.
-`newton_method="bounded_monolithic"` classifies bound activity exactly, so
-`bound_atol` applies only to `feasible_trials` blocks and `solve_steps_bounded`.
+`newton_method="bounded_monolithic"` classifies bound activity exactly; there
+`bound_atol` sets only the tolerance for prescribed values and history bounds.
 
 ```python
 from abaqus_ufl.fe import CompiledElementState, solve_steps_staggered

@@ -69,6 +69,24 @@ __all__ = [
 ]
 
 
+#: No bound tolerance falls below this many ulps of the bound's magnitude.
+_ROUNDOFF_ULPS = 4.0
+
+
+def _bound_tolerance(atol, lo, hi):
+    """Per-DOF tolerance for prescribed values and history bounds.
+
+    It is the scale-aware activity tolerance ``atol = bound_atol *
+    field_scale``, never below four ulps of the larger finite magnitude of
+    the STATIC bounds ``lo``/``hi``, so roundoff alone can never violate it.
+    Callers compute it once from the static bounds and use it in every step.
+    """
+    lo, hi = np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
+    magnitude = np.maximum(np.where(np.isfinite(lo), np.abs(lo), 0.0),
+                           np.where(np.isfinite(hi), np.abs(hi), 0.0))
+    return np.maximum(np.asarray(atol, dtype=float), _ROUNDOFF_ULPS * np.spacing(magnitude))
+
+
 def _is_component(c, dof_per_node):
     return (not isinstance(c, (bool, np.bool_)) and isinstance(c, (int, np.integer))
             and 0 <= c < dof_per_node)
@@ -96,6 +114,15 @@ class BoxSpec:
     Every named component must be an integer index in ``[0, dof_per_node)``;
     :meth:`arrays` raises ``ValueError`` otherwise, so a misnamed component
     cannot silently drop its constraint.
+
+    Bound tolerance.  The drivers use one tolerance per DOF,
+    :meth:`tolerance`: ``bound_atol * field_scale``, never below four ulps of
+    the larger finite static bound magnitude.  It is computed once from the
+    static bounds and used in every step.  A prescribed value within it
+    outside the bounds is kept exactly; when an accepted value within it
+    outside a static bound becomes the step-start state of a monotone
+    component, the history bound rests on that static bound instead of
+    producing an empty box (``arrays(..., atol=...)``).
     """
 
     bounds: Mapping[int, Tuple[float, float]]
@@ -113,13 +140,7 @@ class BoxSpec:
                 f"BoxSpec: components {sorted(overlap)} declared both "
                 "irreversible and monotone_decreasing")
 
-    def arrays(self, ndof, dof_per_node, U_prev=None):
-        """Per-DOF ``(lo, hi)`` arrays for this step.
-
-        ``U_prev`` (the accepted state at step start) is required whenever a
-        monotone component is declared; passing the *current iterate* instead
-        would ratchet the bound during the solve and freeze the field.
-        """
+    def _static_arrays(self, ndof, dof_per_node):
         named = ([("bounds", c) for c in dict(self.bounds)]
                  + [("irreversible", c) for c in self.irreversible]
                  + [("monotone_decreasing", c) for c in self.monotone_decreasing])
@@ -134,19 +155,44 @@ class BoxSpec:
         for c, (c_lo, c_hi) in dict(self.bounds).items():
             lo[comp == c] = c_lo
             hi[comp == c] = c_hi
+        return comp, lo, hi
+
+    def tolerance(self, ndof, dof_per_node, atol):
+        """Per-DOF bound tolerance: ``atol`` (``bound_atol * field_scale``),
+        never below four ulps of the larger finite static bound magnitude."""
+        _, lo, hi = self._static_arrays(ndof, dof_per_node)
+        return _bound_tolerance(np.broadcast_to(atol, (ndof,)), lo, hi)
+
+    def arrays(self, ndof, dof_per_node, U_prev=None, atol=1e-14):
+        """Per-DOF ``(lo, hi)`` arrays for this step.
+
+        ``U_prev`` (the accepted state at step start) is required whenever a
+        monotone component is declared; passing the *current iterate* instead
+        would ratchet the bound during the solve and freeze the field.  Where
+        a history bound crosses the opposite static bound by at most the bound
+        tolerance (``atol``, per DOF or scalar, never below four ulps of the
+        static bound's magnitude), it rests on that bound; a larger crossing
+        raises ``ValueError``.  The drivers pass :meth:`tolerance`.
+        """
+        comp, lo, hi = self._static_arrays(ndof, dof_per_node)
         if self.irreversible or self.monotone_decreasing:
             if U_prev is None:
                 raise ValueError(
                     "BoxSpec.arrays: U_prev is required for a monotone "
                     "component (the dynamic bound is the STEP-START value)")
             U_prev = np.asarray(U_prev, dtype=float)
+            tol = _bound_tolerance(np.broadcast_to(atol, (ndof,)), lo, hi)
             for c in self.irreversible:
                 m = comp == c
                 lo[m] = np.maximum(lo[m], U_prev[m])
+                rest = m & (lo > hi) & (lo <= hi + tol)
+                lo[rest] = hi[rest]
             for c in self.monotone_decreasing:
                 m = comp == c
                 hi[m] = np.minimum(hi[m], U_prev[m])
-        if np.any(lo > hi + 1e-14):
+                rest = m & (hi < lo) & (hi >= lo - tol)
+                hi[rest] = lo[rest]
+        if np.any(lo > hi):
             bad = int(np.argmax(lo - hi))
             raise ValueError(
                 f"BoxSpec.arrays: empty box at dof {bad} "
@@ -640,9 +686,14 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                        without explicit weights the small fields never enter
                        the norm and the gate is vacuous for them.
     ``field_scale``    ``{component: magnitude}`` -- the characteristic size of
-                       each field, used to decide when a DOF is *at* a bound
-                       (``bound_atol * scale``).  Activity detection must be
-                       scale-aware for the same reason.
+                       each field.  ``bound_atol * scale``, never below four
+                       ulps of the larger finite static bound magnitude, is
+                       the one bound tolerance, computed once and used in
+                       every step: it decides when a DOF is *at* a bound, how
+                       far a prescribed value may lie outside the bounds
+                       (it is then kept exactly; farther raises
+                       ``ValueError``), and when an accepted value outside a
+                       static bound still gives a valid history bound.
     ``max_cutbacks``   how many times a failed increment may be halved before
                        the step is declared failed.  Each cutback rolls ``U``
                        and the element state back and re-runs from the accepted
@@ -680,6 +731,8 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     w_res = _component_weights(residual_scale, ndof, dof_per_node, "residual_scale")
     w_fld = _component_weights(field_scale, ndof, dof_per_node, "field_scale")
     at_tol = float(bound_atol) * w_fld
+    # One bound tolerance per DOF, from the static bounds, for every step.
+    bound_tol = box.tolerance(ndof, dof_per_node, at_tol)
 
     U = _initial_vector(U0, ndof)
     report = BoundedReport()
@@ -704,7 +757,6 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
             # ``U`` and therefore recomputes the identical bound -- a cutback
             # re-runs the same problem at a smaller increment, it does not
             # silently ratchet the constraint.
-            lo, hi = box.arrays(ndof, dof_per_node, U_attempt_start)
             snap = _snapshot_element_state(state)
             try:
                 if state is not None and hasattr(state, "begin_increment"):
@@ -713,16 +765,20 @@ def solve_steps_bounded(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                 dirichlet = dirichlet_fn(frac_try)
                 con, is_con = _dirichlet_masks(
                     dirichlet, ndof, f"solve_steps_bounded: step {step}")
+                lo, hi = box.arrays(ndof, dof_per_node, U_attempt_start, atol=bound_tol)
                 Ui = U.copy()
                 for g, v in dirichlet.items():
                     Ui[g] = v
-                bad = np.nonzero(is_con & ((Ui < lo - 1e-12) | (Ui > hi + 1e-12)))[0]
+                ptol = bound_tol
+                bad = np.nonzero(is_con & ((Ui < lo - ptol) | (Ui > hi + ptol)))[0]
                 if bad.size:
+                    g = int(bad[0])
                     raise ValueError(
-                        f"solve_steps_bounded: step {step}: prescribed value at "
-                        f"dof {int(bad[0])} lies outside the box "
-                        f"[{lo[bad[0]]:.6g}, {hi[bad[0]]:.6g}] -- an infeasible "
-                        "Dirichlet value cannot be satisfied by a bounded solve")
+                        f"solve_steps_bounded: step {step}: prescribed value "
+                        f"{Ui[g]:.17g} at dof {g} lies outside the box "
+                        f"[{lo[g]:.17g}, {hi[g]:.17g}] beyond the bound "
+                        f"tolerance {ptol[g]:.3g} -- an infeasible Dirichlet "
+                        "value cannot be satisfied by a bounded solve")
 
                 step_asm = _make_step_assembler(
                     asm, external_fn, step, frac_try, U_attempt_start)

@@ -712,18 +712,18 @@ def _coupled_to_prescribed(ei, coords, U_e, DU_e):
             np.array([[1.0, 0.0], [-1e13, 1.0]]))
 
 
-def _bounded_route(route, element_fn, dirichlet, dpn=2, **kw):
+def _bounded_route(route, element_fn, dirichlet, dpn=2, box=None, n_steps=1, **kw):
     nodes, elems = np.zeros((1, 2)), np.array([[0]])
-    box = BoxSpec({0: (0.0, 1.0)})
+    box = BoxSpec({0: (0.0, 1.0)}) if box is None else box
     if route == "bounded":
-        return solve_steps_bounded(nodes, elems, dpn, element_fn, lambda f: dirichlet, 1,
-                                   box, tol=1e-10, **kw)[0]
+        return solve_steps_bounded(nodes, elems, dpn, element_fn, lambda f: dirichlet,
+                                   n_steps, box, tol=1e-10, **kw)[0]
     options = {"feasible": dict(box=box, feasible_trials=True),
                "bounded_monolithic": dict(box=box, newton_method="bounded_monolithic"),
                "static_clip": dict(field_bounds={0: (0.0, 1.0)}),
                "box_clip": dict(box=box)}[route]
     return solve_steps_staggered(nodes, elems, dpn, element_fn, lambda f: dirichlet,
-                                 [list(range(dpn))], 1, tol=1e-10, **options, **kw)
+                                 [list(range(dpn))], n_steps, tol=1e-10, **options, **kw)
 
 
 @pytest.mark.parametrize("route", ["bounded", "feasible", "bounded_monolithic",
@@ -736,6 +736,103 @@ def test_bounded_routes_keep_prescribed_values_exactly(route, value):
     U = _bounded_route(route, _coupled_to_prescribed, {0: value})
     assert U[0] == value
     assert U[1] == pytest.approx(1e13 * value, rel=1e-15)
+
+
+@pytest.mark.parametrize("route", ["bounded", "box_clip", "feasible", "bounded_monolithic"])
+@pytest.mark.parametrize("direction, value", [("irreversible", 1.0 + 5e-13),
+                                              ("monotone_decreasing", -5e-13)])
+def test_history_bound_of_a_prescribed_value_in_the_slack_is_not_an_empty_box(
+        route, direction, value):
+    """A prescribed value within the 1e-12 Dirichlet slack beyond a static bound
+    is accepted exactly; on the next step its history bound (``d >= d_n`` or
+    ``d <= d_n``) must rest on that static bound, not cross it and raise
+    "empty box"."""
+    box = BoxSpec({0: (0.0, 1.0)}, **{direction: (0,)})
+    U = _bounded_route(route, _coupled_to_prescribed, {0: value}, box=box, n_steps=3)
+    assert U[0] == value
+    assert U[1] == pytest.approx(1e13 * value, rel=1e-15)
+
+
+def test_box_arrays_rest_history_bounds_within_the_tolerance_and_raise_beyond():
+    box = BoxSpec({0: (0.0, 1.0)}, irreversible=(0,))
+    lo, hi = box.arrays(1, 1, np.array([1.0 + 5e-13]), atol=1e-12)
+    assert (lo[0], hi[0]) == (1.0, 1.0)                    # rests on the static bound
+    with pytest.raises(ValueError, match="empty box"):     # beyond the tolerance
+        box.arrays(1, 1, np.array([1.0 + 2e-12]), atol=1e-12)
+    mirror = BoxSpec({0: (0.0, 1.0)}, monotone_decreasing=(0,))
+    lo, hi = mirror.arrays(1, 1, np.array([-5e-13]), atol=1e-12)
+    assert (lo[0], hi[0]) == (0.0, 0.0)
+    # The floor is a few ulps of the bound's magnitude, whatever atol is.
+    big = BoxSpec({0: (0.0, 2.3e4)}, irreversible=(0,))
+    lo, hi = big.arrays(1, 1, np.array([np.nextafter(2.3e4, np.inf)]), atol=0.0)
+    assert (lo[0], hi[0]) == (2.3e4, 2.3e4)
+
+
+C_MAX = 2.3e4
+
+
+def _doubled(ei, coords, U_e, DU_e):
+    """Component 1 must equal twice the prescribed component 0."""
+    return np.array([0.0, U_e[1] - 2.0 * U_e[0]]), np.array([[1.0, 0.0], [-2.0, 1.0]])
+
+
+@pytest.mark.parametrize("route", ["bounded", "box_clip", "feasible", "bounded_monolithic",
+                                   "static_clip"])
+@pytest.mark.parametrize("value, field_scale", [
+    (C_MAX * (1.0 + np.finfo(float).eps), None),     # roundoff above c_max, no field scale
+    (C_MAX + 1e-8, C_MAX),                           # inside bound_atol * field_scale
+])
+def test_large_magnitude_prescribed_value_within_the_scaled_tolerance_is_accepted(
+        route, value, field_scale):
+    """Bounds [0, 2.3e4]: one ulp is 3.6e-12, so an absolute 1e-12 tolerance
+    rejected c_max*(1+eps) by roundoff alone.  The tolerance is bound_atol *
+    field_scale with a floor of a few ulps of the bound; the value is kept
+    exactly, and on the box routes its irreversible history bound is valid."""
+    box = (BoxSpec({0: (0.0, C_MAX)}, irreversible=(0,))
+           if route != "static_clip" else None)
+    kw = {} if field_scale is None else {"field_scale": {0: field_scale}}
+    if route == "static_clip":
+        nodes, elems = np.zeros((1, 2)), np.array([[0]])
+        U = solve_steps_staggered(nodes, elems, 2, _doubled, lambda f: {0: value}, [[0, 1]], 3,
+                                  tol=1e-10, field_bounds={0: (0.0, C_MAX)}, **kw)
+    else:
+        U = _bounded_route(route, _doubled, {0: value}, box=box, n_steps=3, **kw)
+    assert U[0] == value and U[1] == 2.0 * value
+
+
+@pytest.mark.parametrize("route", ["bounded", "box_clip", "feasible", "bounded_monolithic"])
+@pytest.mark.parametrize("direction, static, start, value", [
+    ("monotone_decreasing", (0.0, C_MAX), C_MAX, -5e-12),
+    ("irreversible", (-C_MAX, 0.0), -C_MAX, 5e-12),
+])
+def test_tolerance_comes_from_the_static_bounds_in_every_step(
+        route, direction, static, start, value):
+    """The prescribed value lies 5e-12 outside the bound at 0, inside the
+    tolerance of the static box [0, 2.3e4] (four ulps of 2.3e4).  Step 2's
+    history box rests at [0, 0]; the tolerance must stay the static one
+    (it used to be recomputed from the narrowed box and dropped to 1e-12)."""
+    box = BoxSpec({0: static}, **{direction: (0,)})
+    U = _bounded_route(route, _doubled, {0: value}, box=box, n_steps=3,
+                       U0=np.array([start, 2.0 * start]))
+    assert U[0] == value                       # the prescribed value, exactly
+    assert U[1] == pytest.approx(2.0 * value, abs=1e-10)   # solved from 2*start to tol
+    np.testing.assert_array_equal(box.tolerance(2, 2, 1e-12),
+                                  [4.0 * np.spacing(C_MAX), 1e-12])
+
+
+@pytest.mark.parametrize("route", ["bounded", "box_clip", "feasible", "bounded_monolithic",
+                                   "static_clip"])
+@pytest.mark.parametrize("field_scale", [None, C_MAX])
+def test_large_magnitude_incompatible_prescribed_value_still_raises(route, field_scale):
+    kw = {} if field_scale is None else {"field_scale": {0: field_scale}}
+    value = C_MAX * (1.0 + 1e-6)                     # 0.023 above the bound
+    nodes, elems = np.zeros((1, 2)), np.array([[0]])
+    with pytest.raises(ValueError, match="outside the box"):
+        if route == "static_clip":
+            solve_steps_staggered(nodes, elems, 2, _doubled, lambda f: {0: value}, [[0, 1]], 1,
+                                  tol=1e-10, field_bounds={0: (0.0, C_MAX)}, **kw)
+        else:
+            _bounded_route(route, _doubled, {0: value}, box=BoxSpec({0: (0.0, C_MAX)}), **kw)
 
 
 @pytest.mark.parametrize("route", ["bounded", "feasible"])

@@ -615,9 +615,14 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
 
     Either way the clip is followed by a fresh, scaled projected-residual
     certificate, so projection cannot silently invalidate the converged state
-    or commit a non-KKT bound state.  On every bounded route a prescribed
-    value outside the bounds (by more than 1e-12) raises ``ValueError``, and
-    neither clipping nor snapping ever changes a prescribed value.
+    or commit a non-KKT bound state.  One bound tolerance per DOF,
+    ``bound_atol * field_scale`` and never below four ulps of the larger
+    finite static bound magnitude, is computed once from the static bounds
+    and applies in every step on every bounded route: a prescribed value outside the
+    bounds by more than it raises ``ValueError``; one within it is kept
+    exactly (neither clipping nor snapping ever changes a prescribed value);
+    and an accepted value within it outside a static bound still gives a
+    valid history bound for a monotone component.
 
     Adaptive stepping (``max_cutbacks > 0``) snapshots ``U`` and ``state``
     (SVARS and the increment clock) before each trial, restores both on
@@ -667,8 +672,9 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     requires a fresh finite weighted KKT residual below ``tol``; ``update_tol``,
     ``max_projection_rounds`` and ``feasible_trials`` apply only to staggered
     sweeps.  This method classifies activity exactly (zero activity tolerance)
-    in its Newton iteration and in its certificate, so ``bound_atol`` does not
-    apply to it.  The reported update is the actual last projected Newton
+    in its Newton iteration and in its certificate; ``bound_atol`` still sets
+    its bound tolerance for prescribed values and history bounds.  The
+    reported update is the actual last projected Newton
     update, recorded as an observation rather than an additional convergence
     condition.  Attempt records use ``newton_iterations`` and zero alternating
     ``sweeps`` in this mode.  Saved attempt records without these fields
@@ -687,9 +693,9 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     ``return_report``.  Raises :class:`StaggeredSolveFailed` when an
     increment fails after ``max_cutbacks`` cutbacks or falls below ``min_dt``.
     """
-    from .bounds import (BoxSpec, _bounded_newton, _is_component,
-                         _restore_element_state, _snapshot_element_state,
-                         projected_residual)
+    from .bounds import (BoxSpec, _bound_tolerance, _bounded_newton,
+                         _is_component, _restore_element_state,
+                         _snapshot_element_state, projected_residual)
 
     if newton_method not in ("staggered", "bounded_monolithic"):
         raise ValueError("newton_method must be 'staggered' or 'bounded_monolithic'")
@@ -756,11 +762,15 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
         raise ValueError("solve_steps_staggered: feasible_trials needs a box "
                          "or field_bounds")
     at_tol = float(bound_atol) * w_fld
+    # One bound tolerance per DOF, from the static bounds, for every step:
+    # prescribed-value checks, history boxes and resting all use it.
+    bound_tol = (box.tolerance(ndof, dof_per_node, at_tol) if box is not None
+                 else _bound_tolerance(at_tol, static_lo, static_hi))
 
     def _attempt_bounds(U_start):
         """Per-DOF (lo, hi) for ONE attempt, from the accepted start state."""
         if box is not None:
-            return box.arrays(ndof, dof_per_node, U_start)
+            return box.arrays(ndof, dof_per_node, U_start, atol=bound_tol)
         return static_lo, static_hi
 
     def _clamp(Uv, lo, hi, prescribed):
@@ -816,11 +826,8 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
             print(msg, flush=True)
         raise StaggeredSolveFailed(msg, reason=reason, report=report)
 
-    def _try_increment(U_work, U_prev, frac_try, step, lo_arr, hi_arr):
+    def _try_increment(U_work, U_prev, bc, bc_con, is_bc, step, lo_arr, hi_arr):
         """Solve one trial increment. Raises ``_StaggeredAttemptFailed``."""
-        bc = dirichlet_fn(frac_try)
-        bc_con, is_bc = _dirichlet_masks(
-            bc, ndof, f"solve_steps_staggered: step {step}")
         for g, v in bc.items():
             U_work[g] = v
         uncovered = np.flatnonzero(~is_bc & ~in_some_field)
@@ -835,15 +842,18 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
         # cannot satisfy an incompatible Dirichlet value, and accepting it
         # would solve a different boundary-value problem without saying so.
         if (bounded or newton_method == "bounded_monolithic") and bc_con.size:
-            bad = bc_con[(U_work[bc_con] < lo_arr[bc_con] - 1e-12)
-                         | (U_work[bc_con] > hi_arr[bc_con] + 1e-12)]
+            ptol = bound_tol[bc_con]
+            bad = bc_con[(U_work[bc_con] < lo_arr[bc_con] - ptol)
+                         | (U_work[bc_con] > hi_arr[bc_con] + ptol)]
             if bad.size:
                 g = int(bad[0])
                 raise ValueError(
                     f"solve_steps_staggered: step {step}: prescribed value "
-                    f"{U_work[g]:.6g} at dof {g} lies outside the box "
-                    f"[{lo_arr[g]:.6g}, {hi_arr[g]:.6g}] -- an infeasible "
-                    "Dirichlet value cannot be satisfied by a bounded solve")
+                    f"{U_work[g]:.17g} at dof {g} lies outside the box "
+                    f"[{lo_arr[g]:.17g}, {hi_arr[g]:.17g}] beyond the bound "
+                    f"tolerance {bound_tol[g]:.3g}"
+                    " -- an infeasible Dirichlet value cannot be satisfied by "
+                    "a bounded solve")
 
         if newton_method == "bounded_monolithic":
             try:
@@ -1134,18 +1144,22 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
             frac_try = min(frac_done + span_try, frac_target)
             dt_sub = dt * (frac_try - frac_done) * n_steps
             U_attempt_start = U.copy()
-            # The dynamic bound tracks the last ACCEPTED state, so it advances
-            # only when an attempt is committed.  A rolled-back attempt
-            # restores ``U`` and therefore recomputes the identical bound: a
-            # cutback re-runs the SAME problem at a smaller increment, it does
-            # not silently ratchet the constraint.
-            lo_arr, hi_arr = _attempt_bounds(U_attempt_start)
             snap = _snapshot_element_state(state)
             try:
                 if state is not None and hasattr(state, "begin_increment"):
                     state.begin_increment(kinc, time_begin=time_end, dt=dt_sub)
+                bc = dirichlet_fn(frac_try)
+                bc_con, is_bc = _dirichlet_masks(
+                    bc, ndof, f"solve_steps_staggered: step {step}")
+                # The dynamic bound tracks the last ACCEPTED state, so it
+                # advances only when an attempt is committed.  A rolled-back
+                # attempt restores ``U`` and therefore recomputes the identical
+                # bound: a cutback re-runs the SAME problem at a smaller
+                # increment, it does not silently ratchet the constraint.
+                lo_arr, hi_arr = _attempt_bounds(U_attempt_start)
                 U_new, R, last_sweep, rfinal, n_rounds = _try_increment(
-                    U.copy(), U_attempt_start, frac_try, step, lo_arr, hi_arr)
+                    U.copy(), U_attempt_start, bc, bc_con, is_bc, step,
+                    lo_arr, hi_arr)
                 if commit_fn is not None:
                     # COMMIT INSIDE THE TRANSACTION.  A compiled UEL
                     # re-evaluates at the converged state during commit and can
