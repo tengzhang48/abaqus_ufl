@@ -368,3 +368,21 @@ def test_multimaterial_final_update_commit_hook_and_state():
     assert U[0] == pytest.approx(0.5)
     assert commits == [(0.5, 0.0), (0.5, 0.5)]
     assert kincs == [1, 2]
+
+
+def test_assemble_groups_accepts_an_empty_group():
+    """An empty element group contributes nothing (it used to fail in the DOF map)."""
+    nodes, left, right = _two_material_mesh()
+    U = np.linspace(0.0, 1.0, 12)
+    unused = lambda *args: pytest.fail("an empty group must not be evaluated")
+    coupled = lambda ei, c, U_e, DU_e: (2.0 * U_e, 2.0 * np.eye(8))
+    empty = {"elems": np.empty((0, 4), dtype=int), "comps": [0], "element_fn": unused}
+    full = {"elems": np.vstack([left, right]), "comps": [0, 1], "element_fn": coupled}
+    R, K = assemble_groups(nodes, len(nodes), 2, [empty, full], U, du_is_total=True)
+    R_ref, K_ref = assemble_groups(nodes, len(nodes), 2, [full], U, du_is_total=True)
+    np.testing.assert_array_equal(R, R_ref)
+    np.testing.assert_array_equal(K.toarray(), K_ref.toarray())
+    R0, K0 = assemble_groups(ONE_NODE, 1, 1, [{"elems": np.empty((0, 4), dtype=int),
+                                                "comps": [0], "element_fn": unused}],
+                             np.zeros(1), du_is_total=True)
+    assert R0.tolist() == [0.0] and K0.nnz == 0

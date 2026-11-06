@@ -90,7 +90,7 @@ def _dof_map(elems, comps, dof_per_node):
     """``(nelem, nne*len(comps))`` global DOFs, node-major within an element."""
     comps = np.asarray(comps, dtype=int)
     return (elems[:, :, None] * dof_per_node + comps[None, None, :]).reshape(
-        len(elems), -1)
+        len(elems), elems.shape[1] * len(comps))
 
 
 def _initial_vector(U0, ndof, name="U0"):
