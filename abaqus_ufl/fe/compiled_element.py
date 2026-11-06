@@ -23,6 +23,15 @@ class IncrementTooLarge(RuntimeError):
     """A UEL rejected a trial increment through PNEWDT."""
 
 
+class NonfiniteElementOutput(RuntimeError):
+    """An element returned a nonfinite residual, tangent or state.
+
+    Solvers that backtrack treat such a trial as an infinite residual; any
+    other exception from an element is not a numerical rejection and
+    propagates. It subclasses RuntimeError for backward compatibility.
+    """
+
+
 def _signature(weakform):
     if weakform.ndim != 2 or any(field.degree != 1 for field in weakform.fields.values()):
         raise ValueError("serial FE supports 2D Quad4 degree-one nodal fields only")
@@ -227,7 +236,7 @@ class CompiledAbaqusElement:
             error.pnewdt = float(pnewdt)
             raise error
         if not all(np.isfinite(value).all() for value in (rhs, tangent, state)):
-            raise RuntimeError("generated UEL returned nonfinite values")
+            raise NonfiniteElementOutput("generated UEL returned nonfinite values")
 
     def _call(self, ei, coords, U_e, DU_e, sv):
         jelem = ei + 1 if self.elem_ids is None else int(self.elem_ids[ei])

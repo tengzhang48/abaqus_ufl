@@ -6,6 +6,8 @@ import numpy as np
 from scipy.sparse import coo_matrix
 from scipy.sparse.linalg import MatrixRankWarning, spsolve
 
+from .compiled_element import NonfiniteElementOutput
+
 
 def _mesh_inputs(nodes, elems, dof_per_node):
     nodes = np.asarray(nodes, dtype=float)
@@ -54,7 +56,7 @@ def assemble(nodes, elems, dof_per_node, element_fn, U, DU=None, *, du_is_total=
         if local_r.shape != (len(dofs),) or local_k.shape != (len(dofs), len(dofs)):
             raise ValueError("element output shapes disagree with the DOF layout")
         if not np.isfinite(local_r).all() or not np.isfinite(local_k).all():
-            raise RuntimeError("nonfinite element residual or tangent")
+            raise NonfiniteElementOutput("nonfinite element residual or tangent")
         np.add.at(residual, dofs, local_r)
         rows.extend(np.repeat(dofs, len(dofs)))
         cols.extend(np.tile(dofs, len(dofs)))
@@ -78,7 +80,7 @@ def assemble_batched(nodes, elems, dof_per_node, batch_fn, U, DU=None, *, du_is_
     if local_r.shape != (ne, nd) or local_k.shape != (ne, nd, nd):
         raise ValueError("batch output shapes disagree with the DOF layout")
     if not np.isfinite(local_r).all() or not np.isfinite(local_k).all():
-        raise RuntimeError("nonfinite element residual or tangent")
+        raise NonfiniteElementOutput("nonfinite element residual or tangent")
     residual = np.zeros(size)
     np.add.at(residual, gm.ravel(), local_r.ravel())
     rows = np.broadcast_to(gm[:, :, None], local_k.shape).ravel()
