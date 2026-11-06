@@ -901,6 +901,26 @@ class _OvershootToy:
         return R, K
 
 
+@pytest.mark.parametrize("flag", [False, True])
+def test_feasible_trials_forward_cutback_on_element_rejection(flag):
+    """Defect regression: with both options the feasible-trial blocks ignored
+    the flag, backtracked past the rejected trial and recorded no cutback."""
+    nodes, elems = structured_quad_mesh(1, 1)
+    element = _OvershootToy()
+    U, report = solve_steps_staggered(
+        nodes, elems, 3, element, lambda frac: {3 * n + 1: frac for n in range(4)},
+        [[0, 1], [2]], 1, tol=1e-10, box=BoxSpec(bounds={2: (0.0, 1.0)}),
+        feasible_trials=True, cutback_on_element_rejection=flag, max_cutbacks=2,
+        return_report=True)
+    np.testing.assert_allclose(U[0::3], 1.0, atol=1e-10)
+    assert element.rejections >= 1
+    if flag:
+        assert report.cutbacks == 1
+        assert "during line search" in report.attempts[0].reason
+    else:
+        assert report.cutbacks == 0 and len(report.attempts) == 1
+
+
 # --------------------------------------------------------------------------
 # 4. TIME / DTIME / KINC on the public adapter, cutbacks and restart
 # --------------------------------------------------------------------------

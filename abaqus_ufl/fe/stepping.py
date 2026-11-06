@@ -641,11 +641,14 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
     ``sweeps`` in this mode.  Saved attempt records without these fields
     default to the staggered method.
 
-    ``cutback_on_element_rejection=True`` makes bounded Newton reject an
-    increment immediately when a line-search trial requests an element
-    cutback. The existing transaction then restores state and subdivides.
-    Its default permits backtracking past rejected trials. The staggered
-    method already propagates element rejections and is unaffected.
+    ``cutback_on_element_rejection=True`` makes the projected Newton solves
+    (``bounded_monolithic``, and each field block under ``feasible_trials``)
+    reject the attempt immediately when a line-search trial requests an
+    element cutback; the transaction then restores state and subdivides.  With
+    the default, those solves backtrack past a rejected trial.  Unprojected
+    staggered blocks always treat an element cutback at any assembly,
+    including line-search trials, as an attempt failure, so the flag does not
+    change them.
 
     Returns ``U``, or ``(U, report)`` with a :class:`StaggeredReport` when
     ``return_report``.  Raises :class:`StaggeredSolveFailed` when an
@@ -865,7 +868,9 @@ def solve_steps_staggered(nodes, elems, dof_per_node, element_fn, dirichlet_fn,
                             linear_solve=linear_solve,
                             line_search=line_search,
                             context=(f"solve_steps_staggered: step {step} "
-                                     f"field {i_f}"))
+                                     f"field {i_f}"),
+                            cutback_on_element_rejection=(
+                                cutback_on_element_rejection))
                     except NonfiniteElementOutput as exc:
                         raise _StaggeredAttemptFailed(
                             "non-finite residual/tangent", extra=where) from exc
