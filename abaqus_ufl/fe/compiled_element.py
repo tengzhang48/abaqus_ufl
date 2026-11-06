@@ -1,6 +1,7 @@
 """Generate and call a standard Quad4 UEL through a packaged f2py wrapper."""
 
 import importlib.util
+import numbers
 from pathlib import Path
 import os
 import shutil
@@ -108,7 +109,11 @@ def build_external_uel(sources, workdir=None, *, compile_flags=(), module_name=N
     ``sources`` is one Fortran file or a sequence of them, compiled in the
     given order by ``gfortran -c -O2 -fPIC -J <build directory>`` followed by
     ``compile_flags`` (later flags take precedence, so ``("-O3",)`` or
-    ``("-ffixed-line-length-none",)`` adjust the defaults).  The objects are
+    ``("-ffixed-line-length-none",)`` adjust the defaults).  Each source is
+    compiled in its own folder, so its local includes and relative ``-I``
+    paths resolve there.  The flags apply to compilation only; options that
+    need the link step (``-fopenmp``, ``-fopenacc``, ``-l``, ``-L``,
+    ``-Wl,``) are rejected.  The objects are
     linked with the packaged ``drive_uel.f90`` through numpy.f2py, so the
     subroutine must be named ``UEL`` and have the standard Abaqus argument
     list.  ``workdir`` behaves as in :func:`build_compiled_uel`; the
@@ -126,8 +131,19 @@ def build_external_uel(sources, workdir=None, *, compile_flags=(), module_name=N
     missing = [str(item) for item in sources if not item.is_file()]
     if missing:
         raise FileNotFoundError("UEL source files not found: " + ", ".join(missing))
-    if isinstance(compile_flags, str) or not all(isinstance(flag, str) for flag in compile_flags):
+    if isinstance(compile_flags, (str, bytes)):
+        raise ValueError("compile_flags must be a sequence of strings, not one string")
+    try:
+        compile_flags = list(compile_flags)       # an iterator is consumed once, here
+    except TypeError as exc:
+        raise ValueError("compile_flags must be a sequence of strings") from exc
+    if not all(isinstance(flag, str) for flag in compile_flags):
         raise ValueError("compile_flags must be a sequence of strings")
+    link_time = [flag for flag in compile_flags if flag in ("-fopenmp", "-fopenacc")
+                 or flag.startswith(("-l", "-L", "-Wl,"))]
+    if link_time:
+        raise ValueError("compile_flags apply to compilation only; link-time options are "
+                         "not supported: " + " ".join(link_time))
     if module_name is None:
         module_name = "_abaqus_ufl_ext"
     elif not (isinstance(module_name, str) and module_name.isidentifier()):
@@ -153,6 +169,19 @@ def _is_count(value):
     """A nonnegative Python or NumPy integer, not a bool."""
     return (not isinstance(value, (bool, np.bool_))
             and isinstance(value, (int, np.integer)) and value >= 0)
+
+
+def _is_real(value):
+    """A real Python or NumPy scalar, not a bool or a complex number."""
+    return not isinstance(value, (bool, np.bool_)) and isinstance(value, numbers.Real)
+
+
+def _real_array(values, name):
+    """A float copy of integer or real values; complex, text or objects are refused."""
+    values = np.asarray(values)
+    if values.dtype.kind not in "iuf":
+        raise ValueError(name + " must hold real numbers")
+    return values.astype(float)
 
 
 def _int32_vector(values, name):
@@ -218,22 +247,23 @@ class CompiledAbaqusElement:
                                  "(build it with build_external_uel)")
         if not _is_count(dof_per_node) or dof_per_node < 1:
             raise ValueError("dof_per_node must be a positive integer")
-        props = np.array(props, dtype=float)
+        props = _real_array(props, "props")
         if props.ndim != 1 or not np.isfinite(props).all():
             raise ValueError("props must be a finite one-dimensional sequence")
         if not _is_count(nsvars):
             raise ValueError("nsvars must be a nonnegative integer")
         if svars_initial is not None:
-            svars_initial = np.array(svars_initial, dtype=float)
+            svars_initial = _real_array(svars_initial, "svars_initial")
             if svars_initial.shape != (nsvars,) or not np.isfinite(svars_initial).all():
                 raise ValueError("svars_initial must hold nsvars finite values")
         jprops = _int32_vector(jprops, "jprops")
         lflags = _int32_vector(lflags, "lflags")
         if lflags.shape != (6,):
             raise ValueError("lflags must hold six integers")
-        if (isinstance(dt, (bool, np.bool_)) or not isinstance(dt, (int, float, np.number))
-                or not np.isfinite(dt) or dt <= 0):
-            raise ValueError("dt must be positive and finite")
+        if not _is_real(dt) or not np.isfinite(dt) or dt <= 0:
+            raise ValueError("dt must be a positive finite real number")
+        if time is not None and (not _is_real(time) or not np.isfinite(time) or time < 0):
+            raise ValueError("time must be a nonnegative finite real number")
         element = object.__new__(cls)
         element._setup(module, dof_per_node=int(dof_per_node), props=props,
                        nstate=int(nsvars), n_elem=n_elem, svars_initial=svars_initial,

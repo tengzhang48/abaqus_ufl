@@ -201,8 +201,15 @@ _FAKE = SimpleNamespace(drive_uel=lambda *a: None, drive_uel_batch=lambda *a: No
     ({"dt": np.nan}, "dt"),
     ({"dt": np.inf}, "dt"),
     ({"dt": True}, "dt"),
-    ({"time": -1.0}, "time_begin"),
-    ({"time": np.nan}, "time_begin"),
+    ({"time": -1.0}, "time"),
+    ({"time": np.nan}, "time"),
+    ({"dt": np.complex128(1 + 2j)}, "dt"),
+    ({"dt": 1 + 0j}, "dt"),
+    ({"time": np.complex128(1 + 1j)}, "time"),
+    ({"props": [1 + 2j]}, "props"),
+    ({"props": np.array([1.0 + 2j])}, "props"),
+    ({"props": ["1.0"]}, "props"),
+    ({"nsvars": 1, "n_elem": 1, "svars_initial": np.array([1 + 1j])}, "svars_initial"),
 ])
 def test_from_module_rejects_invalid_arguments(changes, message):
     arguments = dict(module=_FAKE, dof_per_node=2, props=[1.0, 2.0])
@@ -311,3 +318,21 @@ def test_a_rebuild_with_the_same_name_and_workdir_runs_the_new_kernel(tmp_path):
         assert sys.modules["external_kernel"] is sentinel
     finally:
         sys.modules.pop("external_kernel", None)
+
+
+def test_compile_flags_given_as_an_iterator_are_all_used(tmp_path):
+    sources = _write_external_uel(tmp_path / "src", scale=2.0, factor=5.0)
+    module = build_external_uel(sources, workdir=tmp_path / "build",
+                                compile_flags=(flag for flag in ["-Iinc"]))
+    assert _gain(module) == 10.0
+
+
+@pytest.mark.parametrize("flag", ["-fopenmp", "-fopenacc", "-lgomp", "-L/opt/lib",
+                                  "-Wl,-rpath,/opt/lib"])
+def test_link_time_flags_are_rejected(tmp_path, flag):
+    """compile_flags reach compilation only; an option that needs the link
+    step would build a module that fails or misbehaves at import."""
+    source = tmp_path / "uel.f90"
+    source.write_text("subroutine uel()\nend subroutine uel\n")
+    with pytest.raises(ValueError, match="link"):
+        build_external_uel(source, workdir=tmp_path / "build", compile_flags=[flag])
