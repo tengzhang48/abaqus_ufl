@@ -5,7 +5,11 @@ guard fails a test (audit 2026-10-10: G1, G4, G5, G8).
 """
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
+
+import numpy as np
 
 import pytest
 
@@ -55,6 +59,17 @@ class ComplexComparison(au.Material):
         return self.G * s * (F - inv(F).T)
 
 
+class ComplexComparisonOnTheRight(au.Material):
+    props = dict(G=1.0)
+
+    def stress_PK1(self, F):
+        J = det(F)
+        s = 1.0
+        if 1.0 < J:
+            s = 2.0
+        return self.G * s * (F - inv(F).T)
+
+
 class ChainedComparison(au.Material):
     props = dict(G=1.0)
 
@@ -70,6 +85,7 @@ class ChainedComparison(au.Material):
     (EarlyReturn, r'Early `return` inside a control-flow block'),
     (WhileLoop, r'while loops are deliberately rejected'),
     (ComplexComparison, r'Comparison on potentially-complex expression'),
+    (ComplexComparisonOnTheRight, r'Comparison on potentially-complex expression'),
     (ChainedComparison, r'Chained comparisons are not supported'),
 ])
 def test_unrepresentable_construct_raises(material, message):
@@ -277,3 +293,137 @@ def test_committed_fortran_has_no_component_indexed_det():
     offenders = {str(p.relative_to(REPO)): bad for p in sources
                  if (bad := component_indexed_det(p.read_text(errors='replace')))}
     assert offenders == {}
+
+
+# ---------------------------------------------------------------------------
+# Comparisons: both operands must be emitted as real values. Fortran has no
+# ordering of complex numbers, and constants and properties are DCMPLX(...)
+# in arithmetic. Before 2026-11-11 a property or a constant on the left, and
+# any expression on the right, were emitted complex and the file did not
+# compile (found with `if self.matflag > 2.5:` in a multi-material element).
+# ---------------------------------------------------------------------------
+
+class BranchOnProperties(au.Material):
+    props = dict(G=1.0, H=0.5, flag=3.0)
+
+    def stress_PK1(self, F):
+        J = det(F)
+        Jr = J.real
+        s = 1.0
+        if self.flag > 2.5:
+            s = s + 1.0
+        if self.G * 2 > 1.0:
+            s = s + 1.0
+        if 2.0 < J.real:
+            s = s + 1.0
+        if -self.H < 0.0:
+            s = s + 1.0
+        if J.real > self.G * 2:
+            s = s + 1.0
+        if Jr > self.H + 1.0:
+            s = s + 1.0
+        if J.real > self.G:
+            s = s + 1.0
+        if abs(J.real) > self.H:
+            s = s + 1.0
+        if J.real > Jr:
+            s = s + 1.0
+        return self.G * s * (F - inv(F).T)
+
+
+EXPECTED_COMPARISONS = [
+    'IF (props(3) .GT. 2.500000000000000d+00) THEN',
+    'IF (DBLE((DCMPLX(props(1), 0.0d0) * DCMPLX(2.0d0, 0.0d0))) .GT. 1.000000000000000d+00) THEN',
+    'IF (2.000000000000000d+00 .LT. DBLE(J)) THEN',
+    'IF (DBLE((-DCMPLX(props(2), 0.0d0))) .LT. 0.000000000000000d+00) THEN',
+    'IF (DBLE(J) .GT. DBLE((DCMPLX(props(1), 0.0d0) * DCMPLX(2.0d0, 0.0d0)))) THEN',
+    'IF (Jr .GT. DBLE((DCMPLX(props(2), 0.0d0) + DCMPLX(1.000000000000000d+00, 0.0d0)))) THEN',
+    # operands that were already real are emitted exactly as before
+    'IF (DBLE(J) .GT. props(1)) THEN',
+    'IF (ABS(DBLE(J)) .GT. props(2)) THEN',
+    'IF (DBLE(J) .GT. Jr) THEN',
+]
+
+
+def _joined(source):
+    """Fixed-form source with continuation lines folded into one line each."""
+    return re.sub(r'\n     &', '', source)
+
+
+def test_comparison_operands_are_emitted_real():
+    source = _joined(stress_source(BranchOnProperties()))
+    emitted = [line.strip() for line in source.splitlines() if line.strip().startswith('IF (')]
+    assert emitted == EXPECTED_COMPARISONS
+
+
+def test_no_relational_operator_touches_a_complex_operand():
+    """General form of the rule: an operand of .GT. etc. never starts with DCMPLX."""
+    source = _joined(stress_source(BranchOnProperties()))
+    relational = r'\.(?:GT|GE|LT|LE)\.'
+    assert not re.search(r'IF \(\(?-?DCMPLX\(', source)
+    assert not re.search(relational + r' \(?-?DCMPLX\(', source)
+
+
+def test_umat_with_property_comparisons_compiles(tmp_path):
+    if shutil.which('gfortran') is None:
+        pytest.skip('gfortran not available')
+    output = tmp_path / 'umat_branch.for'
+    au.generate_umat(BranchOnProperties(), str(output), verify=False)
+    result = subprocess.run(['gfortran', '-c', '-std=legacy', '-ffixed-line-length-none', output.name,
+                             '-o', 'umat_branch.o'], cwd=str(tmp_path), capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr[-2000:]
+
+
+# ---------------------------------------------------------------------------
+# A vector state variable keeps its kind in stress_PK1. It was registered as
+# a scalar there and as a vector in the flux methods, so a helper that takes
+# <name>_old could not be shared: "multiple argument kind signatures".
+# ---------------------------------------------------------------------------
+
+class VectorStateSharedHelper(au.Material):
+    props = dict(G=1.0, K=10.0, c=2.0)
+    state_vars = dict(m=np.zeros(3))
+
+    def _relax(self, F, grad_phi, m_old):
+        J = det(F)
+        return m_old + self.c * J * grad_phi
+
+    def stress_PK1(self, F, grad_phi, m_old, dt):
+        J = det(F)
+        m_new = self._relax(F, grad_phi, m_old)
+        P = self.G * (F - inv(F).T) + self.K * (J - 1.0) * J * inv(F).T
+        return P, {'m': m_new}
+
+    def phase_storage(self, F, grad_phi):
+        return 0.0 * det(F)
+
+    def phase_flux(self, F, grad_phi, m_old):
+        m_new = self._relax(F, grad_phi, m_old)
+        return grad_phi - m_new
+
+
+class VectorStateProblem(au.WeakForm):
+    material = VectorStateSharedHelper
+    ndim = 3
+
+    def define_fields(self):
+        self.u = au.VectorField('u', degree=1)
+        self.phi = au.ScalarField('phi', degree=1, test='eta')
+
+    def momentum_equation(self, v, F, grad_phi):
+        return self.material.stress_PK1(F, grad_phi)
+
+    def phase_equation(self, eta, F, grad_phi):
+        return self.material.phase_storage(F, grad_phi), self.material.phase_flux(F, grad_phi)
+
+
+def test_helper_with_vector_state_is_shared_by_stress_and_flux(tmp_path):
+    output = tmp_path / 'uel_vector_state.for'
+    au.generate_uel(VectorStateProblem(), str(output), element='Hex8', formulation='standard', verify=False)
+    source = output.read_text()
+    assert source.upper().count('SUBROUTINE') > 0
+    if shutil.which('gfortran') is None:
+        pytest.skip('gfortran not available')
+    result = subprocess.run(['gfortran', '-c', '-std=legacy', '-ffixed-line-length-none', output.name,
+                             '-o', 'uel_vector_state.o'], cwd=str(tmp_path), capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr[-2000:]

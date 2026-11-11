@@ -280,11 +280,14 @@ def _generate_material_subroutine(material, method_name, mat_prefix,
         else:
             translator._var_kinds[p] = 'scalar'
 
-    # Register state variable kinds
+    # Register state variable kinds. A vector state must stay a vector
+    # here: registering it as a scalar made a helper called with <name>_old
+    # from stress_PK1 (scalar) and from a flux method (vector) fail with
+    # "multiple argument kind signatures".
     if has_state:
         for name, entry in sv_info.items():
-            if entry['shape'] == 'tensor':
-                translator._var_kinds[name + '_old'] = 'tensor'
+            if entry['shape'] in ('tensor', 'vector'):
+                translator._var_kinds[name + '_old'] = entry['shape']
             else:
                 translator._var_kinds[name + '_old'] = 'scalar'
 

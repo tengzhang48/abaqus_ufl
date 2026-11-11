@@ -579,9 +579,14 @@ class FortranTranslator(ast.NodeVisitor):
             lines.append('      END DO')
         elif return_kind == 'vector':
             lines.append('')
-            lines.append('      DO ii = 1, 3')
-            lines.append(f'        result(ii) = {return_expr}(ii)')
-            lines.append('      END DO')
+            if _is_fortran_name(return_expr):
+                lines.append('      DO ii = 1, 3')
+                lines.append(f'        result(ii) = {return_expr}(ii)')
+                lines.append('      END DO')
+            else:
+                # A vector expression (e.g. ``return a + c * b``) cannot be
+                # indexed as (expr)(ii); assign the whole array instead.
+                lines.append(f'      result = {return_expr}')
         else:
             lines.append(f'      result = {return_expr}')
 
@@ -691,9 +696,12 @@ class FortranTranslator(ast.NodeVisitor):
                 lines.append('        END DO')
                 lines.append('      END DO')
             elif okind == 'vector':
-                lines.append('      DO ii = 1, 3')
-                lines.append(f'        {oname}(ii) = {oexpr}(ii)')
-                lines.append('      END DO')
+                if _is_fortran_name(oexpr):
+                    lines.append('      DO ii = 1, 3')
+                    lines.append(f'        {oname}(ii) = {oexpr}(ii)')
+                    lines.append('      END DO')
+                else:
+                    lines.append(f'      {oname} = {oexpr}')
             else:
                 lines.append(f'      {oname} = {oexpr}')
 
@@ -1051,9 +1059,11 @@ class FortranTranslator(ast.NodeVisitor):
             # x.real is real-safe.
             if n.attr == 'real':
                 return True
-            # self.<prop> is a material property; the generator
-            # emits it as PROPS(K) which is REAL*8 in Fortran,
-            # never a CS-perturbed complex variable.
+            # self.<prop> is a material property: PROPS(K) is REAL*8 and is
+            # never perturbed by the complex step. In arithmetic it is
+            # emitted as DCMPLX(props(K), 0.0d0); the comparison handler
+            # therefore emits real-safe operands through
+            # _emit_real_operand, never through _visit_expr alone.
             if isinstance(n.value, ast.Name) and n.value.id == 'self':
                 return True
         if isinstance(n, ast.Call):
@@ -1065,6 +1075,47 @@ class FortranTranslator(ast.NodeVisitor):
         if isinstance(n, ast.UnaryOp):
             return self._is_real_safe(n.operand)
         return False
+
+    def _emits_real(self, n):
+        """True if _visit_expr already emits a REAL or INTEGER expression."""
+        if isinstance(n, ast.Name):
+            return (n.id in self._integer_vars or n.id in self._real_vars
+                    or n.id in self._real_names)
+        if isinstance(n, ast.Attribute):
+            return n.attr == 'real'
+        if isinstance(n, ast.Subscript):
+            return self._emits_real(n.value)
+        if isinstance(n, ast.Call):
+            return self._get_func_name(n) in ('abs', 'float', 'int')
+        return False
+
+    def _emit_real_operand(self, n):
+        """Fortran text of a real-safe comparison operand, as a real value.
+
+        Fortran has no ordering of complex numbers, and constants and
+        properties are DCMPLX(...) in arithmetic. A constant is emitted as
+        a real literal, a property as props(K); any other expression whose
+        normal emission is complex (for example ``self.G * 2``) is wrapped
+        in DBLE(...), which is exact because a real-safe expression carries
+        no imaginary part.
+        """
+        if (isinstance(n, ast.Constant)
+                and isinstance(n.value, (int, float))
+                and not isinstance(n.value, bool)):
+            return _fortran_float(n.value)
+        if (isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub)
+                and isinstance(n.operand, ast.Constant)
+                and isinstance(n.operand.value, (int, float))
+                and not isinstance(n.operand.value, bool)):
+            return '-' + _fortran_float(n.operand.value)
+        if (isinstance(n, ast.Attribute)
+                and isinstance(n.value, ast.Name) and n.value.id == 'self'
+                and n.attr in self.props_names):
+            return f'props({self.props_names.index(n.attr) + 1})'
+        expr, _ = self._visit_expr(n)
+        if self._emits_real(n):
+            return expr
+        return f'DBLE({expr})'
 
     def _is_unperturbed(self, n):
         """True if the complex step never perturbs the expression.
@@ -1536,23 +1587,22 @@ class FortranTranslator(ast.NodeVisitor):
                     f"Use {var_name}.real or rewrite to avoid branching."
                 )
             op = node.ops[0]
-            # For the comparator, use a plain real literal if it's
-            # a constant (not DCMPLX wrapped) — comparisons are real
             comp_node = node.comparators[0]
-            if isinstance(comp_node, ast.Constant):
-                right = _fortran_float(comp_node.value)
-            elif (isinstance(comp_node, ast.UnaryOp)
-                  and isinstance(comp_node.op, ast.USub)
-                  and isinstance(comp_node.operand, ast.Constant)):
-                right = '-' + _fortran_float(comp_node.operand.value)
-            elif (isinstance(comp_node, ast.Attribute)
-                  and isinstance(comp_node.value, ast.Name)
-                  and comp_node.value.id == 'self'
-                  and comp_node.attr in self.props_names):
-                idx = self.props_names.index(comp_node.attr) + 1
-                right = f'props({idx})'
-            else:
-                right, _ = self._visit_expr(comp_node)
+            # The same rule holds for the right-hand side: a complex
+            # variable there (e.g. ``x.real > y``) is as invalid as on the
+            # left.
+            if not self._is_real_safe(comp_node):
+                var_name = getattr(comp_node, 'id', ast.dump(comp_node))
+                raise NotImplementedError(
+                    f"Comparison on potentially-complex expression "
+                    f"{var_name!r} is not Fortran-safe. "
+                    f"Use {var_name}.real or rewrite to avoid branching."
+                )
+            # Both operands are emitted as real values: constants as real
+            # literals, properties as props(K), anything else that is
+            # DCMPLX in arithmetic inside DBLE(...).
+            left = self._emit_real_operand(node.left)
+            right = self._emit_real_operand(comp_node)
             op_map = {
                 ast.Gt: '.GT.', ast.GtE: '.GE.',
                 ast.Lt: '.LT.', ast.LtE: '.LE.',
@@ -1681,6 +1731,12 @@ def _fortran_call(indent, sub_name, args):
         else:
             lines.append(f'     &  {arg})')
     return '\n'.join(lines)
+
+
+def _is_fortran_name(expr):
+    """True if the emitted expression is a bare variable name."""
+    import re
+    return re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', expr.strip()) is not None
 
 
 def _tensorize_expr(expr, tensor_vars):

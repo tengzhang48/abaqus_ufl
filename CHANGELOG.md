@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fix comparisons in material methods: both operands are now emitted as real
+  values. A property or a constant on the left (`if self.flag > 2.5:`), and any
+  real expression on either side (`x.real > self.G * 2`), used to be emitted as
+  `DCMPLX(...)` and the generated file did not compile. A complex variable on
+  the right (`x.real > y`) now raises the same error as on the left.
+- Fix vector state variables in `stress_PK1` of a UEL: they were registered as
+  scalars there, so a helper taking `<name>_old` could not be called from both
+  `stress_PK1` and a flux method. A helper may now also return a vector
+  expression (`return a + c * b`), which was emitted as `(expr)(ii)`.
 - Add `build_external_uel` and `CompiledAbaqusElement.from_module` for a
   standard Quad4 `UEL` compiled outside abaqus_ufl: validated arguments, the
   same adapter and drivers, and a documented TIME convention that a subclass

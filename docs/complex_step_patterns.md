@@ -42,6 +42,11 @@ The imaginary perturbation is ~1e-10, so `x.real > 0` gives the same
 branch as the unperturbed evaluation. The complex arithmetic inside
 the branch propagates the derivative information correctly.
 
+Constants and material properties are real and may stand on either side of a
+comparison without `.real`, alone or in an expression: `if self.flag > 2.5:`,
+`if x.real > 2 * self.sigma_y:`. Every other operand, on the left or on the
+right, needs `.real`; the generator rejects `if x.real > y:` for a complex `y`.
+
 ### Rule 3: State variables — previous step is real, current step is complex
 
 State variables from the **previous converged step** (read from SVARS)
